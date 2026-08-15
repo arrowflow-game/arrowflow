@@ -1,0 +1,161 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="description" content="ArrowFlow - 3D Brain Puzzle. Slide arrows off the cube in the right order!" />
+  <title>ArrowFlow — 3D Brain Puzzle</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800;900&family=Outfit:wght@700;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <!-- Three.js renders into this canvas (always behind everything) -->
+  <canvas id="three-canvas"></canvas>
+
+  <!-- SPLASH -->
+  <div id="screen-splash" class="ovr-screen active">
+    <div class="splash-inner">
+      <div class="splash-cube-icon">
+        <div class="sci-face sci-top"></div>
+        <div class="sci-face sci-front">→</div>
+        <div class="sci-face sci-right">↑</div>
+      </div>
+      <h1 class="splash-title">ArrowFlow</h1>
+      <p class="splash-sub">3D Brain Puzzle</p>
+      <div class="splash-loader-wrap">
+        <div class="splash-loader-bar" id="splash-bar"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN MENU -->
+  <div id="screen-menu" class="ovr-screen">
+    <div class="menu-controls-top">
+      <button id="btn-theme" class="icon-btn" aria-label="Toggle theme"><span id="theme-icon">🌙</span></button>
+      <button id="btn-sound" class="icon-btn" aria-label="Toggle sound"><span id="sound-icon">🔊</span></button>
+    </div>
+    <div class="menu-card">
+      <h1 class="menu-logo">ArrowFlow</h1>
+      <p class="menu-tagline">Slide all arrows off the cube!</p>
+      <div class="menu-btns">
+        <button id="btn-play" class="btn btn-primary btn-lg">▶  PLAY</button>
+        <div class="menu-btn-row">
+          <button id="btn-levels" class="btn btn-outline">☰ Levels</button>
+          <button id="btn-daily" class="btn btn-outline">📅 Daily</button>
+        </div>
+      </div>
+      <div class="menu-progress-wrap">
+        <div class="menu-progress-info">
+          <span>Level <strong id="menu-cur-lvl">1</strong> / 300</span>
+          <span id="menu-total-stars">★ 0</span>
+        </div>
+        <div class="progress-track"><div class="progress-fill" id="menu-prog"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GAME HUD (transparent overlay while playing) -->
+  <div id="screen-game" class="ovr-screen game-hud">
+    <header class="hud-top">
+      <button id="btn-pause" class="icon-btn">⏸</button>
+      <div class="hud-level-badge">
+        <span class="hud-lvl-label">LEVEL</span>
+        <span class="hud-lvl-num" id="hud-lvl-num">1</span>
+      </div>
+      <button id="btn-hint" class="hud-hint-btn">💡 <span id="hud-hints">3</span></button>
+    </header>
+    <div class="hud-stats-row">
+      <div class="hud-arrows-badge"><span class="hud-arrows-icon">↗</span><span id="hud-arrows-remaining">0</span></div>
+      <div class="hud-lives-row" id="hud-lives-row">
+        <span class="heart-icon">♥</span>
+        <span class="heart-icon">♥</span>
+        <span class="heart-icon">♥</span>
+      </div>
+      <div class="hud-difficulty-badge" id="hud-difficulty">ปานกลาง</div>
+    </div>
+    <div class="hud-tier-label" id="hud-tier">AWAKENING</div>
+    <div class="hud-instruction" id="hud-instruction">Drag to rotate • Tap an arrowhead to slide it off!</div>
+    <footer class="hud-bottom">
+      <div class="hud-stars-row">
+        <span class="hud-star" id="hs1">☆</span>
+        <span class="hud-star" id="hs2">☆</span>
+        <span class="hud-star" id="hs3">☆</span>
+      </div>
+      <div class="hud-moves-box">
+        <div class="hud-moves-label">MOVES</div>
+        <div class="hud-moves-val" id="hud-moves">0</div>
+      </div>
+      <button id="btn-undo" class="hud-undo-btn" disabled>↩ Undo</button>
+    </footer>
+  </div>
+
+  <!-- LEVEL SELECT -->
+  <div id="screen-levels" class="ovr-screen levels-ovr">
+    <div class="levels-panel">
+      <div class="levels-hdr">
+        <button id="btn-back-lvl" class="icon-btn">←</button>
+        <h2>SELECT LEVEL</h2>
+        <span id="ls-stars" class="ls-stars">★ 0</span>
+      </div>
+      <div class="tier-tabs-wrap" id="tier-tabs"></div>
+      <div class="levels-grid-wrap" id="levels-grid"></div>
+    </div>
+  </div>
+
+  <!-- PAUSE MODAL -->
+  <div id="modal-pause" class="modal-overlay hidden">
+    <div class="modal-box">
+      <h2 class="modal-title">⏸ PAUSED</h2>
+      <p class="modal-sub">Level <span id="pause-lvl">1</span></p>
+      <div class="modal-btns">
+        <button id="btn-resume"  class="btn btn-primary">▶ Resume</button>
+        <button id="btn-restart" class="btn btn-outline">↺ Restart</button>
+        <button id="btn-quit"    class="btn btn-ghost">✕ Menu</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- WIN MODAL -->
+  <div id="modal-win" class="modal-overlay hidden">
+    <div id="confetti-area" class="confetti-area"></div>
+    <div class="modal-box modal-win-box">
+      <div class="win-emoji" id="win-emoji">🎉</div>
+      <h2 class="modal-title">LEVEL COMPLETE!</h2>
+      <div class="win-stars-row" id="win-stars-row">
+        <span class="wstar">★</span><span class="wstar">★</span><span class="wstar">★</span>
+      </div>
+      <div class="win-stats-row">
+        <div class="wstat"><div class="wstat-lbl">Moves</div><div class="wstat-val" id="ws-moves">0</div></div>
+        <div class="wstat"><div class="wstat-lbl">Hints</div><div class="wstat-val" id="ws-hints">0</div></div>
+      </div>
+      <div class="modal-btns">
+        <button id="btn-next"   class="btn btn-primary btn-lg">NEXT LEVEL →</button>
+        <button id="btn-replay" class="btn btn-outline">↺ Replay</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- FAIL MODAL -->
+  <div id="modal-fail" class="modal-overlay hidden">
+    <div class="modal-box">
+      <h2 class="modal-title">💔 หมดหัวใจ!</h2>
+      <p class="modal-sub">ลองด่านนี้อีกครั้ง</p>
+      <div class="modal-btns">
+        <button id="btn-fail-restart" class="btn btn-primary">↺ ลองอีกครั้ง</button>
+        <button id="btn-fail-quit" class="btn btn-ghost">✕ เมนู</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts: Three.js first, then game modules -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/levels.js"></script>
+  <script src="js/scene.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
