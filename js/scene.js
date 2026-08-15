@@ -9,8 +9,27 @@ const Scene3D = (() => {
   let faceContexts = [];
   let faceTextures = [];
 
-  const TEX_SIZE = 512;
+  // 384 rather than 512: at grid=4 each cell is still 96px of texture (plenty crisp for
+  // a 4x4 puzzle), but it cuts the per-face pixel count (and GPU texture-upload bandwidth,
+  // paid every time a face redraws) by ~44%, across all 6 faces, every animated frame.
+  const TEX_SIZE = 384;
   const CUBE_SIZE = 2;
+
+  // Paths are no longer distinguished by a per-path identity color (that scheme
+  // ran out of headroom once levels started packing >10-12 simultaneous paths on
+  // one cube, and colors that close together stop being readable anyway). Every
+  // path now draws in one of three semantic colors instead - idle/blocked-once
+  // state is read from shape and position alone, matching the reference app.
+  const COLOR_IDLE_LIGHT = '#1a7fe8';
+  const COLOR_IDLE_DARK = '#00f5ff';
+  const COLOR_MOVING = '#2ecc71';
+  const COLOR_BLOCKED = '#ff3b30';
+
+  function getPathColor(path) {
+    if (path.status === 'bumped' || path.status === 'bumped_return' || path.wasBlocked) return COLOR_BLOCKED;
+    if (path.status === 'moving' || path.status === 'done') return COLOR_MOVING;
+    return Storage.get('theme') === 'dark' ? COLOR_IDLE_DARK : COLOR_IDLE_LIGHT;
+  }
 
   let isDragging = false;
   let previousMousePosition = { x: 0, y: 0 };
@@ -25,7 +44,11 @@ const Scene3D = (() => {
   function init() {
     const canvas = document.getElementById('three-canvas');
     renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-    renderer.setPixelRatio(window.devicePixelRatio);
+    // Uncapped devicePixelRatio means a phone reporting dpr=3 renders 2.25x the pixels
+    // of dpr=2 for no visible benefit on a screen that size - this alone is often the
+    // single biggest steady-state GPU cost of a WebGL page (paid every frame, forever,
+    // not just while animating).
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
     // Sort transparent objects correctly
     renderer.sortObjects = true;
@@ -65,15 +88,20 @@ const Scene3D = (() => {
       const ctx = c.getContext('2d');
 
       const tex = new THREE.CanvasTexture(c);
-      tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      // The GPU's max anisotropy (often 16) buys sharpness at grazing viewing angles
+      // that a flat puzzle face never needs; it's pure sampling cost paid every frame.
+      tex.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 2);
 
       faceCanvases.push(c);
       faceContexts.push(ctx);
       faceTextures.push(tex);
 
-      materials.push(new THREE.MeshStandardMaterial({
-        map: tex, roughness: 0.1, metalness: 0.1,
-        transparent: true, opacity: 0.7, side: THREE.DoubleSide
+      // Lambert instead of Standard: this cube only has one ambient + one directional
+      // light and flat-colored 2D line art on its faces, so the extra per-pixel PBR
+      // (roughness/metalness) shading MeshStandardMaterial does buys nothing visible
+      // here but costs real GPU time every frame, on every face, forever.
+      materials.push(new THREE.MeshLambertMaterial({
+        map: tex, transparent: true, opacity: 0.7, side: THREE.DoubleSide
       }));
     }
     cube = new THREE.Mesh(geometry, materials);
@@ -83,28 +111,36 @@ const Scene3D = (() => {
   function setLevelData(gridSize, paths) {
     currentGridSize = gridSize;
     highlightPathId = null;
-    updateFrame(paths);
+    updateFrame(paths, true);
   }
 
-  function updateFrame(paths) {
+  // Redrawing + re-uploading all 6 face textures every animation frame is expensive
+  // (each is a 512x512 GPU upload). Callers that know exactly which faces changed
+  // (game.js, mid-animation) pass that set explicitly; `true` forces every face
+  // (level load / undo, where idle paths' appearance also needs refreshing).
+  function updateFrame(paths, dirtyFaces) {
     currentPaths = paths;
 
-    for (let i = 0; i < 6; i++) {
+    const facesToRedraw = dirtyFaces === true ? new Set([0, 1, 2, 3, 4, 5]) : new Set(dirtyFaces);
+
+    if (highlightPathId !== null) {
+      const hp = paths.find(p => p.id === highlightPathId);
+      if (hp) hp.segments.forEach(s => facesToRedraw.add(s.face));
+    }
+
+    facesToRedraw.forEach(i => {
       const ctx = faceContexts[i];
       ctx.fillStyle = Storage.get('theme') === 'dark' ? '#1a1a2e' : '#ffffff';
       ctx.fillRect(0, 0, TEX_SIZE, TEX_SIZE);
-    }
 
-    for (let i = 0; i < 6; i++) {
-      const ctx = faceContexts[i];
       paths.forEach(p => {
-        if (!p.cleared) {
+        if (!p.cleared && p.segments.some(s => s.face === i)) {
           const highlighted = p.id === highlightPathId && performance.now() < highlightUntil;
           drawPathOnFace(ctx, p, i, currentGridSize, highlighted);
         }
       });
       faceTextures[i].needsUpdate = true;
-    }
+    });
   }
 
   function highlightPath(id) {
@@ -123,14 +159,15 @@ const Scene3D = (() => {
     if (highlighted) {
       const pulse = 0.4 + 0.4 * Math.sin(performance.now() / 130);
       ctx.strokeStyle = `rgba(255,209,63,${pulse})`;
-      ctx.lineWidth = cellSize * 0.65;
+      ctx.lineWidth = cellSize * 0.45;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       strokePath(ctx, path, faceIdx, gridSize, cellSize, startD, endD, L);
     }
 
-    ctx.strokeStyle = path.color;
-    ctx.lineWidth = cellSize * 0.4;
+    const color = getPathColor(path);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = cellSize * 0.28;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
@@ -149,7 +186,7 @@ const Scene3D = (() => {
           else if (sB.c > sA.c) dir = 'right';
         }
       }
-      drawPerfectArrowHead(ctx, headPt.x, headPt.y, dir, cellSize * 0.7, path.color);
+      drawPerfectArrowHead(ctx, headPt.x, headPt.y, dir, cellSize * 0.5, color);
     }
   }
 

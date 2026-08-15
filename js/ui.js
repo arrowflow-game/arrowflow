@@ -57,9 +57,8 @@ const UI = (() => {
     if (undoBtn) undoBtn.disabled = !canUndo;
   }
 
-  function showWin(moves, hints, stars) {
+  function showWin(hints, stars) {
     document.getElementById('modal-win').classList.remove('hidden');
-    document.getElementById('ws-moves').textContent = moves;
     document.getElementById('ws-hints').textContent = hints;
     const starEls = document.querySelectorAll('#win-stars-row .wstar');
     starEls.forEach((el, idx) => {

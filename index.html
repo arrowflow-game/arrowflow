@@ -7,7 +7,12 @@
   <title>ArrowFlow — 3D Brain Puzzle</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800;900&family=Outfit:wght@700;900&display=swap" rel="stylesheet" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <!-- Loaded non-blocking: the font swaps in once ready instead of holding up first paint. -->
+  <link rel="preload" as="style"
+        href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800;900&family=Outfit:wght@700;900&display=swap"
+        onload="this.onload=null;this.rel='stylesheet'" />
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800;900&family=Outfit:wght@700;900&display=swap" /></noscript>
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
@@ -76,16 +81,12 @@
       <div class="hud-difficulty-badge" id="hud-difficulty">ปานกลาง</div>
     </div>
     <div class="hud-tier-label" id="hud-tier">AWAKENING</div>
-    <div class="hud-instruction" id="hud-instruction">Drag to rotate • Tap an arrowhead to slide it off!</div>
+    <div class="hud-instruction" id="hud-instruction">Drag to rotate • Tap a path to slide it off!</div>
     <footer class="hud-bottom">
       <div class="hud-stars-row">
         <span class="hud-star" id="hs1">☆</span>
         <span class="hud-star" id="hs2">☆</span>
         <span class="hud-star" id="hs3">☆</span>
-      </div>
-      <div class="hud-moves-box">
-        <div class="hud-moves-label">MOVES</div>
-        <div class="hud-moves-val" id="hud-moves">0</div>
       </div>
       <button id="btn-undo" class="hud-undo-btn" disabled>↩ Undo</button>
     </footer>
@@ -127,7 +128,6 @@
         <span class="wstar">★</span><span class="wstar">★</span><span class="wstar">★</span>
       </div>
       <div class="win-stats-row">
-        <div class="wstat"><div class="wstat-lbl">Moves</div><div class="wstat-val" id="ws-moves">0</div></div>
         <div class="wstat"><div class="wstat-lbl">Hints</div><div class="wstat-val" id="ws-hints">0</div></div>
       </div>
       <div class="modal-btns">
