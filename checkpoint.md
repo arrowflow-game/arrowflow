@@ -1065,7 +1065,17 @@ confirmed `data-theme` flipped and the cube visibly re-rendered in the new palet
 `remaining`/level number stayed exactly unchanged - toggled back, confirmed it returns cleanly.
 Zero console errors.
 
+## 🔗 Deployed
+Committed and pushed to `main` (`b76dd39`); confirmed live at
+`https://arrowflow-game.github.io/arrowflow/` by polling for the new button's markup in the
+served HTML, then the user confirmed visually in their own browser.
+
 ## 🔜 Next Steps
-- Not yet pushed/deployed - do that next so `arrowflow-game.github.io/arrowflow/` picks it up.
 - Same open items as before: non-cubic box geometry, grid-8 tap-target sizing, unused per-path
   `color` field cleanup, native-haptics revisit, the 4 pending Firestore test-doc deletions.
+- **Session checkpoint recorded here at the user's request (2026-08-16)** - current live state:
+  game deployed at `https://arrowflow-game.github.io/arrowflow/` (org-owned URL, no
+  personal-account name in it), Firebase project `arrowflow-8d6a8` backing the leaderboard,
+  local git remote `origin` pointing at `github.com/arrowflow-game/arrowflow.git`. Any future
+  code change needs `git add`/`commit`/`push origin main` to reach that URL - nothing
+  auto-deploys from uncommitted local changes.
