@@ -41,7 +41,7 @@ const Game = (() => {
       startTime: Date.now()
     };
 
-    Scene3D.setLevelData(data.grid, state.paths);
+    Scene3D.setLevelData(data.shape, data.unitGrid, state.paths);
     UI.hideAllModals();
     UI.updateHUD(buildHudPayload());
 
@@ -63,7 +63,14 @@ const Game = (() => {
     };
   }
 
-  function getPathCell(face, r, c) {
+  // Segments identify their face by (cube position, direction) rather than a
+  // single 0-5 index, since a level's surface is now an arbitrary polycube
+  // (see [[arrowflow_level_roadmap]] v7) with a variable, per-level face
+  // count - Polycube.faceKey gives both a stable string key for comparisons
+  // and matches exactly what scene.js uses for the same faces.
+  function segFaceKey(s) { return Polycube.faceKey(s.cube, s.dir); }
+
+  function getPathCell(faceKey, r, c) {
     // Check if any active path occupies this cell. A path that's already committed to
     // exiting (status 'moving') is treated as fully passable immediately, not just the
     // portion it's visually slid past yet - once a tap has confirmed it can leave, it
@@ -72,7 +79,7 @@ const Game = (() => {
     // still block normally.
     for (let p of state.paths) {
       if (p.cleared || p.status === 'moving') continue;
-      if (p.segments.some(s => s.face === face && s.r === r && s.c === c)) {
+      if (p.segments.some(s => segFaceKey(s) === faceKey && s.r === r && s.c === c)) {
         return p;
       }
     }
@@ -80,15 +87,20 @@ const Game = (() => {
   }
 
   // Walks a path's exit direction from its head until it either reaches the
-  // cube edge (free) or hits another path (blocked). Shared by tap-handling
-  // and hint-scanning so both agree on what counts as "can exit right now".
+  // face's own edge (free) or hits another path (blocked). Shared by tap-
+  // handling and hint-scanning so both agree on what counts as "can exit
+  // right now". Every exposed face in the polycube system is a uniform
+  // unitGrid x unitGrid square, so the bound check is the same constant
+  // regardless of which face the head is on.
   function findBlocker(path) {
     const head = path.segments.find(s => s.isHead);
+    const headKey = segFaceKey(head);
     let checkR = head.r;
     let checkC = head.c;
     let blockedBy = null;
     let blockDist = 0;
 
+    const unitGrid = state.levelData.unitGrid;
     while (true) {
       if (path.exitDir === 'up') checkR--;
       else if (path.exitDir === 'down') checkR++;
@@ -96,11 +108,11 @@ const Game = (() => {
       else if (path.exitDir === 'right') checkC++;
 
       blockDist++;
-      if (checkR < 0 || checkR >= state.levelData.grid || checkC < 0 || checkC >= state.levelData.grid) {
+      if (checkR < 0 || checkR >= unitGrid || checkC < 0 || checkC >= unitGrid) {
         break; // Reached edge, free!
       }
 
-      const obstacle = getPathCell(head.face, checkR, checkC);
+      const obstacle = getPathCell(headKey, checkR, checkC);
       if (obstacle && obstacle.id !== path.id) {
         blockedBy = obstacle;
         break;
@@ -110,14 +122,15 @@ const Game = (() => {
     return { blockedBy, blockDist };
   }
 
-  function onArrowTap(faceIndex, u, v) {
+  function onArrowTap(facePos, faceDir, u, v) {
     if (state.failed || state.won) return;
-    const gridSize = state.levelData.grid;
-    const col = Math.floor(u * gridSize);
-    const row = Math.floor((1 - v) * gridSize);
+    const unitGrid = state.levelData.unitGrid;
+    const col = Math.floor(u * unitGrid);
+    const row = Math.floor((1 - v) * unitGrid);
+    const faceKey = Polycube.faceKey(facePos, faceDir);
 
     // Any cell along the path is tappable, not just the head - matches the reference app's feel.
-    const path = state.paths.find(p => !p.cleared && p.status === 'idle' && p.segments.some(s => s.face === faceIndex && s.r === row && s.c === col));
+    const path = state.paths.find(p => !p.cleared && p.status === 'idle' && p.segments.some(s => segFaceKey(s) === faceKey && s.r === row && s.c === col));
 
     if (path) {
       handlePathTap(path);
@@ -210,9 +223,9 @@ const Game = (() => {
         const lo = Math.max(0, Math.floor(off));
         const hi = Math.min(L, Math.ceil(L + off));
         if (lo <= hi) {
-          for (let idx = lo; idx <= hi; idx++) dirtyFaces.add(p.segments[idx].face);
+          for (let idx = lo; idx <= hi; idx++) dirtyFaces.add(segFaceKey(p.segments[idx]));
         } else {
-          dirtyFaces.add(p.segments[L].face);
+          dirtyFaces.add(segFaceKey(p.segments[L]));
         }
       }
 
@@ -285,7 +298,7 @@ const Game = (() => {
     UI.updateHUD(buildHudPayload());
     Sound.playWin();
     Haptics.win();
-    UI.showWin(state.hintsUsed, stars, score, elapsedSec);
+    UI.showWin(state.levelNum, state.hintsUsed, stars, score, elapsedSec);
   }
 
   function onFail() {

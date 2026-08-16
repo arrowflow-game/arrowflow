@@ -20,22 +20,13 @@ document.addEventListener('DOMContentLoaded', () => {
     return Storage.get('currentLevel');
   };
   
-  // Patch UI next/replay buttons if they relied on Game.levelNum
-  const oldReplay = document.getElementById('btn-replay').onclick;
-  document.getElementById('btn-replay').addEventListener('click', () => {
-    document.getElementById('modal-win').classList.add('hidden');
-    // Read from DOM instead of Game object
-    const lvl = parseInt(document.getElementById('hud-lvl-num').textContent) || Storage.get('currentLevel');
-    Game.loadLevel(lvl);
-  });
-  
-  document.getElementById('btn-next').addEventListener('click', () => {
-    document.getElementById('modal-win').classList.add('hidden');
-    const lvl = parseInt(document.getElementById('hud-lvl-num').textContent) || Storage.get('currentLevel');
-    Game.loadLevel(lvl + 1);
-  });
-
   // Start
-  UI.runSplash();
-  UI.promptNicknameIfNeeded();
+  const debugLevel = parseInt(new URLSearchParams(location.search).get('level'));
+  if (debugLevel >= 1) {
+    UI.showScreen('screen-game');
+    Game.loadLevel(debugLevel);
+  } else {
+    UI.runSplash();
+    UI.promptNicknameIfNeeded();
+  }
 });

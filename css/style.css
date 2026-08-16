@@ -170,6 +170,8 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
 
 /* Win modal rank badge */
 .win-rank-badge { background: var(--bg-primary); border-radius: 12px; padding: 10px; margin-bottom: 18px; font-weight: 800; color: var(--accent); }
+.win-level-best-row { display: flex; justify-content: space-between; gap: 10px; background: var(--bg-primary); border-radius: 12px; padding: 10px 14px; margin-bottom: 12px; font-size: 0.8rem; color: var(--text-secondary); }
+.win-level-best-row b { color: var(--text-primary); }
 
 /* Leaderboard modal */
 .modal-box-wide { max-width: 380px; }
@@ -179,5 +181,6 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
 .lb-row.lb-me { background: var(--bg-primary); border-radius: 8px; }
 .lb-rank { width: 28px; font-weight: 900; color: var(--text-secondary); text-align: center; flex-shrink: 0; }
 .lb-name { flex: 1; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lb-score { font-weight: 900; color: var(--accent); }
+.lb-progress { font-size: 0.75rem; color: var(--text-secondary); font-weight: 700; flex-shrink: 0; }
+.lb-score { font-weight: 900; color: var(--accent); flex-shrink: 0; }
 .lb-empty { padding: 20px 0; text-align: center; color: var(--text-secondary); font-weight: 700; }

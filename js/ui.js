@@ -59,11 +59,14 @@ const UI = (() => {
   }
 
   function updateMenu() {
-    const cl = Storage.get('currentLevel');
+    // currentLevel becomes levelNum+1 on completeLevel() even for the last
+    // level (see storage.js), so it can read 301 once the whole campaign is
+    // done - clamp for display so the menu never shows "Level 301 / 300".
+    const cl = Math.min(Storage.get('currentLevel'), TOTAL_LEVELS);
     const ts = Storage.get('totalStars');
     document.getElementById('menu-cur-lvl').textContent = cl;
     document.getElementById('menu-total-stars').textContent = '★ ' + ts;
-    document.getElementById('menu-prog').style.width = ((cl / 300) * 100) + '%';
+    document.getElementById('menu-prog').style.width = ((cl / TOTAL_LEVELS) * 100) + '%';
   }
 
   function buildStatsScreen() {
@@ -195,7 +198,7 @@ const UI = (() => {
     return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
   }
 
-  function showWin(hints, stars, score, elapsedSec) {
+  function showWin(levelNum, hints, stars, score, elapsedSec) {
     document.getElementById('modal-win').classList.remove('hidden');
     document.getElementById('ws-hints').textContent = hints;
     const scoreEl = document.getElementById('ws-score');
@@ -209,6 +212,29 @@ const UI = (() => {
     });
     burstConfetti();
 
+    // Personal best for THIS level - Storage.completeLevel() (called just
+    // before showWin, see game.js's onWin) already merged this run's score
+    // into the stored per-level best, so reading it back here naturally
+    // shows whichever is higher: this run, or a past one.
+    const personalBestEl = document.getElementById('ws-personal-best');
+    if (personalBestEl) {
+      const levelData = Storage.getLevelData(levelNum);
+      personalBestEl.textContent = levelData ? levelData.score : score;
+    }
+
+    // World best for this level - best-effort, submitted then re-fetched so
+    // a new personal record shows up immediately as the world best too
+    // rather than waiting for a stale read.
+    const worldBestEl = document.getElementById('ws-level-world-best');
+    if (worldBestEl) {
+      worldBestEl.textContent = '…';
+      Leaderboard.submitLevelScore(levelNum, score)
+        .then(() => Leaderboard.fetchLevelBest(levelNum))
+        .then(best => {
+          worldBestEl.textContent = best ? `${best.score} (${best.nickname})` : '—';
+        });
+    }
+
     // Submit + fetch rank are both best-effort network calls - never block the
     // win screen on them, just fill the badge in once (if) they resolve.
     const rankEl = document.getElementById('ws-rank');
@@ -220,7 +246,8 @@ const UI = (() => {
         badge.classList.remove('hidden');
         rankEl.textContent = '…';
         const totalScore = Storage.get('totalScore') || 0;
-        Leaderboard.submitScore(totalScore).then(() => Leaderboard.fetchMyRank(totalScore)).then(rank => {
+        const highestLevel = Storage.get('highestUnlocked') || 1;
+        Leaderboard.submitScore(totalScore, highestLevel).then(() => Leaderboard.fetchMyRank(totalScore)).then(rank => {
           rankEl.textContent = rank != null ? ('#' + rank) : '—';
         });
       }
@@ -241,8 +268,9 @@ const UI = (() => {
       nickname ? Leaderboard.fetchMyRank(myScore) : Promise.resolve(null)
     ]);
 
+    const myProgress = progressLabel(Storage.get('highestUnlocked') || 1);
     myRow.textContent = nickname
-      ? ('คุณ: ' + nickname + ' — อันดับ ' + (myRank != null ? '#' + myRank : '—') + ' (' + myScore + ' คะแนน)')
+      ? ('คุณ: ' + nickname + ' — อันดับ ' + (myRank != null ? '#' + myRank : '—') + ' (' + myScore + ' คะแนน, ' + myProgress + ')')
       : 'ตั้งชื่อผู้เล่นเพื่อเข้าร่วมอันดับ';
 
     if (top.length === 0) {
@@ -255,9 +283,19 @@ const UI = (() => {
       row.innerHTML =
         '<span class="lb-rank">' + (idx + 1) + '</span>' +
         '<span class="lb-name">' + escapeHtml(p.nickname) + '</span>' +
+        '<span class="lb-progress">' + progressLabel(p.highestLevel) + '</span>' +
         '<span class="lb-score">' + p.totalScore + '</span>';
       list.appendChild(row);
     });
+  }
+
+  // A player who has cleared/unlocked level 300 gets a "จบเกม!" (done) badge
+  // instead of a bare "300/300" number - reads better as a finish line, and
+  // matches the request that finishing the whole campaign stand out on the
+  // leaderboard rather than looking like just another number.
+  function progressLabel(highestLevel) {
+    const lvl = Math.min(highestLevel || 1, TOTAL_LEVELS);
+    return lvl >= TOTAL_LEVELS ? '🏁 จบเกม!' : ('ด่าน ' + lvl);
   }
 
   function escapeHtml(s) {
@@ -351,13 +389,12 @@ const UI = (() => {
 
     document.getElementById('btn-next').addEventListener('click', () => {
       hideAllModals();
-      const next = (Game.levelNum || Storage.get('currentLevel')) + 1;
-      Game.loadLevel(next);
+      Game.loadLevel(Game.getLevelNum() + 1);
     });
 
     document.getElementById('btn-replay').addEventListener('click', () => {
       hideAllModals();
-      Game.loadLevel(Game.levelNum || Storage.get('currentLevel'));
+      Game.loadLevel(Game.getLevelNum());
     });
 
     document.getElementById('btn-hint').addEventListener('click', () => Game.useHint());

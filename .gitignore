@@ -1,3 +1,10 @@
 # Reference/example clips and screenshots used during development, not project assets
 *.mp4
 ex3.jpg
+test/*.jpg
+
+# Build artifacts from tools/generate_campaign.py, not source
+tools/__pycache__/
+tools/campaign_gen.log
+tools/campaign_output.js
+tools/*.bak

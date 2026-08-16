@@ -55,8 +55,10 @@ const Leaderboard = (() => {
 
   // Pushes this player's current total score (not per-call delta) - the doc
   // always reflects the latest known total, so a submit from an older/smaller
-  // score never needs special-casing.
-  async function submitScore(totalScore) {
+  // score never needs special-casing. `highestLevel` (1-300) rides along so
+  // the leaderboard can show progress, not just score - a player who reached
+  // level 300 is shown as "จบเกม!" (done) rather than a bare number.
+  async function submitScore(totalScore, highestLevel) {
     const ok = await ensureInit();
     if (!ok || !db || !uid) return false;
     const nickname = getNickname();
@@ -65,8 +67,9 @@ const Leaderboard = (() => {
       await db.collection('players').doc(uid).set({
         nickname,
         totalScore: Math.round(totalScore),
+        highestLevel: highestLevel || 1,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
+      }, { merge: true });
       return true;
     } catch {
       return false;
@@ -78,7 +81,10 @@ const Leaderboard = (() => {
     if (!ok || !db) return [];
     try {
       const snap = await db.collection('players').orderBy('totalScore', 'desc').limit(n).get();
-      return snap.docs.map(d => ({ id: d.id, nickname: d.data().nickname, totalScore: d.data().totalScore }));
+      return snap.docs.map(d => ({
+        id: d.id, nickname: d.data().nickname, totalScore: d.data().totalScore,
+        highestLevel: d.data().highestLevel || 1
+      }));
     } catch {
       return [];
     }
@@ -100,5 +106,47 @@ const Leaderboard = (() => {
     }
   }
 
-  return { ensureInit, getNickname, setNickname, submitScore, fetchTop, fetchMyRank };
+  // Per-level world-best score, kept in its own small collection (one doc
+  // per level actually played by anyone) rather than trying to compute "max
+  // score for level N across all players" from the players collection, which
+  // Firestore can't query directly (would need a composite index per level
+  // or a Cloud Function - out of scope for a client-only backend). Written
+  // via a transaction so a slower client reading a stale "current best"
+  // can't clobber a higher score that landed in between.
+  async function submitLevelScore(levelId, score) {
+    const ok = await ensureInit();
+    if (!ok || !db || !uid) return false;
+    const nickname = getNickname();
+    if (!nickname) return false;
+    try {
+      const ref = db.collection('levelBests').doc(String(levelId));
+      await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        const current = snap.exists ? snap.data().score : -1;
+        if (score > current) {
+          tx.set(ref, { score: Math.round(score), nickname, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+        }
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function fetchLevelBest(levelId) {
+    const ok = await ensureInit();
+    if (!ok || !db) return null;
+    try {
+      const snap = await db.collection('levelBests').doc(String(levelId)).get();
+      if (!snap.exists) return null;
+      return { score: snap.data().score, nickname: snap.data().nickname };
+    } catch {
+      return null;
+    }
+  }
+
+  return {
+    ensureInit, getNickname, setNickname, submitScore, fetchTop, fetchMyRank,
+    submitLevelScore, fetchLevelBest
+  };
 })();
