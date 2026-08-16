@@ -63,6 +63,7 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
 .btn-primary:active { transform: scale(0.95); }
 .btn-outline { border: 2px solid var(--accent); color: var(--accent); background: var(--bg-card); }
 .btn-lg { padding: 16px 32px; font-size: 1.2rem; }
+.btn-sm { padding: 8px 16px; font-size: 0.85rem; }
 .icon-btn { width: 44px; height: 44px; border-radius: 50%; background: var(--bg-card); display: flex; align-items: center; justify-content: center; font-size: 1.2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
 
 /* Menu */
@@ -84,6 +85,7 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
    and swallow clicks meant for the menu screen underneath it. */
 .ovr-screen.active.game-hud .hud-top, .ovr-screen.active.game-hud .hud-bottom { pointer-events: all; width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 20px; }
 .hud-top, .hud-bottom { width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 20px; }
+.hud-controls-group { display: flex; gap: 10px; align-items: center; }
 .hud-level-badge { background: var(--bg-card); padding: 5px 20px; border-radius: 20px; text-align: center; border: 2px solid var(--accent); }
 .hud-lvl-label { display: block; font-size: 0.6rem; font-weight: 800; letter-spacing: 2px; color: var(--text-secondary); }
 .hud-lvl-num { display: block; font-size: 1.2rem; font-family: var(--font-logo); font-weight: 900; color: var(--accent); line-height: 1; }
@@ -107,10 +109,26 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
 /* Modals & Levels */
 .modal-overlay { position: fixed; inset: 0; background: var(--bg-overlay); z-index: 100; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(5px); }
 .modal-overlay.hidden { display: none; }
+.hidden { display: none; }
 .modal-box { background: var(--bg-card); padding: 30px; border-radius: 20px; width: 90%; max-width: 320px; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,0.2); }
 .modal-title { font-family: var(--font-logo); color: var(--accent); font-size: 1.8rem; margin-bottom: 5px; }
 .modal-sub { color: var(--text-secondary); font-weight: 700; margin-bottom: 20px; }
 .modal-btns { display: flex; flex-direction: column; gap: 10px; }
+
+/* Positioned + z-index so it paints above .confetti-area: an absolutely-positioned
+   sibling paints above static-flow siblings regardless of DOM order, confetti would
+   otherwise sit on top of the win text. */
+.modal-win-box { position: relative; z-index: 2; }
+.confetti-area { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 1; }
+.confetti-area canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+.settings-list { display: flex; flex-direction: column; gap: 18px; margin: 20px 0 25px; text-align: left; }
+.settings-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.settings-label { font-weight: 700; color: var(--text-primary); }
+.switch { width: 50px; height: 28px; border-radius: 99px; background: var(--bg-secondary); position: relative; flex-shrink: 0; transition: background var(--transition); }
+.switch .switch-knob { position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.3); transition: transform var(--transition); }
+.switch.on { background: var(--accent); }
+.switch.on .switch-knob { transform: translateX(22px); }
 
 .win-emoji { font-size: 3.5rem; margin-bottom: 10px; }
 .win-stars-row { font-size: 2.5rem; color: #ccc; margin-bottom: 15px; }
@@ -130,3 +148,36 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
 .lvl-btn.current { background: var(--accent); color: var(--text-on-btn); }
 .lvl-btn.locked { background: var(--bg-secondary); color: var(--text-secondary); opacity: 0.6; }
 .lvl-btn-stars { font-size: 0.5rem; letter-spacing: 1px; color: var(--star-color); margin-top: 2px; }
+
+/* Stats screen */
+.stats-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 0 20px 15px; }
+.stats-summary-card { background: var(--bg-card); border-radius: 12px; padding: 12px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+.stats-summary-lbl { font-size: 0.7rem; font-weight: 800; color: var(--text-secondary); text-transform: uppercase; }
+.stats-summary-val { font-size: 1.5rem; font-family: var(--font-logo); font-weight: 900; color: var(--accent); }
+.stats-summary-val-sm { font-size: 0.95rem; }
+.stats-list-hdr { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1fr; padding: 0 20px 8px; font-size: 0.7rem; font-weight: 800; color: var(--text-secondary); text-transform: uppercase; }
+.stats-list-wrap { padding: 0 20px 20px; flex: 1; overflow-y: auto; }
+.stats-row { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1fr; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--bg-secondary); font-weight: 700; }
+.stats-row-lvl { color: var(--text-primary); }
+.stats-row-stars { color: var(--star-color); letter-spacing: 1px; font-size: 0.85rem; }
+.stats-row-time { color: var(--text-secondary); font-size: 0.85rem; }
+.stats-row-score { color: var(--accent); font-weight: 900; }
+.stats-empty { padding: 30px 0; text-align: center; color: var(--text-secondary); font-weight: 700; }
+
+/* Nickname modal */
+.nickname-input { width: 100%; padding: 12px 16px; border-radius: 12px; border: 2px solid var(--accent); background: var(--bg-primary); color: var(--text-primary); font-family: var(--font-main); font-weight: 700; font-size: 1rem; margin-bottom: 20px; outline: none; }
+.nickname-input::placeholder { color: var(--text-secondary); }
+
+/* Win modal rank badge */
+.win-rank-badge { background: var(--bg-primary); border-radius: 12px; padding: 10px; margin-bottom: 18px; font-weight: 800; color: var(--accent); }
+
+/* Leaderboard modal */
+.modal-box-wide { max-width: 380px; }
+.lb-my-row { display: flex; justify-content: space-between; align-items: center; background: var(--bg-primary); border-radius: 12px; padding: 10px 14px; margin-bottom: 15px; font-weight: 800; }
+.lb-list { max-height: 300px; overflow-y: auto; margin-bottom: 20px; text-align: left; }
+.lb-row { display: flex; align-items: center; gap: 12px; padding: 8px 4px; border-bottom: 1px solid var(--bg-secondary); }
+.lb-row.lb-me { background: var(--bg-primary); border-radius: 8px; }
+.lb-rank { width: 28px; font-weight: 900; color: var(--text-secondary); text-align: center; flex-shrink: 0; }
+.lb-name { flex: 1; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-score { font-weight: 900; color: var(--accent); }
+.lb-empty { padding: 20px 0; text-align: center; color: var(--text-secondary); font-weight: 700; }

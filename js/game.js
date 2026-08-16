@@ -16,7 +16,8 @@ const Game = (() => {
     failed: false,
     won: false,
     lastMovePathId: null,
-    canUndo: false
+    canUndo: false,
+    startTime: 0
   };
 
   let animationFrameId = null;
@@ -36,7 +37,8 @@ const Game = (() => {
       failed: false,
       won: false,
       lastMovePathId: null,
-      canUndo: false
+      canUndo: false,
+      startTime: Date.now()
     };
 
     Scene3D.setLevelData(data.grid, state.paths);
@@ -136,6 +138,8 @@ const Game = (() => {
 
       state.lives = Math.max(0, state.lives - 1);
       if (state.lives <= 0) state.failed = true;
+      Sound.playBump();
+      Haptics.bump();
       UI.updateHUD(buildHudPayload());
       return;
     }
@@ -148,6 +152,7 @@ const Game = (() => {
     state.lastMovePathId = path.id;
     state.canUndo = false; // becomes undoable once the slide finishes, see animateLogic
 
+    Sound.playSlide();
     UI.updateHUD(buildHudPayload());
   }
 
@@ -254,19 +259,37 @@ const Game = (() => {
     animationFrameId = requestAnimationFrame(animateLogic);
   }
 
+  // Time-based scoring: no per-level data needed, "par" time scales with how many
+  // paths the level has. Faster-than-par clears earn a bonus, hearts kept and stars
+  // earned each add a flat bonus, so a full-hearts fast 3-star clear scores highest.
+  function computeScore(elapsedSec) {
+    const parTime = state.paths.length * 2.5;
+    const timeBonus = Math.max(0, Math.round((parTime - elapsedSec) * 20));
+    const heartsBonus = state.lives * 100;
+    const starBonus = (state.stars || 0) * 200;
+    return 500 + timeBonus + heartsBonus + starBonus;
+  }
+
   function onWin() {
     state.won = true;
     state.canUndo = false;
     let stars = 1;
     if (state.moves <= state.levelData.parMoves) stars = 3;
     else if (state.moves <= state.levelData.maxMoves) stars = 2;
+    state.stars = stars;
 
-    Storage.completeLevel(state.levelNum, stars, state.moves);
+    const elapsedSec = (Date.now() - state.startTime) / 1000;
+    const score = computeScore(elapsedSec);
+
+    Storage.completeLevel(state.levelNum, stars, state.moves, score, elapsedSec);
     UI.updateHUD(buildHudPayload());
-    UI.showWin(state.hintsUsed, stars);
+    Sound.playWin();
+    Haptics.win();
+    UI.showWin(state.hintsUsed, stars, score, elapsedSec);
   }
 
   function onFail() {
+    Sound.playFail();
     UI.showFail();
   }
 

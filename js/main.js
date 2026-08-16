@@ -6,6 +6,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // Init UI
   UI.applyTheme(Storage.get('theme'));
   UI.applySound(Storage.get('sound'));
+  UI.applyMusic(Storage.get('music'));
+  UI.applyVibration(Storage.get('vibration'));
   UI.wireEvents();
   
   // Init 3D Scene
@@ -35,4 +37,5 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Start
   UI.runSplash();
+  UI.promptNicknameIfNeeded();
 });

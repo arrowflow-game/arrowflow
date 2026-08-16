@@ -506,3 +506,429 @@ same artifact link.
 ## 🔜 Next Steps
 - Awaiting the user's next playtest to confirm the false-bump issue is fully gone, including
   in rapid-tap sequences the automated repro may not have covered.
+
+---
+
+# Update — 2026-08-15 (cont'd): cube see-through rendering fixed and confirmed
+
+User reported (`test10.mp4`) some cube faces couldn't be seen through to the back. Went
+through several iterations before landing on the right design:
+1. First tried `depthWrite: false` on a single transparent box mesh — reduced but didn't
+   fully fix view-angle-dependent occlusion (`test11.mp4` + screenshots still showed some
+   faces gray/opaque).
+2. Misread the reference clip `ex2.mp4` as "plain opaque box, no see-through" and reverted
+   to fully opaque `MeshBasicMaterial` — wrong call, corrected once the user pointed at
+   `ex3.jpg`, which shows the front face with the back face's paths faintly visible through
+   it, confirming see-through *is* the intended design.
+3. **Final fix**: split the cube into two `THREE.Mesh` objects sharing one `BoxGeometry` —
+   a `BackSide` mesh (far walls, opacity 0.55, `renderOrder = 0`) and a `FrontSide` mesh (near
+   walls, opacity 0.88, `renderOrder = 1`), both `depthWrite: false, depthTest: false` so
+   `renderOrder` alone controls draw order instead of BoxGeometry's fixed per-face material
+   order. Both live under a new `cubeGroup` that the drag-rotate handler rotates. Full
+   rationale and rejected alternatives logged in memory (`arrowflow_render_perf`).
+
+**Verified two ways:** built a self-contained single-file bundle and drove it with Playwright
+(`python -m playwright`, works on this machine even without `node`) to visually match
+`ex3.jpg`; then the user independently confirmed via their own `test12.mp4` that it's correct
+and that resource usage feels fine now.
+
+## 🔜 Next Steps (open, not started — carried over from earlier sessions)
+- Sound: still preference-only, no real audio files.
+- Visual polish pass (confetti win screen, drag-vs-tap feel) from the `ex1`/`ex2` reference
+  clips.
+- Non-cubic box geometry to match `ex2.mp4`'s elongated shape — explicitly deferred, would
+  need a full face-adjacency re-derivation.
+- Grid 8 tap-target size on a real phone — open question, now more pressing at 40 concurrent
+  paths on the densest tier.
+- Unused per-path `color` field in generated level data — cosmetic cleanup, not urgent.
+- User has not yet said which of the above (if any) is next — check with them before starting.
+
+---
+
+# Update — 2026-08-15 (cont'd): visual/feel polish — drag inertia + win confetti
+
+User picked "polish ภาพ/ฟีล (confetti, drag feel)" as the next phase from the open items
+list above.
+
+## ✅ Drag inertia (`js/scene.js`)
+Rotation previously stopped dead the instant the pointer lifted. Added momentum: `onPointerMove`
+now also tracks a smoothed velocity (`velX`/`velY`, exponential toward the latest per-move
+delta, clamped to ±25 so one huge-delta frame can't launch it absurdly fast); `animate()`
+keeps applying that velocity with 0.94/frame friction decay after release until it drops below
+an epsilon. A new grab (`onPointerDown`) zeroes any in-flight velocity so re-grabbing the cube
+feels like catching it, not fighting residual spin. Rotation logic itself was factored out into
+`applyDragRotation(dx, dy)`, shared by both the live-drag and inertia paths. Also moved the
+rotated object from the raw cube mesh to a new `cubeGroup` (needed anyway for the earlier
+front/back dual-mesh see-through fix — see [[arrowflow_render_perf]]).
+
+## ✅ Win-screen confetti (`js/ui.js` + `css/style.css`)
+`#confetti-area` existed in `index.html` since the original 3D redesign but was never wired to
+anything (empty div, no CSS, no JS). Implemented `burstConfetti()`: a canvas-based particle
+burst (90 particles, gravity + drag physics, ~2.2s, fades and self-removes), colors drawn from
+the existing accent/star/status palette. Respects `prefers-reduced-motion: reduce` (skips
+entirely rather than forcing motion on everyone). Called from `showWin()`. `.modal-win-box`
+needed `position: relative; z-index: 2` added — `.confetti-area` is absolutely positioned
+(so it doesn't disturb the flex-centered modal box) which by CSS painting order would
+otherwise paint *above* the static-flow win card and cover the text. `hideAllModals()` and the
+win modal's Next/Replay handlers now clear `#confetti-area` immediately on close instead of
+leaving a burst to finish unseen in the background.
+
+## ✅ Verification
+Rebuilt the Playwright bundle-and-screenshot method used throughout this session:
+- Inertia: fast flick-drag, screenshotted at +0/150/450/1950ms — cube visibly kept rotating
+  after release and had settled to a stop by ~450ms.
+- Confetti: called `UI.showWin(1, 3)` directly (no need to actually solve a 20-path level),
+  screenshotted at +150/650/2850ms — burst renders behind the card (doesn't obscure the win
+  text/buttons), and is fully cleared by 2850ms as designed.
+- Zero console errors in either pass.
+
+Republished to the same artifact link (`arrowflow_test.html`, same URL as prior sessions).
+
+## 🔜 Next Steps
+- Awaiting the user's own playtest/feel-check of both changes on their machine.
+- Remaining open items from the polish list: sound (still preference-only), non-cubic box
+  geometry (deferred), grid-8 tap-target sizing on a real phone, unused per-path `color` field
+  cleanup.
+
+---
+
+# Update — 2026-08-15 (cont'd): fixed a real bug in the test-bundle build process (not the game itself)
+
+User tested the republished link (`test13.mp4` + a desktop screenshot) and reported the cube
+rotation feel was great, but the win modal rendered completely unstyled - serif font, no blue
+accent color, plain borders instead of filled buttons - even though layout/spacing (rounded
+corners, shadows, padding) looked normal.
+
+## 🐛 Root cause: every project source file has a UTF-8 BOM; the bundler script didn't strip it
+`index.html`/`css/style.css`/every `js/*.js` file starts with a UTF-8 byte-order-mark (`EF BB
+BF`). This is invisible and harmless when the browser loads each file as its own resource via
+`<script src="...">`/`<link>` (the real game, `index.html`, was never affected) - browsers
+correctly strip a BOM at the start of a standalone fetched file. But the single-file test
+bundle this session has been building for the Artifact link concatenates all of them as literal
+text inside shared `<script>`/`<style>` blocks - there, a BOM landing mid-document is not
+guaranteed to be treated as harmless whitespace. Confirmed directly: isolated each of the 6
+inlined JS files into its own minimal test page - all 6 threw `SyntaxError: Invalid or
+unexpected token` on their own; reading with Python's `utf-8-sig` codec (strips BOM) instead of
+plain `utf-8` fixed all 6 instantly, verified via Playwright (zero console errors after,
+`getComputedStyle` confirmed `--accent`/font/button-background all resolve correctly).
+
+**This was a bug in the test-bundle build script only, not in the actual project files or game
+code** - `index.html`/`js/*.js`/`css/style.css` in the repo are untouched and were never
+broken.
+
+## ✅ Fix
+Rebuilt the bundling script to read every source file with `utf-8-sig` (strips BOM) and added
+an explicit `<meta charset="UTF-8" />` at the top of the bundle for good measure. Verified zero
+BOM bytes remain anywhere in the output file, zero console errors, correct computed styles.
+Republished to the same artifact link.
+
+## 🔜 Next Steps
+- Awaiting the user's fresh reload/retest to confirm the win-screen styling now renders
+  correctly on their desktop browser too.
+- Same open items as before (sound, non-cubic geometry, tap-target sizing, unused color field).
+
+---
+
+# Update — 2026-08-15 (cont'd): sound effects implemented
+
+User confirmed the encoding fix (`test14.mp4` + desktop screenshot) - win modal now renders
+correctly styled (blue accent, Nunito font, filled buttons). Said "ทำต่อได้เลย" (go ahead) to
+continue; picked up the next open backlog item myself: sound was still preference-only with no
+actual audio.
+
+## ✅ New `js/sound.js` module
+Rather than sourcing external audio files (licensing/asset-management overhead, and the
+Artifact test bundle needs everything self-contained anyway), implemented four short
+synthesized effects via the Web Audio API - oscillator + exponential-decay gain envelope, no
+external assets at all:
+- `playSlide()` - rising triangle-wave blip, on a successful tap (path starts exiting).
+- `playBump()` - falling sawtooth, on a blocked tap (heart lost).
+- `playWin()` - four-note rising triangle arpeggio, on level complete.
+- `playFail()` - long falling sawtooth, on hearts-depleted fail.
+`AudioContext` is created lazily on first `play*()` call rather than at page load - those calls
+only ever happen inside real user-gesture handlers (a tap), so this satisfies browsers'
+autoplay-blocking policy without a separate "unlock" step. Every play function checks
+`Storage.get('sound')` itself, so the existing sound-toggle button (already wired to that same
+flag from an earlier session, previously a no-op preference switch) now actually mutes/unmutes.
+Wired into `js/game.js`: `handlePathTap()`'s two branches, `onWin()`, `onFail()`.
+
+## ✅ Verification
+Rebuilt the Playwright bundle (now 7 inlined scripts, `sound.js` added between `storage.js`
+and `levels.js`) with the same `utf-8-sig` BOM-safe read process from the last fix. Called all
+four `Sound.play*()` functions directly (zero errors), then ran a real tap sequence across the
+cube's visible arrows in a live game session - a real bump occurred (heart count dropped in the
+HUD, confirmed via DOM read) with zero console/page errors, confirming the in-game hooks fire
+correctly, not just the synth functions in isolation. Republished to the same artifact link.
+
+## 🔜 Next Steps
+- Awaiting the user's own listen-test (headless Chromium can't confirm actual audio output,
+  only that no exceptions were thrown and the context was created).
+- Remaining open items: non-cubic box geometry (deferred), grid-8 tap-target sizing on a real
+  phone, unused per-path `color` field cleanup.
+
+---
+
+# Update — 2026-08-15 (cont'd): background music + vibration
+
+User confirmed sound effects work (`test15.mp4`), then asked whether adding background music
+and vibration (on obstacle-hit and level-complete), each independently toggleable, would be
+worth it - flagged as an exploratory question, so gave a recommendation first rather than
+building immediately: vibration is cheap to add but iOS Safari doesn't implement
+`navigator.vibrate` at all (Android-only effect); background music is more involved than the
+short SFX already built (needs a loop that doesn't grate, separate volume handling, needs to
+stop/start with screen transitions). User said to go ahead with both, reasoning that this will
+eventually ship to app stores (a native wrapper there would get real haptics regardless of the
+web Vibration API's iOS gap).
+
+## ✅ New `js/haptics.js`
+Thin wrapper around `navigator.vibrate()`: `Haptics.bump()` (60ms buzz), `Haptics.win()`
+(short 5-pulse pattern). Guarded by both feature detection and a new `Storage` flag
+(`vibration`, default `true`) - separate from the `sound` flag since haptics is a distinct
+sense a player might want off independently of audio. New toggle button `#btn-vibration`
+(📳/📴) added next to the existing sound toggle in the menu's top controls row (wrapped both
+in a `.controls-group` flex container so `justify-content: space-between` still splits
+theme-button vs. sound+vibration cleanly with a 3rd icon in the row). Wired into
+`js/game.js`: `Haptics.bump()` alongside every `Sound.playBump()` call, `Haptics.win()`
+alongside `Sound.playWin()`.
+
+## ✅ Background music added to `js/sound.js`
+`startMusic()`/`stopMusic()`: four soft sine-wave chords (C/G/Am/F) cycling every ~4.2s
+indefinitely, each note with its own attack/release gain envelope so chord changes crossfade
+rather than click - synthesized the same way as the SFX (no audio files/assets). Scheduling
+uses the Web Audio clock (`startTime` params) for the actual audio timing, `setTimeout` only
+triggers *when to schedule the next chord*, so a few ms of JS timer jitter doesn't audibly
+matter for a slow ambient pad. Wired into `js/ui.js`'s `showScreen()`: starts automatically
+entering `screen-game`, stops on any other screen (menu/level-select) - and into `applySound()`
+so toggling the existing sound switch live-stops/starts music immediately rather than waiting
+for the next screen change, and respects the same `Storage.sound` flag as the SFX (one master
+audio switch controls both, per the earlier design conversation).
+
+## ✅ Verification
+Rebuilt the Playwright bundle (now 8 inlined scripts: `haptics.js` added after `sound.js`).
+Checked: vibration toggle button flips its icon and `Storage.vibration` correctly; `play ->
+pause -> quit` screen-transition sequence (which now starts/stops music) runs with zero
+console/page errors; `Haptics.supported()` reports `true` in headless Chromium and
+`bump()`/`win()` don't throw. Republished to the same artifact link. As with the SFX, headless
+Chromium can't confirm actual audible/haptic output - only that nothing throws and state
+updates correctly.
+
+## 🔜 Next Steps
+- Awaiting the user's own listen/feel-test on a real device (vibration especially - Android
+  only, and headless testing can't simulate real hardware).
+- Remaining open items: non-cubic box geometry (deferred), grid-8 tap-target sizing on a real
+  phone, unused per-path `color` field cleanup.
+- Explicitly flagged for whenever the app-store packaging work actually starts: a native
+  wrapper (Capacitor/Cordova or similar) could use real native Haptics APIs to get vibration
+  working on iOS too, instead of the web `navigator.vibrate` ceiling - worth revisiting then,
+  not now.
+
+---
+
+# Update — 2026-08-15 (cont'd): dedicated Settings screen (music/SFX/vibration split)
+
+User asked for a proper settings button/modal instead of scattered top-row icon toggles, with
+independent on/off control for background music, sound effects, and vibration specifically
+(these had been sharing one "sound" flag - music and SFX toggled together).
+
+## ✅ Split music from SFX
+`Storage` gets a new `music` flag (default `true`), separate from the existing `sound` flag
+(now purely SFX). `js/sound.js`'s single `enabled()` check split into `sfxEnabled()` (gates
+`playSlide`/`playBump`/`playWin`/`playFail`) and `musicEnabled()` (gates `startMusic`).
+
+## ✅ New Settings modal (`#modal-settings`)
+Replaced the two inline icon-toggle buttons (`btn-sound`, `btn-vibration`) in the main menu's
+top row with a single gear button (`#btn-settings`, ⚙️) that opens a modal with three
+iOS-style toggle switches (new `.switch`/`.switch-knob` CSS component): Music, Sound Effects,
+Vibration - each independently on/off, backed by `Storage.music`/`Storage.sound`/
+`Storage.vibration` respectively. Also reachable mid-game via a new "⚙ Settings" button added
+to the pause modal's button list (opens on top of - not replacing - the pause modal, so
+closing Settings returns you to Pause). Incidental fix: `btn-quit` was styled `btn-ghost`,
+a CSS class that was never actually defined anywhere in `style.css` (rendered with zero
+button styling) - changed to the existing `btn-outline` class to match its sibling buttons.
+
+`UI.applySound`/`applyMusic`/`applyVibration` now just persist the flag (no more DOM
+icon-text manipulation, since the old inline icons are gone); a new `syncSettingsUI()` reads
+all three flags into the switch elements' visual state whenever the modal opens or a toggle
+is clicked.
+
+## ✅ Verification
+Rebuilt the Playwright bundle. Opened Settings from the main menu, confirmed all three
+switches default "on"; toggled all three off, confirmed `Storage.music`/`sound`/`vibration`
+all became `false` and the switches visually reflect "off"; closed, entered a level, reopened
+Settings via the pause modal, confirmed the switches still correctly show "off" (state
+persisted across the screen change); toggled music back on live mid-game without error.
+Zero console/page errors throughout. Republished to the same artifact link.
+
+## 🔜 Next Steps
+- Awaiting the user's playtest of the new Settings screen.
+- Remaining open items: non-cubic box geometry (deferred), grid-8 tap-target sizing on a real
+  phone, unused per-path `color` field cleanup, native-haptics revisit at app-store-packaging
+  time.
+
+---
+
+# Update — 2026-08-15 (cont'd): Settings reachable directly from the in-game HUD
+
+User confirmed the Settings modal works (`test16.mp4`), then raised a real friction point:
+reaching Settings mid-game required pausing first. Asked for a recommendation between (a) a
+second dedicated gear button in the gameplay HUD vs. (b) just adding a text label to the
+existing pause button. Recommended (a) - the pause icon (⏸) is already unambiguous, and a
+text label wouldn't reduce the actual number of taps needed to reach Settings, which was the
+real complaint; a direct gear button lets players adjust audio/vibration without stopping
+gameplay. User agreed, asked to proceed.
+
+## ✅ New `#btn-hud-settings` in the gameplay HUD
+Added next to `#btn-pause` in `hud-top`, both wrapped in a new `.hud-controls-group` flex
+container so the existing 3-slot `justify-content: space-between` layout (controls / level
+badge / hint button) still holds with a 4th button added. Refactored the three settings-open
+handlers (`btn-settings`, `btn-pause-settings`, and now `btn-hud-settings`) into a single
+shared `openSettings()` closure in `wireEvents()` instead of duplicating the same two lines a
+third time.
+
+## ✅ Verification
+Rebuilt the Playwright bundle. Clicked `#btn-hud-settings` directly during live gameplay and
+confirmed the pause modal never opened (`modal-pause` stayed hidden) while the settings modal
+opened correctly (cube visibly still rendering/rotatable behind the blurred settings overlay,
+matching the intent that opening Settings this way doesn't force a full pause). Confirmed the
+pre-existing pause-modal path to Settings still works too. Zero console/page errors.
+Republished to the same artifact link.
+
+## ✅ User-confirmed
+User tested the HUD settings button live and confirmed it works well - this closes out the
+whole "visual/feel polish" backlog item (inertia, confetti, sound, music, vibration, and now
+in-game settings access) that's been worked through across this session.
+
+## 🔜 Next Steps
+- Remaining open items unchanged: non-cubic box geometry (deferred), grid-8 tap-target sizing
+  on a real phone, unused per-path `color` field cleanup, native-haptics revisit at
+  app-store-packaging time.
+- No open item is currently in progress - check with the user for the next priority.
+
+---
+
+# Update — 2026-08-15 (cont'd): time-based score + personal Stats screen
+
+User asked for a stats view (best score per level, total score, "ranking"). Since the game is
+entirely client-side (no backend, no other players' data exists anywhere), true cross-player
+ranking isn't buildable without standing up a server - explained that tradeoff and user chose
+the local/personal-best route, then asked for a scoring recommendation using level completion
+time as the main criterion (like most games in this genre).
+
+## ✅ Scoring formula (`js/game.js`, no level-data changes needed)
+`computeScore()`: `parTime = numPaths * 2.5s` (derived live from the level's own path count,
+not stored anywhere) → `timeBonus = max(0, round((parTime - elapsed) * 20))` (faster than par
+earns points, slower earns zero rather than going negative) → `+ lives*100` (hearts-remaining
+bonus) `+ stars*200` `+ 500` base. `state.startTime` set in `loadLevel()`, elapsed computed in
+`onWin()`.
+
+## ✅ Storage schema extended (`js/storage.js`)
+`completeLevel()` now also takes `score`/`timeSec`; per-level `levelData[n]` gains `score`
+(best-ever, max) and `time` (best-ever, min), alongside the existing `stars`/`moves`. New
+`totalScore` (sum of every level's best score) tracked the same way `totalStars` already was.
+New `getAllLevelData()` getter for the stats screen to enumerate.
+
+## ✅ New Stats screen (`index.html` + `js/ui.js` + `css/style.css`)
+Reachable via a new "📊 สถิติ" button on the main menu. Shows 4 summary cards (total score,
+total stars, levels completed / 300, single best-scoring level) plus a scrollable per-level
+list (stars/time/score), newest-completed-level first. Personal-best only, explicitly not a
+multiplayer leaderboard - that's flagged as a future item requiring a real backend if ever
+wanted. Win modal (`modal-win`) also gained คะแนน/เวลา (score/time) stats next to the existing
+Hints counter.
+
+## ✅ Verification
+Playwright: empty-state stats screen (no levels completed yet) renders its "ยังไม่มีด่านที่ผ่าน"
+message; injected fake `Storage.completeLevel()` calls for 2-3 levels and confirmed totals,
+best-level card, and per-level rows all compute correctly; called `UI.showWin()` directly and
+confirmed the win modal's new score/time fields render. Zero console errors throughout. (One
+false alarm during testing: a screenshot taken immediately after clicking into the Stats
+screen showed it translucent with the menu bleeding through - turned out to be a genuine
+mid-transition frame, since `.ovr-screen` cross-fades over 0.4s; a screenshot taken after the
+transition settled confirmed the screen renders solid and correctly, not a real bug.)
+
+## 🔜 Next Steps
+- Not yet published to the test-bundle Artifact link - do that next if the user wants to
+  playtest this on their own device before it's considered done.
+- True cross-player leaderboard/ranking explicitly deferred - would need a backend (e.g.
+  Firebase/Supabase) to store other players' scores, out of scope for this pass.
+- Same other open items as before: non-cubic box geometry, grid-8 tap-target sizing, unused
+  per-path `color` field cleanup, native-haptics revisit.
+
+---
+
+# Update — 2026-08-15 (cont'd): global leaderboard built (Firebase Anonymous Auth + Firestore)
+
+User tested the previous build's win modal and asked for a score+ranking popup after each level
+- clarified this meant a real cross-player leaderboard, not just the personal-best stats screen
+from the prior update. Since that needs a backend, walked the user through creating their own
+Firebase project (`arrowflow-8d6a8`) live in this session: Firestore Database, Anonymous
+Authentication (Auto clean-up left OFF so inactive players' scores don't silently expire after
+30 days), and a Web app registration to get the client config.
+
+## ✅ New `js/leaderboard.js`
+Firebase compat SDK (`firebase-app-compat.js` / `-auth-compat.js` / `-firestore-compat.js`,
+loaded via CDN `<script>` tags in `index.html` - matches this project's existing non-bundled,
+non-module script style, no build step). `firebaseConfig` is embedded directly in the file,
+which is the documented-safe approach for Firebase web apps (it's not a secret - real
+protection is the Firestore Security Rules, not hiding this key).
+
+Every exported function (`submitScore`, `fetchTop`, `fetchMyRank`) is best-effort: wrapped so a
+network failure or disabled provider degrades to a safe empty/null return instead of throwing -
+gameplay must never depend on the leaderboard being reachable. `ensureInit()` lazily signs in
+anonymously on first use and races a 6s timeout so a dead network can't hang the UI.
+
+**Identity model matches what the user asked for explicitly**: no email/password, just a
+nickname (`Storage.set('nickname', ...)`) paired with a Firebase anonymous-auth UID generated
+fresh in the browser. Clearing site data / reinstalling loses that UID, so the player starts
+over under a new name next time - by design, not a bug to fix later.
+
+## 🐛 One real bug found and fixed during testing: `.count()` isn't in this compat SDK build
+Original `fetchMyRank()` used Firestore's count() aggregation
+(`.where('totalScore','>',myScore).count().get()`) to avoid downloading every higher-scoring
+doc just to size a query. Playwright testing against the live project threw `count is not a
+function` - confirmed via direct eval that `typeof query.count` is `'undefined'` on this
+project's `firebase-firestore-compat.js@10.14.1` (aggregation queries are apparently
+modular-API-only in this build, not exposed on the compat namespace). Fixed by dropping to a
+plain `.get()` + `snap.size` - fine at this game's actual scale, flagged in a comment as the
+thing to revisit if the player base ever got large enough for that to matter.
+
+## ✅ New UI pieces
+- **Nickname modal** (`#modal-nickname`), shown once via `UI.promptNicknameIfNeeded()` on first
+  launch (`main.js`) if no nickname is stored yet. Skippable - a skip leaves the leaderboard
+  badge hidden in the win modal until a nickname is set later. Also reachable anytime via a new
+  "👋 ชื่อผู้เล่น" row in the existing Settings modal (`btn-edit-nickname`), so skipping isn't a
+  dead end.
+- **Win modal** gained a "🏆 อันดับโลก: #N" badge, filled in asynchronously after the existing
+  score/time/hints stats (submits the score, then fetches rank - never blocks the modal from
+  showing), plus a "🏆 ดูอันดับ" button.
+- **Leaderboard modal** (`#modal-leaderboard`): top-10 list plus a highlighted "your rank" row,
+  opened from the win modal button. Player-supplied nicknames are rendered via `escapeHtml()`
+  before going into `innerHTML` - the only place free-text from other users reaches the DOM, so
+  this is the one spot that actually needed XSS-safety, not just style.
+
+## ✅ Firestore Security Rules (given to the user to paste in the console, since I can't do
+that step myself - it needs their account)
+Public read on the `players` collection, write restricted to `request.auth.uid == uid` (a
+player can only touch their own doc) with shape validation on `nickname`/`totalScore` - blocks
+one client from writing fake scores under another player's identity or malformed data.
+
+## ✅ Verification (Playwright, against the real live Firebase project - not a mock)
+Full flow end-to-end: nickname prompt appears on first launch → set nickname → anonymous auth
+resolves (`Leaderboard.ensureInit()` → `true`) → `Storage.completeLevel()` → `submitScore()`
+returns `true` → `UI.showWin()`'s rank badge fills in "#1" → opening the leaderboard modal shows
+both the "your rank" row and the top-10 list pulled from Firestore, correct nickname/score in
+both. Zero console errors throughout. Caught and fixed the `.count()` bug above via this same
+testing, not just code review.
+
+**Cleanup note**: this testing created two real `TestPlayer_Claude` documents in the live
+`players` collection (Firestore has no separate test/prod environment here) - asked the user to
+delete them manually from the Firestore console's Data tab, since Security Rules mean I can't
+delete another session's docs I no longer hold the auth token for.
+
+## 🔜 Next Steps
+- Awaiting the user's confirmation the two test documents are deleted from Firestore.
+- Not yet republished to the test-bundle Artifact link - that bundler concatenates all `js/`
+  files into inline `<script>` tags, so it'll need the new Firebase CDN `<script src>` tags
+  added too, not just the existing inlining step. Do this next if the user wants to playtest on
+  their own device.
+- Same other open items as before: non-cubic box geometry, grid-8 tap-target sizing, unused
+  per-path `color` field cleanup, native-haptics revisit.

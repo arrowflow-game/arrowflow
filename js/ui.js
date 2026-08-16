@@ -8,13 +8,44 @@ const UI = (() => {
 
   function applySound(enabled) {
     Storage.set('sound', enabled);
-    const icon = document.getElementById('sound-icon');
-    if (icon) icon.textContent = enabled ? '🔊' : '🔇';
+  }
+
+  function applyMusic(enabled) {
+    Storage.set('music', enabled);
+    // Live-toggle rather than waiting for the next screen change, so muting
+    // mid-level takes effect immediately.
+    if (enabled) {
+      if (document.getElementById('screen-game').classList.contains('active')) Sound.startMusic();
+    } else {
+      Sound.stopMusic();
+    }
+  }
+
+  function applyVibration(enabled) {
+    Storage.set('vibration', enabled);
+  }
+
+  function setSwitch(id, on) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.toggle('on', on);
+    el.setAttribute('aria-checked', on);
+  }
+
+  function syncSettingsUI() {
+    setSwitch('toggle-music', Storage.get('music') !== false);
+    setSwitch('toggle-sfx', Storage.get('sound') !== false);
+    setSwitch('toggle-vibration', Storage.get('vibration') !== false);
+    const nickBtn = document.getElementById('btn-edit-nickname');
+    if (nickBtn) nickBtn.textContent = Leaderboard.getNickname() || 'ตั้งชื่อ';
   }
 
   function showScreen(id) {
     document.querySelectorAll('.ovr-screen').forEach(s => s.classList.remove('active'));
     document.getElementById(id).classList.add('active');
+    // Background music only plays while actually in a level.
+    if (id === 'screen-game') Sound.startMusic();
+    else Sound.stopMusic();
   }
 
   function applyTheme(theme) {
@@ -30,6 +61,38 @@ const UI = (() => {
     document.getElementById('menu-cur-lvl').textContent = cl;
     document.getElementById('menu-total-stars').textContent = '★ ' + ts;
     document.getElementById('menu-prog').style.width = ((cl / 300) * 100) + '%';
+  }
+
+  function buildStatsScreen() {
+    const allData = Storage.getAllLevelData();
+    const entries = Object.keys(allData)
+      .map(n => ({ level: Number(n), ...allData[n] }))
+      .sort((a, b) => a.level - b.level);
+
+    document.getElementById('stats-total-score').textContent = Storage.get('totalScore') || 0;
+    document.getElementById('stats-total-stars').textContent = Storage.get('totalStars') || 0;
+    document.getElementById('stats-levels-completed').textContent = entries.length + ' / ' + TOTAL_LEVELS;
+
+    const bestEntry = entries.reduce((best, e) => (!best || (e.score || 0) > (best.score || 0)) ? e : best, null);
+    document.getElementById('stats-best-level').textContent = bestEntry ? ('ด่าน ' + bestEntry.level + ' (' + bestEntry.score + ' คะแนน)') : '—';
+
+    const list = document.getElementById('stats-level-list');
+    list.innerHTML = '';
+    if (entries.length === 0) {
+      list.innerHTML = '<div class="stats-empty">ยังไม่มีด่านที่ผ่าน</div>';
+      return;
+    }
+    // Most recently reached (highest level) first, matches how a player wants to check progress.
+    entries.slice().reverse().forEach(e => {
+      const row = document.createElement('div');
+      row.className = 'stats-row';
+      row.innerHTML =
+        '<span class="stats-row-lvl">ด่าน ' + e.level + '</span>' +
+        '<span class="stats-row-stars">' + '★'.repeat(e.stars || 0) + '☆'.repeat(3 - (e.stars || 0)) + '</span>' +
+        '<span class="stats-row-time">' + (e.time != null ? formatTime(e.time) : '—') + '</span>' +
+        '<span class="stats-row-score">' + (e.score || 0) + '</span>';
+      list.appendChild(row);
+    });
   }
 
   function updateHUD(payload) {
@@ -57,14 +120,152 @@ const UI = (() => {
     if (undoBtn) undoBtn.disabled = !canUndo;
   }
 
-  function showWin(hints, stars) {
+  const CONFETTI_COLORS = ['#1a7fe8', '#4a9ff5', '#fbbf24', '#2ecc71', '#ff3b30'];
+
+  function burstConfetti() {
+    const area = document.getElementById('confetti-area');
+    if (!area) return;
+    area.innerHTML = ''; // clear any still-running burst from a rapid replay
+
+    // Respect the user's OS-level motion preference rather than forcing this on everyone.
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    const w = area.clientWidth, h = area.clientHeight;
+    if (!w || !h) return;
+
+    const canvas = document.createElement('canvas');
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    area.appendChild(canvas);
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    const COUNT = 90;
+    const GRAVITY = 0.28;
+    const DRAG = 0.988;
+    const DURATION = 2200;
+
+    const particles = Array.from({ length: COUNT }, () => ({
+      x: w / 2 + (Math.random() - 0.5) * 40,
+      y: h * 0.35,
+      vx: (Math.random() - 0.5) * 9,
+      vy: -Math.random() * 7 - 4,
+      size: 5 + Math.random() * 5,
+      color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+      rot: Math.random() * Math.PI * 2,
+      vrot: (Math.random() - 0.5) * 0.3,
+      shape: Math.random() < 0.5 ? 'rect' : 'circle'
+    }));
+
+    const start = performance.now();
+    function frame(now) {
+      const t = now - start;
+      // A burst that outlives its own modal (fast Replay tap) should stop drawing
+      // into a canvas that's no longer attached, rather than run forever unseen.
+      if (!area.contains(canvas)) return;
+      ctx.clearRect(0, 0, w, h);
+      const fade = Math.max(0, 1 - t / DURATION);
+      particles.forEach(p => {
+        p.vx *= DRAG;
+        p.vy = p.vy * DRAG + GRAVITY;
+        p.x += p.vx;
+        p.y += p.vy;
+        p.rot += p.vrot;
+        ctx.save();
+        ctx.globalAlpha = fade;
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        ctx.fillStyle = p.color;
+        if (p.shape === 'rect') ctx.fillRect(-p.size / 2, -p.size / 3, p.size, p.size * 0.66);
+        else { ctx.beginPath(); ctx.arc(0, 0, p.size / 2, 0, Math.PI * 2); ctx.fill(); }
+        ctx.restore();
+      });
+      if (t < DURATION) requestAnimationFrame(frame);
+      else area.innerHTML = '';
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function formatTime(sec) {
+    const s = Math.max(0, Math.round(sec));
+    return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  }
+
+  function showWin(hints, stars, score, elapsedSec) {
     document.getElementById('modal-win').classList.remove('hidden');
     document.getElementById('ws-hints').textContent = hints;
+    const scoreEl = document.getElementById('ws-score');
+    if (scoreEl) scoreEl.textContent = score;
+    const timeEl = document.getElementById('ws-time');
+    if (timeEl) timeEl.textContent = formatTime(elapsedSec);
     const starEls = document.querySelectorAll('#win-stars-row .wstar');
     starEls.forEach((el, idx) => {
       if (idx < stars) el.classList.add('earned');
       else el.classList.remove('earned');
     });
+    burstConfetti();
+
+    // Submit + fetch rank are both best-effort network calls - never block the
+    // win screen on them, just fill the badge in once (if) they resolve.
+    const rankEl = document.getElementById('ws-rank');
+    const badge = document.getElementById('win-rank-badge');
+    if (rankEl && badge) {
+      if (!Leaderboard.getNickname()) {
+        badge.classList.add('hidden');
+      } else {
+        badge.classList.remove('hidden');
+        rankEl.textContent = '…';
+        const totalScore = Storage.get('totalScore') || 0;
+        Leaderboard.submitScore(totalScore).then(() => Leaderboard.fetchMyRank(totalScore)).then(rank => {
+          rankEl.textContent = rank != null ? ('#' + rank) : '—';
+        });
+      }
+    }
+  }
+
+  async function openLeaderboardModal() {
+    document.getElementById('modal-leaderboard').classList.remove('hidden');
+    const myRow = document.getElementById('lb-my-row');
+    const list = document.getElementById('lb-list');
+    myRow.textContent = 'กำลังโหลด…';
+    list.innerHTML = '';
+
+    const nickname = Leaderboard.getNickname();
+    const myScore = Storage.get('totalScore') || 0;
+    const [top, myRank] = await Promise.all([
+      Leaderboard.fetchTop(10),
+      nickname ? Leaderboard.fetchMyRank(myScore) : Promise.resolve(null)
+    ]);
+
+    myRow.textContent = nickname
+      ? ('คุณ: ' + nickname + ' — อันดับ ' + (myRank != null ? '#' + myRank : '—') + ' (' + myScore + ' คะแนน)')
+      : 'ตั้งชื่อผู้เล่นเพื่อเข้าร่วมอันดับ';
+
+    if (top.length === 0) {
+      list.innerHTML = '<div class="lb-empty">ยังไม่มีข้อมูลอันดับ (ตรวจสอบการเชื่อมต่อ)</div>';
+      return;
+    }
+    top.forEach((p, idx) => {
+      const row = document.createElement('div');
+      row.className = 'lb-row' + (nickname && p.nickname === nickname && p.totalScore === myScore ? ' lb-me' : '');
+      row.innerHTML =
+        '<span class="lb-rank">' + (idx + 1) + '</span>' +
+        '<span class="lb-name">' + escapeHtml(p.nickname) + '</span>' +
+        '<span class="lb-score">' + p.totalScore + '</span>';
+      list.appendChild(row);
+    });
+  }
+
+  function escapeHtml(s) {
+    const div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
+  }
+
+  function promptNicknameIfNeeded() {
+    if (Leaderboard.getNickname()) return;
+    document.getElementById('modal-nickname').classList.remove('hidden');
   }
 
   function showFail() {
@@ -73,6 +274,8 @@ const UI = (() => {
 
   function hideAllModals() {
     document.querySelectorAll('.modal-overlay').forEach(m => m.classList.add('hidden'));
+    const confettiArea = document.getElementById('confetti-area');
+    if (confettiArea) confettiArea.innerHTML = ''; // stop any still-running burst
   }
 
   function wireEvents() {
@@ -111,6 +314,13 @@ const UI = (() => {
     });
 
     document.getElementById('btn-back-lvl').addEventListener('click', () => showScreen('screen-menu'));
+
+    document.getElementById('btn-stats').addEventListener('click', () => {
+      buildStatsScreen();
+      showScreen('screen-stats');
+    });
+    document.getElementById('btn-back-stats').addEventListener('click', () => showScreen('screen-menu'));
+
     document.getElementById('btn-pause').addEventListener('click', () => {
       document.getElementById('pause-lvl').textContent = Storage.get('currentLevel');
       document.getElementById('modal-pause').classList.remove('hidden');
@@ -122,22 +332,65 @@ const UI = (() => {
       showScreen('screen-menu');
     });
 
+    const openSettings = () => {
+      syncSettingsUI();
+      document.getElementById('modal-settings').classList.remove('hidden');
+    };
+    document.getElementById('btn-settings').addEventListener('click', openSettings);
+    document.getElementById('btn-pause-settings').addEventListener('click', openSettings);
+    document.getElementById('btn-hud-settings').addEventListener('click', openSettings);
+    document.getElementById('btn-settings-close').addEventListener('click', () => {
+      document.getElementById('modal-settings').classList.add('hidden');
+    });
+
     document.getElementById('btn-next').addEventListener('click', () => {
-      document.getElementById('modal-win').classList.add('hidden');
+      hideAllModals();
       const next = (Game.levelNum || Storage.get('currentLevel')) + 1;
       Game.loadLevel(next);
     });
 
     document.getElementById('btn-replay').addEventListener('click', () => {
-      document.getElementById('modal-win').classList.add('hidden');
+      hideAllModals();
       Game.loadLevel(Game.levelNum || Storage.get('currentLevel'));
     });
 
     document.getElementById('btn-hint').addEventListener('click', () => Game.useHint());
     document.getElementById('btn-undo').addEventListener('click', () => Game.undo());
 
-    document.getElementById('btn-sound').addEventListener('click', () => {
-      applySound(!Storage.get('sound'));
+    document.getElementById('toggle-music').addEventListener('click', () => {
+      applyMusic(Storage.get('music') === false);
+      syncSettingsUI();
+    });
+
+    document.getElementById('toggle-sfx').addEventListener('click', () => {
+      applySound(Storage.get('sound') === false);
+      syncSettingsUI();
+    });
+
+    document.getElementById('toggle-vibration').addEventListener('click', () => {
+      applyVibration(Storage.get('vibration') === false);
+      syncSettingsUI();
+    });
+
+    document.getElementById('btn-nickname-confirm').addEventListener('click', () => {
+      const input = document.getElementById('nickname-input');
+      const val = input.value.trim();
+      if (!val) { input.focus(); return; }
+      Leaderboard.setNickname(val);
+      document.getElementById('modal-nickname').classList.add('hidden');
+    });
+    document.getElementById('btn-nickname-skip').addEventListener('click', () => {
+      document.getElementById('modal-nickname').classList.add('hidden');
+    });
+
+    document.getElementById('btn-view-leaderboard').addEventListener('click', () => openLeaderboardModal());
+
+    document.getElementById('btn-edit-nickname').addEventListener('click', () => {
+      document.getElementById('nickname-input').value = Leaderboard.getNickname() || '';
+      document.getElementById('modal-nickname').classList.remove('hidden');
+    });
+    document.getElementById('btn-leaderboard-close').addEventListener('click', () => {
+      document.getElementById('modal-leaderboard').classList.add('hidden');
     });
 
     document.getElementById('btn-fail-restart').addEventListener('click', () => {
@@ -168,5 +421,5 @@ const UI = (() => {
     }, 100);
   }
 
-  return { showScreen, applyTheme, applySound, updateMenu, updateHUD, showWin, showFail, hideAllModals, wireEvents, runSplash };
+  return { showScreen, applyTheme, applySound, applyMusic, applyVibration, updateMenu, updateHUD, showWin, showFail, hideAllModals, wireEvents, runSplash, buildStatsScreen, promptNicknameIfNeeded };
 })();

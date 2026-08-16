@@ -4,7 +4,7 @@
 
 const Scene3D = (() => {
   let scene, camera, renderer;
-  let cube;
+  let cube, cubeGroup;
   let faceCanvases = [];
   let faceContexts = [];
   let faceTextures = [];
@@ -35,6 +35,12 @@ const Scene3D = (() => {
   let previousMousePosition = { x: 0, y: 0 };
   let currentGridSize = 4;
 
+  // Drag inertia: a flick keeps the cube spinning and easing to a stop instead of
+  // stopping dead on release, matching the reference app's heavier, more physical feel.
+  let velX = 0, velY = 0; // smoothed per-frame drag delta, degrees-equivalent (see applyDragRotation)
+  const INERTIA_FRICTION = 0.94;
+  const INERTIA_STOP_EPS = 0.01;
+
   let onArrowTapCallback = null;
 
   let currentPaths = [];
@@ -50,20 +56,12 @@ const Scene3D = (() => {
     // not just while animating).
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
-    // Sort transparent objects correctly
-    renderer.sortObjects = true;
 
     scene = new THREE.Scene();
 
     camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
     camera.position.set(3, 3, 4);
     camera.lookAt(0, 0, 0);
-
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
-    scene.add(ambientLight);
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
-    dirLight.position.set(10, 20, 10);
-    scene.add(dirLight);
 
     createCube();
 
@@ -81,7 +79,8 @@ const Scene3D = (() => {
 
   function createCube() {
     const geometry = new THREE.BoxGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE);
-    const materials = [];
+    const frontMaterials = [];
+    const backMaterials = [];
     for (let i = 0; i < 6; i++) {
       const c = document.createElement('canvas');
       c.width = TEX_SIZE; c.height = TEX_SIZE;
@@ -96,16 +95,37 @@ const Scene3D = (() => {
       faceContexts.push(ctx);
       faceTextures.push(tex);
 
-      // Lambert instead of Standard: this cube only has one ambient + one directional
-      // light and flat-colored 2D line art on its faces, so the extra per-pixel PBR
-      // (roughness/metalness) shading MeshStandardMaterial does buys nothing visible
-      // here but costs real GPU time every frame, on every face, forever.
-      materials.push(new THREE.MeshLambertMaterial({
-        map: tex, transparent: true, opacity: 0.7, side: THREE.DoubleSide
+      // Basic (unlit) rather than Lambert/Standard: this is flat-colored 2D line art
+      // baked into the canvas texture, not a lit 3D surface - it doesn't need per-pixel
+      // lighting shading, just the texture as-is, and Basic is cheaper to boot.
+      frontMaterials.push(new THREE.MeshBasicMaterial({
+        map: tex, transparent: true, opacity: 0.88, side: THREE.FrontSide,
+        depthWrite: false, depthTest: false
+      }));
+      backMaterials.push(new THREE.MeshBasicMaterial({
+        map: tex, transparent: true, opacity: 0.55, side: THREE.BackSide,
+        depthWrite: false, depthTest: false
       }));
     }
-    cube = new THREE.Mesh(geometry, materials);
-    scene.add(cube);
+
+    // Two meshes sharing one geometry instead of a single transparent box: a single
+    // box with transparent materials draws its 6 face groups in a fixed index order,
+    // not sorted by camera distance, so whichever face happened to draw last "won"
+    // the blend - which face looked see-through vs. opaque depended on view angle
+    // (see git history). Splitting into a BackSide mesh (the far walls, seen from
+    // inside the box) and a FrontSide mesh (the near walls) and forcing draw order
+    // with renderOrder - back always first, front always on top - makes the nearest
+    // face always render crisp with the far faces faintly visible through it,
+    // regardless of how the cube is rotated.
+    const backMesh = new THREE.Mesh(geometry, backMaterials);
+    backMesh.renderOrder = 0;
+    cube = new THREE.Mesh(geometry, frontMaterials);
+    cube.renderOrder = 1;
+
+    cubeGroup = new THREE.Group();
+    cubeGroup.add(backMesh);
+    cubeGroup.add(cube);
+    scene.add(cubeGroup);
   }
 
   function setLevelData(gridSize, paths) {
@@ -312,6 +332,11 @@ const Scene3D = (() => {
         updateFrame(currentPaths);
       }
     }
+    if (!isDragging && (Math.abs(velX) > INERTIA_STOP_EPS || Math.abs(velY) > INERTIA_STOP_EPS)) {
+      applyDragRotation(velX, velY);
+      velX *= INERTIA_FRICTION;
+      velY *= INERTIA_FRICTION;
+    }
     renderer.render(scene, camera);
   }
 
@@ -326,11 +351,19 @@ const Scene3D = (() => {
     return { x: e.clientX, y: e.clientY };
   }
 
+  function applyDragRotation(dx, dy) {
+    const deltaRotationQuaternion = new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(Math.PI/180 * (dy * 0.5), Math.PI/180 * (dx * 0.5), 0, 'XYZ')
+    );
+    cubeGroup.quaternion.multiplyQuaternions(deltaRotationQuaternion, cubeGroup.quaternion);
+  }
+
   let dragDist = 0;
   function onPointerDown(e) {
     if (e.target.id !== 'three-canvas') return;
     isDragging = true;
     dragDist = 0;
+    velX = 0; velY = 0; // grabbing the cube stops any in-flight inertia spin
     previousMousePosition = getEventPos(e);
   }
 
@@ -340,16 +373,23 @@ const Scene3D = (() => {
     const deltaMove = { x: pos.x - previousMousePosition.x, y: pos.y - previousMousePosition.y };
     dragDist += Math.abs(deltaMove.x) + Math.abs(deltaMove.y);
 
-    const deltaRotationQuaternion = new THREE.Quaternion().setFromEuler(
-      new THREE.Euler(Math.PI/180 * (deltaMove.y * 0.5), Math.PI/180 * (deltaMove.x * 0.5), 0, 'XYZ')
-    );
-    cube.quaternion.multiplyQuaternions(deltaRotationQuaternion, cube.quaternion);
+    applyDragRotation(deltaMove.x, deltaMove.y);
+    // Smooth toward the latest delta (not a running average of the whole drag) so the
+    // release velocity reflects how the drag ended, not an early fast flick that already slowed down.
+    // Clamped so a single huge-delta frame (fast swipe, or a touch-event coordinate jump)
+    // can't launch the cube into an absurdly fast spin.
+    const VEL_CLAMP = 25;
+    velX += (Math.max(-VEL_CLAMP, Math.min(VEL_CLAMP, deltaMove.x)) - velX) * 0.5;
+    velY += (Math.max(-VEL_CLAMP, Math.min(VEL_CLAMP, deltaMove.y)) - velY) * 0.5;
     previousMousePosition = pos;
   }
 
   function onPointerUp(e) {
     isDragging = false;
-    if (dragDist < 10 && e.target.id === 'three-canvas') handleTap(getEventPos(e));
+    if (dragDist < 10 && e.target.id === 'three-canvas') {
+      velX = 0; velY = 0;
+      handleTap(getEventPos(e));
+    }
   }
 
   function handleTap(pos) {
