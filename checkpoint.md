@@ -932,3 +932,140 @@ delete another session's docs I no longer hold the auth token for.
   their own device.
 - Same other open items as before: non-cubic box geometry, grid-8 tap-target sizing, unused
   per-path `color` field cleanup, native-haptics revisit.
+
+---
+
+# Update — 2026-08-16: deployed to GitHub Pages (real hosting, not the sandboxed Artifact link)
+
+Realized the existing Artifact test-bundle link can't validate the leaderboard at all - Artifacts
+render behind a strict CSP that blocks every external network request, which would silently kill
+every Firebase call (auth, Firestore reads/writes), not just look different. Flagged this instead
+of quietly rebuilding a bundle that would look fine but not actually prove the feature works.
+Offered three real alternatives; user chose real hosting over Artifact-rebuild or LAN-serving.
+
+## ✅ First-ever git remote + push for this project
+Repo was git-initialized locally back on 2026-08-15 but had never been pushed anywhere. Walked
+the user through creating a GitHub account (`DanielLK888`) and a new public repo
+(`github.com/DanielLK888/arrowflow`) live in this session - I have no `gh` CLI in this
+environment and can't create repos/push without the user's own authenticated session, so this
+was necessarily an interactive, screen-by-screen walkthrough, including Git Credential Manager's
+OAuth popup for the actual push.
+
+**One fix made before the first push**: `ex3.jpg` (a reference screenshot of the *other*
+"Arrow Puzzle 3D" app, kept at the project root purely as internal dev reference material per
+[[arrowflow_render_perf]]) was untracked but not gitignored - added it to `.gitignore` alongside
+the existing `*.mp4` reference-clip rule before committing, so a screenshot of someone else's app
+doesn't end up published in this now-public repo.
+
+**One real permission boundary hit**: the chained `git remote add && git branch -M main && git
+push` command was blocked outright by the session's auto-mode action classifier before any of it
+ran (risky/shared-state action - pushing to a real public GitHub repo). Split into separate
+commands; `remote add` and `branch -M` succeeded standalone, then the `git push` itself required
+the user's explicit confirmation before retrying, per this environment's safety policy on
+actions with external visibility.
+
+## ✅ GitHub Pages enabled
+Repo Settings → Pages → source "Deploy from a branch" → `main` / `/(root)`. Live at
+**https://daniellk888.github.io/arrowflow/** within about a minute of Save - confirmed via a
+polling `curl` loop, not assumed.
+
+## ✅ Verification - now genuinely end-to-end, not sandbox-approximated
+Re-ran the same Playwright leaderboard script from the previous update, this time against the
+real `daniellk888.github.io` URL instead of a local static server: nickname → anonymous auth →
+score submit → rank fetch → leaderboard modal, all succeeded, zero console errors - and unlike
+the Artifact-sandbox concern, this run proves real outbound network calls actually work from a
+real host. **The user then independently tested on their own device/browser** (screenshots),
+played to a nickname "LK", and watched their live rank/score update correctly (1450 → 3276
+across two submissions) against the same real leaderboard data the Playwright run had also
+written to - genuine cross-session confirmation, not just automated-test-says-so.
+
+## 🔜 Next Steps
+- Still need the 3 accumulated `TestPlayer_Claude` documents deleted from the live Firestore
+  `players` collection (from this update's and the previous update's testing) - asked the user
+  to do this via the Firestore console's Data tab, same as before.
+- From now on, any further code change needs a fresh `git push` to `main` for
+  `daniellk888.github.io/arrowflow` to pick it up - GitHub Pages does not auto-deploy from
+  uncommitted local changes.
+- The old Artifact link (`ArrowFlow Test Build`) is now superseded by the real GitHub Pages URL
+  for anything leaderboard-related; still fine for pure UI/gameplay smoke-testing without a
+  network dependency, but no longer the primary test link going forward.
+- Same other open items as before: non-cubic box geometry, grid-8 tap-target sizing, unused
+  per-path `color` field cleanup, native-haptics revisit.
+
+---
+
+# Update — 2026-08-16 (cont'd): moved off the daniellk888.github.io URL over a real branding risk
+
+User tested the `daniellk888.github.io/arrowflow/` link from an unrelated machine (confirming it
+works beyond this LAN), then raised a legitimate concern: "LK888" is a naming pattern extremely
+common among Thai online-gambling sites (the digits "888" specifically are a recurring gambling-
+brand convention), and since GitHub Pages URLs embed the account username directly, the live game
+URL contained it. Real risk on two fronts - player trust (looks like a gambling site at a glance)
+and automated keyword-based web filters (some corporate/ISP-level filters in Thailand block by
+keyword match, not just domain reputation). Not a hypothetical: recommended fixing it rather than
+leaving it, and the user agreed.
+
+## ✅ Fix: moved the repo into a neutrally-named GitHub Organization
+Created org `arrowflow-game` (owned by the same personal GitHub account, free tier), then used
+GitHub's **repository transfer** (Settings → Danger Zone → Transfer ownership) rather than a
+fresh push - this preserves full commit history and, it turns out, **GitHub Pages
+configuration carries over automatically** on transfer (confirmed - the new URL was already
+serving without needing to re-enable Pages).
+
+**New canonical URL: `https://arrowflow-game.github.io/arrowflow/`** - no personal-account
+username in it at all now. Old `daniellk888.github.io/arrowflow/` URL still resolves (repo
+transfer doesn't kill the old owner's Pages the way a delete would - it's just now a different,
+unrelated GitHub Pages site since Pages is served from wherever the repo currently lives, not
+tied to a fixed slot) but should be treated as retired; told the user to stop sharing it.
+Updated the local git remote (`git remote set-url origin ...`) to match, so future pushes go to
+the right place.
+
+## ✅ Verification
+Re-ran the same Playwright leaderboard script against the new URL - full flow succeeds, zero
+console errors, and (confirming the Firebase backend itself is unaffected by the hosting move,
+since it's a separate project from GitHub) the leaderboard correctly showed the *same* live
+data as before, including two real players who'd played in the interim (`LK` at 3276, `AAb` at
+1647) alongside the accumulated test entries.
+
+## 🔜 Next Steps
+- Now 4 accumulated `TestPlayer_Claude` documents need deleting from Firestore (one more added
+  by this update's re-verification pass) - same ask to the user as before.
+- `js/leaderboard.js`'s Firebase config is unaffected by any of this (Firebase project identity
+  is independent of where the frontend is hosted) - no code changes were needed for the move,
+  purely a GitHub-side operation.
+- Same other open items as before: non-cubic box geometry, grid-8 tap-target sizing, unused
+  per-path `color` field cleanup, native-haptics revisit.
+
+---
+
+# Update — 2026-08-16 (cont'd): in-game theme toggle button
+
+User asked for a way to switch light/dark theme from the gameplay screen itself - previously the
+only theme toggle (`btn-theme`) lived on the main menu.
+
+## ✅ New `#btn-hud-theme` button
+Added to the gameplay HUD's `.hud-controls-group`, between the existing pause and settings
+buttons. Same 🌙/☀️ icon convention as the menu button.
+
+## 🐛 Avoided a real regression before it shipped: the existing toggle logic would have reset
+## progress on every use
+The menu's `applyTheme()` handler redraws the cube's face textures by calling
+`Game.loadLevel(...)` again - fine on the menu screen (no live game state to lose), but reusing
+that same handler for an in-game button would silently reset the current level's progress
+(hearts lost, paths already cleared, move count) every time a player toggled theme mid-level.
+Caught this before wiring the button, not after a bug report - added `Game.redrawTheme()`
+instead, which calls `Scene3D.updateFrame(state.paths, true)` directly (forces every face's
+texture to re-stroke with the new theme colors) without touching any game state at all. Both the
+menu and HUD buttons now use this shared, non-destructive path; the old `Game.loadLevel()`
+call in the theme handler is gone entirely.
+
+## ✅ Verification
+Playwright: entered a level, recorded `remaining`/level number, clicked the new HUD button,
+confirmed `data-theme` flipped and the cube visibly re-rendered in the new palette while
+`remaining`/level number stayed exactly unchanged - toggled back, confirmed it returns cleanly.
+Zero console errors.
+
+## 🔜 Next Steps
+- Not yet pushed/deployed - do that next so `arrowflow-game.github.io/arrowflow/` picks it up.
+- Same open items as before: non-cubic box geometry, grid-8 tap-target sizing, unused per-path
+  `color` field cleanup, native-haptics revisit, the 4 pending Firestore test-doc deletions.

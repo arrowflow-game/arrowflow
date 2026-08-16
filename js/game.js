@@ -293,5 +293,11 @@ const Game = (() => {
     UI.showFail();
   }
 
-  return { loadLevel, onArrowTap, useHint, undo, restart, getLevelNum: () => state.levelNum };
+  // Re-strokes every face with the current theme's colors without touching game state -
+  // unlike loadLevel(), this is safe to call mid-level (won't reset progress/hearts/moves).
+  function redrawTheme() {
+    Scene3D.updateFrame(state.paths, true);
+  }
+
+  return { loadLevel, onArrowTap, useHint, undo, restart, redrawTheme, getLevelNum: () => state.levelNum };
 })();

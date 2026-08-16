@@ -51,8 +51,11 @@ const UI = (() => {
   function applyTheme(theme) {
     document.body.setAttribute('data-theme', theme);
     Storage.set('theme', theme);
+    const iconText = theme === 'dark' ? '☀️' : '🌙';
     const icon = document.getElementById('theme-icon');
-    if (icon) icon.textContent = theme === 'dark' ? '☀️' : '🌙';
+    if (icon) icon.textContent = iconText;
+    const iconHud = document.getElementById('theme-icon-hud');
+    if (iconHud) iconHud.textContent = iconText;
   }
 
   function updateMenu() {
@@ -279,11 +282,14 @@ const UI = (() => {
   }
 
   function wireEvents() {
-    document.getElementById('btn-theme').addEventListener('click', () => {
+    const toggleTheme = () => {
       applyTheme(Storage.get('theme') === 'dark' ? 'light' : 'dark');
-      // Force scene to redraw level with new theme colors
-      Game.loadLevel(Game.levelNum || Storage.get('currentLevel'));
-    });
+      // Redraw the cube's face textures with the new theme's colors - safe to call even
+      // mid-level, since it doesn't touch game state (progress/hearts/moves survive).
+      Game.redrawTheme();
+    };
+    document.getElementById('btn-theme').addEventListener('click', toggleTheme);
+    document.getElementById('btn-hud-theme').addEventListener('click', toggleTheme);
 
     document.getElementById('btn-play').addEventListener('click', () => {
       Game.loadLevel(Storage.get('currentLevel'));
