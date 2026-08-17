@@ -165,6 +165,7 @@ const Game = (() => {
     state.lastMovePathId = path.id;
     state.canUndo = false; // becomes undoable once the slide finishes, see animateLogic
 
+    Scene3D.shootExitArrow(path);
     Sound.playSlide();
     UI.updateHUD(buildHudPayload());
   }
@@ -230,7 +231,7 @@ const Game = (() => {
       }
 
       if (p.status === 'moving') {
-        p.progress += 0.2; // speed
+        p.progress += 0.32; // speed - bumped up from 0.2, reported as feeling too slow
         needsUpdate = true;
         // Total length of path = p.segments.length - 1
         // It needs to slide completely off, so progress needs to reach length + a few extra cells

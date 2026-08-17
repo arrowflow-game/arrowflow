@@ -16,6 +16,7 @@ Then paste the printed array as the new LEVELS array in js/levels.js.
 import json
 import random
 import sys
+import time
 
 from generate_level import try_generate, COLORS
 from polycube import PolycubeGraph
@@ -46,13 +47,51 @@ from polycube import PolycubeGraph
 # 300-level regen impractically slow. These numbers were re-verified with 5
 # different random shapes per tier's max (not just one) and all completed
 # comfortably under 6s worst-case.
+# v9 (2026-08-16, same day): path LENGTH bumped +1 on both ends of every
+# tier, path COUNTS left unchanged. User reported the board reads "short and
+# empty" rather than densely packed like the reference clips - probed with
+# generate_level.py directly (5+ random shapes per tier before committing,
+# per [[arrowflow_polycube_system]]'s established practice) and found: at the
+# OLD length range fill was only ~24-28% of a shape's exposed cells; +1/+1
+# length raised that to ~27-37% with generation still fast (under ~5s
+# worst-case per shape, most well under 1s). Pushing paths UP at the same
+# time (tried +15-25 paths on top of the length bump) reliably stalled/failed
+# within the existing 1500-seed budget even on LABYRINTH/ASCENSION-sized
+# shapes - see chat history's probe output - so path counts were deliberately
+# left alone this pass. The existing shape-retry + paths-reduction fallback
+# in generate_one() absorbs any individual unlucky shape same as before.
+# v10 (2026-08-17, same day as v9): user asked for MORE fill after v9, but
+# probing (see chat history) showed pushing PATH COUNT higher at v9's length
+# reliably broke solvability (findBlocker()/exit_ray_clear() only checks a
+# clear straight ray on the head's own face - the denser the board, the more
+# often that ray is blocked, and a full 100%-tile prototype was 0/6
+# solvable). User's own call when told this: prefer fewer, LONGER, more
+# winding paths over more separate paths - re-probed that direction
+# specifically (5-8 shapes per tier's densest point, timed, per established
+# practice) and it's a clear win on both axes at once: cutting path counts
+# ~10-20% below v9 while pushing length up further raised actual cell fill
+# from v9's ~24-37% to ~30-60% (higher on the smaller/early tiers), AND
+# generated faster and more reliably (fewer distinct blocking entities to
+# sequence). Don't reintroduce v9's higher path counts without re-probing -
+# that combination is the one that broke.
+# v11 (2026-08-17, same day as v10): user compared a v10 AWAKENING-tier
+# screenshot (level 12, dense) against a CASCADE/ASCENSION-tier one (level
+# 252, visibly sparser) and asked for the LATER tiers to match the earlier
+# ones' density - v10 only tuned length up tier-by-tier conservatively and
+# the bigger/later tiers ended up notably lower fill% than the small early
+# ones. Re-probed CASCADE through ASCENSION specifically (5-6 shapes each,
+# timed, with the new TIME_BUDGET_SEC safety net already in place so a bad
+# combination degrades gracefully instead of risking another stall) and
+# found a further length increase (paired with a modest path-count pullback,
+# same lesson as v10) raised fill from v10's ~29-40% to ~30-51% on these
+# tiers. AWAKENING/MOMENTUM unchanged - already matched the target density.
 TIERS = [
-    dict(name='AWAKENING', start=1, end=50, n_cubes=(2, 10), unit_grid=6, paths=(30, 100), length=(4, 6)),
-    dict(name='MOMENTUM', start=51, end=100, n_cubes=(10, 14), unit_grid=6, paths=(100, 130), length=(5, 7)),
-    dict(name='CASCADE', start=101, end=150, n_cubes=(14, 17), unit_grid=7, paths=(130, 155), length=(5, 7)),
-    dict(name='VORTEX', start=151, end=200, n_cubes=(17, 20), unit_grid=7, paths=(155, 175), length=(5, 8)),
-    dict(name='LABYRINTH', start=201, end=250, n_cubes=(20, 23), unit_grid=8, paths=(175, 195), length=(6, 8)),
-    dict(name='ASCENSION', start=251, end=300, n_cubes=(23, 26), unit_grid=8, paths=(195, 220), length=(6, 9)),
+    dict(name='AWAKENING', start=1, end=50, n_cubes=(2, 10), unit_grid=6, paths=(26, 85), length=(7, 9)),
+    dict(name='MOMENTUM', start=51, end=100, n_cubes=(10, 14), unit_grid=6, paths=(85, 112), length=(8, 10)),
+    dict(name='CASCADE', start=101, end=150, n_cubes=(14, 17), unit_grid=7, paths=(105, 122), length=(8, 12)),
+    dict(name='VORTEX', start=151, end=200, n_cubes=(17, 20), unit_grid=7, paths=(122, 138), length=(8, 13)),
+    dict(name='LABYRINTH', start=201, end=250, n_cubes=(20, 23), unit_grid=8, paths=(138, 155), length=(9, 13)),
+    dict(name='ASCENSION', start=251, end=300, n_cubes=(23, 26), unit_grid=8, paths=(155, 165), length=(9, 13)),
 ]
 
 # The first 5 levels are always a single plain cube (onboarding - don't hit a
@@ -160,23 +199,54 @@ def lerp_int(lo, hi, frac):
     return round(lo + (hi - lo) * frac)
 
 
+# Hard wall-clock ceiling for a SINGLE level's whole generate_one() call,
+# covering all shape attempts + all path-count reductions combined - added
+# 2026-08-17 after v10's longer min/max path lengths turned out to make
+# individual try_generate() calls dramatically more expensive on some
+# levels (each failed placement attempt does more backtracking over a
+# longer route). The OLD safety net was purely seed-COUNT based (1500 seeds
+# x 4 shape attempts x up to 20 reductions), which assumed each attempt was
+# cheap - a real, observed level (level 1) ground for 3.5+ HOURS on that
+# budget without producing a single result, using 100% CPU the whole time
+# (confirmed alive via climbing CPU time, not deadlocked - just genuinely
+# that slow per attempt at these parameters). A time budget bounds the
+# batch's total worst case regardless of how expensive any individual
+# attempt turns out to be.
+TIME_BUDGET_SEC = 25
+
+
 def generate_one(level_id, tier, seed_budget=1500, shape_attempts=4):
+    start_time = time.time()
+    def out_of_time():
+        return time.time() - start_time > TIME_BUDGET_SEC
+
     span = tier['end'] - tier['start']
     frac = (level_id - tier['start']) / span if span else 0.0
 
     num_paths = lerp_int(tier['paths'][0], tier['paths'][1], frac)
     min_len, max_len = tier['length']
     unit_grid = tier['unit_grid']
+    # Onboarding levels (1-5) are always a single plain cube (see
+    # pick_shape()) - only 6 faces worth of cells, much less room than the
+    # tier's own shapes (2-10+ fused cubes) that v10's length range was
+    # actually probed against. Confirmed directly: AWAKENING's v10 length
+    # (7,9) at its own path count took 32+ seconds PER ATTEMPT on a single
+    # cube (vs instant at length (4,6)) - this was the real cause of level 1
+    # grinding for 3.5+ hours. Onboarding was always meant to be the easy
+    # intro anyway, so decouple it from the tier's length entirely rather
+    # than trying to find a length that works both for a single cube AND for
+    # a 10-cube shape.
+    if level_id <= ONBOARDING_SINGLE_CUBE_THROUGH:
+        min_len, max_len = 4, 6
 
     difficulty = DIFFICULTY_BASE[tier['name']]
     if frac >= 0.6:
         difficulty = DIFFICULTY_NEXT[difficulty]
 
     # Some random shapes are pathologically hard to pack at the target
-    # density (a real, observed failure mode - one shape ground for 10+
-    # minutes without finishing, not a hypothetical) even though most
-    # shapes at the same n_cubes/paths succeed in well under a second. Rather
-    # than grinding an unlucky shape down to a trivially low path count
+    # density (a real, observed failure mode) even though most shapes at the
+    # same n_cubes/paths succeed in well under a second. Rather than
+    # grinding an unlucky shape down to a trivially low path count
     # immediately, re-roll a handful of DIFFERENT shapes first (each at a
     # smaller seed_budget, so one bad shape can't stall the whole batch) and
     # only fall back to reducing paths on the last-tried shape once every
@@ -184,11 +254,15 @@ def generate_one(level_id, tier, seed_budget=1500, shape_attempts=4):
     shape_rng = random.Random(level_id * 31 + 7)
     last_shape, last_graph = None, None
     for shape_try in range(shape_attempts):
+        if out_of_time():
+            break
         shape, graph = pick_shape(level_id, tier, shape_rng, shape_try)
         last_shape, last_graph = shape, graph
         base_seed = level_id * 977 + shape_try * 100003  # deterministic, spread out per shape attempt
         capped_paths = min(num_paths, len(graph.faces) * unit_grid * unit_grid)
         for offset in range(seed_budget):
+            if offset % 20 == 0 and out_of_time():
+                break
             result = try_generate(base_seed + offset, graph, unit_grid, capped_paths, min_len, max_len)
             if result:
                 return result, capped_paths, difficulty, shape, unit_grid
@@ -203,8 +277,10 @@ def generate_one(level_id, tier, seed_budget=1500, shape_attempts=4):
     paths = None
     tried_paths = min(num_paths, len(graph.faces) * unit_grid * unit_grid)
     reductions = 0
-    while paths is None and tried_paths >= 4 and reductions < 20:
+    while paths is None and tried_paths >= 4 and reductions < 20 and not out_of_time():
         for offset in range(seed_budget):
+            if offset % 20 == 0 and out_of_time():
+                break
             result = try_generate(base_seed + offset, graph, unit_grid, tried_paths, min_len, max_len)
             if result:
                 paths = result
@@ -213,14 +289,22 @@ def generate_one(level_id, tier, seed_budget=1500, shape_attempts=4):
             tried_paths -= 1  # fall back to fewer paths rather than fail the level outright
             reductions += 1
     if paths is None:
-        # Last resort: a single plain cube at a small, always-solvable path
-        # count - guarantees every level generates something rather than
-        # the batch stalling on one adversarial shape.
+        # Last resort: a single plain cube at a small, capped-length path
+        # count - guarantees every level generates something fast rather
+        # than the batch stalling on one adversarial shape/length combo.
+        # Length is also capped here (not just the tier's raw min/max) since
+        # a long minimum length was the actual root cause of the 3.5-hour
+        # stall above, and this fallback exists specifically to always be
+        # cheap - `+offset` on the seed was also a real bug fix here: this
+        # loop used to retry the exact same constant seed 1500 times.
         shape = [(0, 0, 0)]
         graph = PolycubeGraph(shape)
         tried_paths = 6
+        fallback_min_len = min(min_len, 6)
+        fallback_max_len = min(max_len, fallback_min_len + 2)
         for offset in range(seed_budget):
-            result = try_generate(level_id * 977, graph, unit_grid, tried_paths, min_len, max_len)
+            result = try_generate(level_id * 977 + offset, graph, unit_grid, tried_paths,
+                                   fallback_min_len, fallback_max_len)
             if result:
                 paths = result
                 break

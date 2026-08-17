@@ -18,6 +18,10 @@
 <body>
   <!-- Three.js renders into this canvas (always behind everything) -->
   <canvas id="three-canvas"></canvas>
+  <!-- 2D overlay for the exit-shot arrow effect (screen-space, so it can fly
+       past the 3D shape's own silhouette to the edge of the viewport - a
+       per-face WebGL texture can't do that, it's clipped to that face). -->
+  <canvas id="fx-canvas"></canvas>
 
   <!-- SPLASH -->
   <div id="screen-splash" class="ovr-screen active">

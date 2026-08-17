@@ -46,10 +46,53 @@ const Scene3D = (() => {
     return Storage.get('theme') === 'dark' ? COLOR_IDLE_DARK : COLOR_IDLE_LIGHT;
   }
 
+  // Pinch/scroll zoom: the camera dollies along its fixed initial viewing
+  // direction (never orbits - shapeGroup itself carries all rotation), so
+  // zoom is just a distance-from-origin scalar. Bounds keep the shape from
+  // clipping past the near plane when zoomed in or shrinking to an unusable
+  // dot when zoomed out.
+  const CAMERA_DIR = new THREE.Vector3(3, 3, 4).normalize();
+  const MIN_CAMERA_DISTANCE = 2.5;
+  const MAX_CAMERA_DISTANCE = 11;
+  let cameraDistance = 0;
+  let pinchStartDist = 0;
+  let pinchStartCameraDistance = 0;
+
+  function setCameraDistance(dist) {
+    cameraDistance = Math.max(MIN_CAMERA_DISTANCE, Math.min(MAX_CAMERA_DISTANCE, dist));
+    camera.position.copy(CAMERA_DIR).multiplyScalar(cameraDistance);
+    camera.lookAt(0, 0, 0);
+  }
+
+  function onWheelZoom(e) {
+    e.preventDefault();
+    setCameraDistance(cameraDistance + e.deltaY * 0.01);
+  }
+
+  function touchDistance(touches) {
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.hypot(dx, dy);
+  }
+
   let isDragging = false;
   let previousMousePosition = { x: 0, y: 0 };
   let currentGraph = null;       // { faces, faceByKey, adj } from Polycube.buildGraph
   let currentUnitGrid = 6;
+  let currentCenter = [0, 0, 0]; // from shapeCenterAndScale(), needed to place the exit-shot fx in the same local frame as the geometry
+  let currentScale = 1;
+
+  // Exit-shot effect: a screen-space overlay (see #fx-canvas), not a 3D
+  // object, so it can fly past the shape's own silhouette to the actual
+  // edge of the viewport - a per-face WebGL texture is clipped to that
+  // face's own quad and can never do this (see [[arrowflow_render_perf]]'s
+  // exit-overshoot writeup for why that path was deliberately clamped
+  // small instead). Requested directly as a release/flourish effect for
+  // when a path successfully exits, distinct from the small in-shape slide.
+  let fxCanvas = null, fxCtx = null;
+  let activeShots = [];
+  const EXIT_SHOT_COLOR = '#FFA500';
+  const EXIT_SHOT_DURATION_MS = 260;
   let faceIndexByKey = {};       // faceKey -> index into faceCanvases/materials/geometry groups
 
   // Drag inertia: a flick keeps the cube spinning and easing to a stop instead of
@@ -66,6 +109,9 @@ const Scene3D = (() => {
 
   function init() {
     const canvas = document.getElementById('three-canvas');
+    fxCanvas = document.getElementById('fx-canvas');
+    fxCtx = fxCanvas.getContext('2d');
+    resizeFxCanvas();
     renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
     // Uncapped devicePixelRatio means a phone reporting dpr=3 renders 2.25x the pixels
     // of dpr=2 for no visible benefit on a screen that size - this alone is often the
@@ -79,6 +125,7 @@ const Scene3D = (() => {
     camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
     camera.position.set(3, 3, 4);
     camera.lookAt(0, 0, 0);
+    cameraDistance = camera.position.length();
 
     shapeGroup = new THREE.Group();
     scene.add(shapeGroup);
@@ -92,6 +139,7 @@ const Scene3D = (() => {
     canvas.addEventListener('touchstart', onPointerDown, {passive: false});
     canvas.addEventListener('touchmove', onPointerMove, {passive: false});
     canvas.addEventListener('touchend', onPointerUp);
+    canvas.addEventListener('wheel', onWheelZoom, {passive: false});
 
     animate();
   }
@@ -171,6 +219,122 @@ const Scene3D = (() => {
     return geometry;
   }
 
+  // World-space position of an arbitrary point (r,c in cell units, can be
+  // fractional/out-of-range) on a given face - same corner math and
+  // uv/(row,col) convention as buildPolycubeGeometry()/onArrowTap() above,
+  // but evaluated at an arbitrary interior point instead of just the 4
+  // corners, and mapped through shapeGroup's LIVE rotation (so it tracks the
+  // shape as the player drags it, not just its position at load time). Used
+  // by the exit-shot effect below to know where a path's head/exit really
+  // is on screen right now.
+  function cellWorldPosition(faceObj, r, c, unitGrid) {
+    const corners = Polycube.faceCorners(faceObj.pos, faceObj.d);
+    const toLocal = (key) => {
+      const p = corners[key];
+      return new THREE.Vector3(
+        (p[0] - currentCenter[0]) * currentScale,
+        (p[1] - currentCenter[1]) * currentScale,
+        (p[2] - currentCenter[2]) * currentScale
+      );
+    };
+    const c00 = toLocal('0,0'), c01 = toLocal('0,1'), c10 = toLocal('1,0'), c11 = toLocal('1,1');
+    const u = c / unitGrid, v = 1 - r / unitGrid; // matches uv00=(0,1) etc. above
+    const top = c00.clone().lerp(c01, u);
+    const bot = c10.clone().lerp(c11, u);
+    const local = bot.lerp(top, v);
+    return shapeGroup.localToWorld(local);
+  }
+
+  function projectToScreen(worldVec) {
+    const v = worldVec.clone().project(camera);
+    return {
+      x: (v.x * 0.5 + 0.5) * window.innerWidth,
+      y: (1 - (v.y * 0.5 + 0.5)) * window.innerHeight
+    };
+  }
+
+  // Extends a ray from (x0,y0) in direction (dx,dy) to wherever it crosses
+  // the viewport's own rectangle - dx/dy are mutually exclusive in sign per
+  // axis for which edge is relevant, so at most one candidate per axis.
+  function rayToViewportEdge(x0, y0, dx, dy) {
+    const w = window.innerWidth, h = window.innerHeight;
+    let t = Infinity;
+    if (dx > 0) t = Math.min(t, (w - x0) / dx);
+    else if (dx < 0) t = Math.min(t, (0 - x0) / dx);
+    if (dy > 0) t = Math.min(t, (h - y0) / dy);
+    else if (dy < 0) t = Math.min(t, (0 - y0) / dy);
+    if (!isFinite(t) || t <= 0) t = Math.max(w, h);
+    return { x: x0 + dx * t, y: y0 + dy * t };
+  }
+
+  // Release/flourish effect for a path that just successfully exited -
+  // requested directly as a distinct visual from the small in-shape slide
+  // (see [[arrowflow_ux_polish]]): a straight line shoots from the exit
+  // point out to the actual edge of the screen. Must be screen-space (see
+  // #fx-canvas setup) since a per-face WebGL texture is clipped to that
+  // face's own quad and can't visually leave the shape's silhouette.
+  function shootExitArrow(path) {
+    if (!path.segments.length) return;
+    shapeGroup.updateMatrixWorld(true);
+    camera.updateMatrixWorld();
+
+    const head = path.segments[path.segments.length - 1];
+    const faceObj = { pos: head.cube, d: head.dir };
+    const p0 = cellWorldPosition(faceObj, head.r + 0.5, head.c + 0.5, currentUnitGrid);
+
+    let r2 = head.r + 0.5, c2 = head.c + 0.5;
+    const delta = 0.8; // just past the head, enough to establish a reliable screen-space direction
+    if (path.exitDir === 'up') r2 -= delta;
+    else if (path.exitDir === 'down') r2 += delta;
+    else if (path.exitDir === 'left') c2 -= delta;
+    else if (path.exitDir === 'right') c2 += delta;
+    const p1 = cellWorldPosition(faceObj, r2, c2, currentUnitGrid);
+
+    const s0 = projectToScreen(p0);
+    const s1 = projectToScreen(p1);
+    let dx = s1.x - s0.x, dy = s1.y - s0.y;
+    const len = Math.hypot(dx, dy) || 1;
+    dx /= len; dy /= len;
+
+    const edge = rayToViewportEdge(s0.x, s0.y, dx, dy);
+    activeShots.push({ x0: s0.x, y0: s0.y, x1: edge.x, y1: edge.y, start: performance.now() });
+  }
+
+  function drawExitShots() {
+    const now = performance.now();
+    const fadeTail = 150;
+    activeShots = activeShots.filter(s => now - s.start < EXIT_SHOT_DURATION_MS + fadeTail);
+    fxCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    activeShots.forEach(shot => {
+      const t = Math.min(1, (now - shot.start) / EXIT_SHOT_DURATION_MS);
+      const grow = 1 - Math.pow(1 - t, 3); // ease-out
+      const cx = shot.x0 + (shot.x1 - shot.x0) * grow;
+      const cy = shot.y0 + (shot.y1 - shot.y0) * grow;
+      const fadeStart = 0.7;
+      const alpha = t > fadeStart ? Math.max(0, 1 - (t - fadeStart) / (1 - fadeStart)) : 1;
+
+      fxCtx.globalAlpha = alpha;
+      fxCtx.strokeStyle = EXIT_SHOT_COLOR;
+      fxCtx.lineWidth = 6;
+      fxCtx.lineCap = 'round';
+      fxCtx.beginPath();
+      fxCtx.moveTo(shot.x0, shot.y0);
+      fxCtx.lineTo(cx, cy);
+      fxCtx.stroke();
+
+      const ang = Math.atan2(cy - shot.y0, cx - shot.x0);
+      const headLen = 16;
+      fxCtx.beginPath();
+      fxCtx.moveTo(cx, cy);
+      fxCtx.lineTo(cx - headLen * Math.cos(ang - Math.PI / 7), cy - headLen * Math.sin(ang - Math.PI / 7));
+      fxCtx.lineTo(cx - headLen * Math.cos(ang + Math.PI / 7), cy - headLen * Math.sin(ang + Math.PI / 7));
+      fxCtx.closePath();
+      fxCtx.fillStyle = EXIT_SHOT_COLOR;
+      fxCtx.fill();
+    });
+    fxCtx.globalAlpha = 1;
+  }
+
   function disposeFaceResources() {
     frontMaterials.forEach(m => m.dispose());
     backMaterials.forEach(m => m.dispose());
@@ -210,9 +374,21 @@ const Scene3D = (() => {
       // Basic (unlit) rather than Lambert/Standard: this is flat-colored 2D line art
       // baked into the canvas texture, not a lit 3D surface - it doesn't need per-pixel
       // lighting shading, just the texture as-is, and Basic is cheaper to boot.
+      // depthTest/depthWrite ARE enabled here (unlike the back mesh below) -
+      // a polycube shape (see [[arrowflow_polycube_system]]) is often
+      // non-convex, so two different exterior faces can both be
+      // camera-facing at once while sitting at different real depths (e.g.
+      // the inner wall of a step). With depth testing off, the front mesh's
+      // many face-groups draw in a fixed array order rather than by actual
+      // distance, so the farther exterior face could paint over the nearer
+      // one - reported directly as "the front line fades and the back line
+      // becomes prominent instead" on a 23-cube LABYRINTH-tier shape. This
+      // only affects the front mesh's self-occlusion; the back mesh is
+      // still drawn first via renderOrder with depthWrite left off, so it
+      // can't block the front mesh from painting over it as before.
       frontMaterials.push(new THREE.MeshBasicMaterial({
         map: tex, transparent: true, opacity: FRONT_OPACITY, side: THREE.FrontSide,
-        depthWrite: false, depthTest: false
+        depthWrite: true, depthTest: true
       }));
       backMaterials.push(new THREE.MeshBasicMaterial({
         map: tex, transparent: true, opacity: BACK_OPACITY, side: THREE.BackSide,
@@ -221,6 +397,8 @@ const Scene3D = (() => {
     });
 
     const { center, scale } = shapeCenterAndScale(shape);
+    currentCenter = center;
+    currentScale = scale;
     const geometry = buildPolycubeGeometry(currentGraph.faces, center, scale);
 
     // Two meshes sharing one geometry instead of a single transparent mesh: a
@@ -232,7 +410,13 @@ const Scene3D = (() => {
     // FrontSide mesh (the near walls) and forcing draw order with
     // renderOrder - back always first, front always on top - makes the
     // nearest face always render crisp with the far faces faintly visible
-    // through it, regardless of how the shape is rotated.
+    // through it, regardless of how the shape is rotated. The back mesh
+    // still skips depth test/write entirely (mesh-level renderOrder alone
+    // decides it always loses to the front mesh); the front mesh now DOES
+    // depth test/write against itself (see its material above) so that on a
+    // non-convex polycube shape, two different exterior faces that are both
+    // camera-facing at once resolve by real distance instead of by array
+    // order.
     if (shapeMesh) { shapeGroup.remove(shapeMesh); shapeMesh.geometry.dispose(); }
     if (backMesh) { shapeGroup.remove(backMesh); }
 
@@ -430,6 +614,40 @@ const Scene3D = (() => {
     return headPt;
   }
 
+  // Determines which of sA's 4 edges (top/bottom/left/right) actually leads
+  // to keyB, using the real adjacency graph rather than guessing from sA's
+  // row/col boundary position - a corner cell (e.g. r=0 AND c=0) sits on TWO
+  // boundaries at once, and picking the wrong one sent the stroke to the
+  // wrong wall, leaving a visible gap where the line should have continued
+  // onto the neighboring face (reported by the user as broken corners).
+  function edgeTowards(fromKey, toKey) {
+    const adj = currentGraph && currentGraph.adj[fromKey];
+    if (adj) {
+      for (const edge in adj) {
+        if (adj[edge][0] === toKey) return edge;
+      }
+    }
+    return null;
+  }
+
+  function clampToEdge(edge, cx, cy, texSize, fallbackR, fallbackC) {
+    let ex = cx, ey = cy;
+    if (edge === 'top') ey = 0;
+    else if (edge === 'bottom') ey = texSize;
+    else if (edge === 'left') ex = 0;
+    else if (edge === 'right') ex = texSize;
+    else {
+      // Fallback: old boundary-guessing, only reached if the graph lookup
+      // above somehow fails (e.g. mismatched keys) - keeps rendering from
+      // hard-breaking rather than leaving the stroke stuck at the cell center.
+      if (fallbackR === 0) ey = 0;
+      else if (fallbackR === currentUnitGrid - 1) ey = texSize;
+      else if (fallbackC === 0) ex = 0;
+      else if (fallbackC === currentUnitGrid - 1) ex = texSize;
+    }
+    return { ex, ey };
+  }
+
   function getPointAtDist(path, d, cellSize, L) {
     const texSize = currentUnitGrid * cellSize;
     if (d <= 0) {
@@ -454,27 +672,39 @@ const Scene3D = (() => {
           let t2 = t * 2;
           let cx = sA.c * cellSize + cellSize/2;
           let cy = sA.r * cellSize + cellSize/2;
-          let ex = cx, ey = cy;
-          if (sA.r === 0) ey = 0;
-          else if (sA.r === currentUnitGrid - 1) ey = texSize;
-          else if (sA.c === 0) ex = 0;
-          else if (sA.c === currentUnitGrid - 1) ex = texSize;
+          const edge = edgeTowards(keyA, keyB);
+          const { ex, ey } = clampToEdge(edge, cx, cy, texSize, sA.r, sA.c);
           return { faceKey: keyA, x: cx + t2 * (ex - cx), y: cy + t2 * (ey - cy) };
         } else {
           let t2 = (t - 0.5) * 2;
           let cx = sB.c * cellSize + cellSize/2;
           let cy = sB.r * cellSize + cellSize/2;
-          let ex = cx, ey = cy;
-          if (sB.r === 0) ey = 0;
-          else if (sB.r === currentUnitGrid - 1) ey = texSize;
-          else if (sB.c === 0) ex = 0;
-          else if (sB.c === currentUnitGrid - 1) ex = texSize;
+          const edge = edgeTowards(keyB, keyA);
+          const { ex, ey } = clampToEdge(edge, cx, cy, texSize, sB.r, sB.c);
           return { faceKey: keyB, x: ex + t2 * (cx - ex), y: ey + t2 * (cy - ey) };
         }
       }
     } else {
       let head = path.segments[L];
       let ext = d - L;
+      // A clearing path's whole stroke has to travel its own length L for
+      // the tail to catch up to where the head started (see animateLogic()'s
+      // comment in game.js) - that part is correct and uses real segment
+      // data via the d<=L branch above. But once the WINDOW's start (not
+      // just its end) also passes L, near the end of the slide, this crude
+      // "extend head's r/c in a straight line on its own face" fallback was
+      // being asked to draw up to L+4 cells out - for a longer path that's
+      // a long straight line cutting across (or past) the head's face,
+      // completely disconnected from the path's actual maze shape,
+      // reported directly as "the line dives away before the true edge,
+      // then a stray line shoots out to the edge of the screen". Clamping
+      // the overshoot to a small constant keeps the intended "pokes a
+      // little past the edge, then gone" look regardless of path length -
+      // points beyond the clamp return no face (faceKey: null never matches
+      // any real key) so strokePath() just stops drawing there instead of
+      // rendering the runaway line.
+      const MAX_EXIT_OVERSHOOT = 1.5;
+      if (ext > MAX_EXIT_OVERSHOOT) return { faceKey: null, x: 0, y: 0 };
       let r = head.r, c = head.c;
       if (path.exitDir === 'up') r -= ext;
       else if (path.exitDir === 'down') r += ext;
@@ -525,12 +755,21 @@ const Scene3D = (() => {
       if (shapeGroup.quaternion.angleTo(targetQuaternion) < 0.01) targetQuaternion = null;
     }
     renderer.render(scene, camera);
+    if (activeShots.length) drawExitShots();
   }
 
   function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    resizeFxCanvas();
+  }
+
+  function resizeFxCanvas() {
+    const dpr = Math.min(window.devicePixelRatio, 2);
+    fxCanvas.width = window.innerWidth * dpr;
+    fxCanvas.height = window.innerHeight * dpr;
+    fxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
   function getEventPos(e) {
@@ -538,10 +777,10 @@ const Scene3D = (() => {
     return { x: e.clientX, y: e.clientY };
   }
 
-  // Degrees of rotation per pixel of drag - lowered from 0.5 after a user
-  // report that the default felt dizzyingly fast, especially the inertia
-  // spin continuing after a flick.
-  const DRAG_SENSITIVITY = 0.32;
+  // Degrees of rotation per pixel of drag - lowered from 0.5, then 0.32
+  // (2026-08-15), then 0.2, then again here (2026-08-17) after a third
+  // report that long sessions still felt dizzying.
+  const DRAG_SENSITIVITY = 0.1;
 
   function applyDragRotation(dx, dy) {
     const deltaRotationQuaternion = new THREE.Quaternion().setFromEuler(
@@ -553,6 +792,13 @@ const Scene3D = (() => {
   let dragDist = 0;
   function onPointerDown(e) {
     if (e.target.id !== 'three-canvas') return;
+    if (e.touches && e.touches.length === 2) {
+      isDragging = false; // a second finger landing mid-drag hands off to pinch, not rotate
+      velX = 0; velY = 0;
+      pinchStartDist = touchDistance(e.touches);
+      pinchStartCameraDistance = cameraDistance;
+      return;
+    }
     isDragging = true;
     dragDist = 0;
     velX = 0; velY = 0; // grabbing the shape stops any in-flight inertia spin
@@ -561,6 +807,14 @@ const Scene3D = (() => {
   }
 
   function onPointerMove(e) {
+    if (e.touches && e.touches.length === 2) {
+      e.preventDefault();
+      const dist = touchDistance(e.touches);
+      if (pinchStartDist > 0) {
+        setCameraDistance(pinchStartCameraDistance * (pinchStartDist / dist));
+      }
+      return;
+    }
     if (!isDragging) return;
     const pos = getEventPos(e);
     const deltaMove = { x: pos.x - previousMousePosition.x, y: pos.y - previousMousePosition.y };
@@ -578,6 +832,7 @@ const Scene3D = (() => {
   }
 
   function onPointerUp(e) {
+    pinchStartDist = 0;
     isDragging = false;
     if (dragDist < 10 && e.target.id === 'three-canvas') {
       velX = 0; velY = 0;
@@ -603,5 +858,5 @@ const Scene3D = (() => {
 
   function setOnArrowTap(cb) { onArrowTapCallback = cb; }
 
-  return { init, setLevelData, updateFrame, setOnArrowTap, highlightPath };
+  return { init, setLevelData, updateFrame, setOnArrowTap, highlightPath, shootExitArrow };
 })();

@@ -44,6 +44,12 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font-main); colo
   position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block; z-index: 0;
 }
 
+#fx-canvas {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block; z-index: 1;
+  pointer-events: none;
+  transform: translateZ(0); /* own compositor layer, cheap insurance next to a WebGL canvas */
+}
+
 .ovr-screen {
   position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10; opacity: 0; pointer-events: none; transition: opacity 0.4s;
 }
