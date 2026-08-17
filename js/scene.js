@@ -68,6 +68,7 @@ const Scene3D = (() => {
   function onWheelZoom(e) {
     e.preventDefault();
     setCameraDistance(cameraDistance + e.deltaY * 0.01);
+    if (onGestureCallback) onGestureCallback('zoom', Math.abs(e.deltaY));
   }
 
   function touchDistance(touches) {
@@ -106,6 +107,11 @@ const Scene3D = (() => {
   const INERTIA_STOP_EPS = 0.01;
 
   let onArrowTapCallback = null;
+  // Optional tutorial hook: fired with ('rotate', cumulativePixelsThisDrag) on every
+  // drag move, and ('zoom', pixelOrWheelDelta) on every wheel/pinch move. Not used by
+  // normal gameplay - only the first-run tutorial (js/tutorial.js) listens, to detect
+  // that the player actually performed the gesture rather than just reading about it.
+  let onGestureCallback = null;
 
   let currentPaths = [];
   let highlightPathId = null;
@@ -854,6 +860,7 @@ const Scene3D = (() => {
       const dist = touchDistance(e.touches);
       if (pinchStartDist > 0) {
         setCameraDistance(pinchStartCameraDistance * (pinchStartDist / dist));
+        if (onGestureCallback) onGestureCallback('zoom', Math.abs(dist - pinchStartDist));
       }
       return;
     }
@@ -863,6 +870,7 @@ const Scene3D = (() => {
     dragDist += Math.abs(deltaMove.x) + Math.abs(deltaMove.y);
 
     applyDragRotation(deltaMove.x, deltaMove.y);
+    if (onGestureCallback) onGestureCallback('rotate', dragDist);
     // Smooth toward the latest delta (not a running average of the whole drag) so the
     // release velocity reflects how the drag ended, not an early fast flick that already slowed down.
     // Clamped so a single huge-delta frame (fast swipe, or a touch-event coordinate jump)
@@ -899,6 +907,7 @@ const Scene3D = (() => {
   }
 
   function setOnArrowTap(cb) { onArrowTapCallback = cb; }
+  function setOnGesture(cb) { onGestureCallback = cb; }
 
-  return { init, setLevelData, updateFrame, setOnArrowTap, highlightPath, shootExitArrow };
+  return { init, setLevelData, updateFrame, setOnArrowTap, setOnGesture, highlightPath, shootExitArrow };
 })();

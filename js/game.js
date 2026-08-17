@@ -22,6 +22,15 @@ const Game = (() => {
 
   let animationFrameId = null;
 
+  // Optional tutorial hook: fired with ('tap-success' | 'tap-blocked', path) from
+  // handlePathTap(), and ('level-loaded', levelNum) from loadLevel(). Not used by
+  // normal gameplay - only the first-run tutorial (js/tutorial.js) listens, to know
+  // when the player actually performed each taught action rather than just being
+  // told about it.
+  let onEventCallback = null;
+  function setOnEvent(cb) { onEventCallback = cb; }
+  function fireEvent(name, data) { if (onEventCallback) onEventCallback(name, data); }
+
   function loadLevel(n) {
     const data = getLevel(n);
     if (!data) return false;
@@ -48,6 +57,7 @@ const Game = (() => {
 
     if (animationFrameId) cancelAnimationFrame(animationFrameId);
     animateLogic();
+    fireEvent('level-loaded', n);
     return true;
   }
 
@@ -171,6 +181,7 @@ const Game = (() => {
       Sound.playBump();
       Haptics.bump();
       UI.updateHUD(buildHudPayload());
+      fireEvent('tap-blocked', path);
       return;
     }
 
@@ -195,6 +206,7 @@ const Game = (() => {
     Scene3D.shootExitArrow(path);
     Sound.playSlide();
     UI.updateHUD(buildHudPayload());
+    fireEvent('tap-success', path);
   }
 
   function useHint() {
@@ -345,5 +357,5 @@ const Game = (() => {
     Scene3D.updateFrame(state.paths, true);
   }
 
-  return { loadLevel, onArrowTap, useHint, undo, restart, redrawTheme, getLevelNum: () => state.levelNum };
+  return { loadLevel, onArrowTap, useHint, undo, restart, redrawTheme, setOnEvent, getLevelNum: () => state.levelNum };
 })();

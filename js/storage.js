@@ -1,6 +1,6 @@
 ﻿const Storage = (() => {
   const KEY = 'arrowflow3d_save';
-  const defaults = { currentLevel: 1, highestUnlocked: 1, levelData: {}, totalStars: 0, totalScore: 0, hints: 3, theme: 'light', sound: true, music: true, vibration: true };
+  const defaults = { currentLevel: 1, highestUnlocked: 1, levelData: {}, totalStars: 0, totalScore: 0, hints: 3, theme: 'light', sound: true, music: true, vibration: true, tutorialSeen: false };
 
   function load() {
     try { const raw = localStorage.getItem(KEY); return raw ? { ...defaults, ...JSON.parse(raw) } : { ...defaults }; }

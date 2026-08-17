@@ -14,6 +14,10 @@ document.addEventListener('DOMContentLoaded', () => {
   Scene3D.init();
   Scene3D.setOnArrowTap(Game.onArrowTap);
 
+  // First-run tutorial (level 1 only, gated on Storage's tutorialSeen flag) -
+  // wires its listeners now so it's ready before the first Game.loadLevel() call below.
+  Tutorial.init();
+
   // Expose current level on Game object for UI
   Game.getCurrentLevel = () => {
     // hacky way if state is hidden, but let's just use Storage
