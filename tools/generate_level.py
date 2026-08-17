@@ -26,6 +26,7 @@ from polycube import PolycubeGraph
 DIRS = ['up', 'down', 'left', 'right']
 OPP = {'up': 'down', 'down': 'up', 'left': 'right', 'right': 'left'}
 EDGE_TO_DIR = {'top': 'up', 'bottom': 'down', 'left': 'left', 'right': 'right'}
+DIR_TO_EDGE = {'up': 'top', 'down': 'bottom', 'left': 'left', 'right': 'right'}
 
 # 12 colors: the original 10 plus indigo/deep-red to fill the two remaining hue gaps
 # (needed once tiers pack more than 10 simultaneous paths onto one cube - see
@@ -65,11 +66,42 @@ def step(face, r, c, direction, graph, unit_grid):
     if nedge == 'right': return (nface, nidx, unit_grid - 1, True, continue_dir)
 
 
-def exit_ray_clear(face, r, c, direction, occupied, self_cells, unit_grid):
+def is_open_edge(face, direction, graph):
+    """True if face's edge in `direction` is a genuine exterior boundary of
+    the WHOLE polycube - one that wraps to another exposed face of the SAME
+    physical unit cube - rather than an interior seam bordering a DIFFERENT
+    cube glued onto the shape. Every exposed face's every edge has SOME
+    neighbor in `graph.adj` (a polycube surface has no literal gaps - see
+    PolycubeGraph's own invariant check), so "reaching the edge" alone can't
+    tell open air from a fold in the shape; only checking which cube owns
+    the neighbor across that edge can. Reported directly by the user with a
+    screenshot circling paths whose line ran off into an interior seam
+    between two faces of the same shape, expecting it to look like it left
+    the shape entirely - it must only be able to exit through an edge that's
+    actually this cube's own exterior."""
+    edge = DIR_TO_EDGE[direction]
+    nface, _nedge, _rel = graph.adj[face][edge]
+    return nface[0] == face[0]
+
+
+def exit_ray_clear(face, r, c, direction, occupied, self_cells, unit_grid, graph):
     """Mirrors game.js's findBlocker() exactly: the slide-off animation never
     actually crosses to a neighbor face - it just walks the head's OWN face
-    grid in `direction` until it runs past that face's own bounds (free) or
-    hits another path's cell (blocked)."""
+    grid in `direction` until it runs past that face's own bounds (open edge
+    -> free, interior seam -> permanently blocked) or hits another path's
+    cell (blocked).
+
+    Tried widening this to also check perpendicular neighbor cells (a line
+    rendered close enough to look like it's touching the exit path should
+    block it, per direct user feedback) - even scoped to just the first 2
+    steps near the head, this broke solvability on 246/250 of the already-
+    live levels, at their normal ~30-50% fill. Turns out lines running
+    adjacent-but-not-colinear is completely ordinary, expected maze packing
+    (that's what makes it read as a maze at all), not a special near-miss
+    case - widening the ray at all is incompatible with how this puzzle
+    works, not just a tuning problem. Reverted 2026-08-17; back to the
+    original single-cell ray. See [[arrowflow_open_issues]] for the fuller
+    writeup of what was tried and why it doesn't generalize."""
     r2, c2 = r, c
     while True:
         if direction == 'up': r2 -= 1
@@ -77,12 +109,12 @@ def exit_ray_clear(face, r, c, direction, occupied, self_cells, unit_grid):
         elif direction == 'left': c2 -= 1
         elif direction == 'right': c2 += 1
         if r2 < 0 or r2 >= unit_grid or c2 < 0 or c2 >= unit_grid:
-            return True
+            return is_open_edge(face, direction, graph)
         if (face, r2, c2) in occupied and (face, r2, c2) not in self_cells:
             return False
 
 
-def gen_path(occupied, rng, graph, unit_grid, min_len, max_len, attempts=400):
+def gen_path(occupied, rng, graph, unit_grid, min_len, max_len, attempts=400, cross_bias=0.0):
     faces = graph.faces
     for _ in range(attempts):
         face = faces[rng.randrange(len(faces))]
@@ -98,6 +130,19 @@ def gen_path(occupied, rng, graph, unit_grid, min_len, max_len, attempts=400):
         for _i in range(length - 1):
             choices = DIRS[:]
             rng.shuffle(choices)
+            # A face is unitGrid x unitGrid cells - plenty of room for a whole
+            # path to curl up without ever leaving it, which reads as "short
+            # and easy" even at a long nominal length (reported directly: user
+            # wants long paths to visibly SPAN multiple faces/sides, not just
+            # be long while sitting on one face). With probability `cross_bias`,
+            # reorder this step's candidate directions so ones that actually
+            # cross to a neighbor face are tried first - still random which
+            # face-crossing direction wins, just biased away from staying put.
+            if cross_bias > 0 and rng.random() < cross_bias:
+                fromf0, fromr0, fromc0 = cells[-1]
+                def _crosses(d):
+                    return step(fromf0, fromr0, fromc0, d, graph, unit_grid)[3]
+                choices.sort(key=lambda d: not _crosses(d))
             moved = False
             for d in choices:
                 if last_dir and d == OPP[last_dir]:
@@ -121,6 +166,12 @@ def gen_path(occupied, rng, graph, unit_grid, min_len, max_len, attempts=400):
                 # blocked (the game excludes self-collision) but they read as a dead
                 # end/self-block to a player looking at the idle shape - don't draw
                 # that shape at all rather than relying on the mechanic being forgiving.
+                # (Tried extending this to also buffer against OTHER paths, 2026-08-17 -
+                # fixes the "looks connected to a different path" ambiguity but caps
+                # density at ~41-46% fill, down from ~74-90%. Reverted per user's
+                # explicit call: they'd rather keep the density and accept that dense
+                # boards will have close-but-separate paths - see
+                # [[arrowflow_open_issues]] for the fuller history.)
                 touches_self = False
                 for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1)):
                     nnr, nnc = nr + dr, nc + dc
@@ -141,6 +192,23 @@ def gen_path(occupied, rng, graph, unit_grid, min_len, max_len, attempts=400):
                 break
         if not ok or len(cells) < min_len:
             continue
+        # The path's terminal direction must lead to a genuine exterior
+        # opening, not an interior seam bordering a different cube of the
+        # same shape (see is_open_edge()) - otherwise this path could never
+        # actually be exited by the player no matter what clears around it.
+        if not is_open_edge(cells[-1][0], last_continue_dir, graph):
+            continue
+        # A path whose own exit ray would run straight through an EARLIER part of
+        # its own body must never be generated - unlike being blocked by another
+        # path (temporary, clears once that other path moves), a path can't ever
+        # unblock itself: its own cells only disappear when the whole path exits,
+        # which is exactly what this check would be blocking. Reuses
+        # exit_ray_clear() against the path's own cellset (self_cells=empty, so
+        # nothing is excluded) purely to detect this - unrelated to the game's
+        # actual self-collision-exempt runtime rule.
+        head_face, head_r, head_c = cells[-1]
+        if not exit_ray_clear(head_face, head_r, head_c, last_continue_dir, cellset, set(), unit_grid, graph):
+            continue
         # A newly placed path is allowed to be blocked by paths already on the
         # board right now - that's a real, intended puzzle feature (the player
         # has to clear something else first). Overall solvability - that SOME
@@ -150,13 +218,17 @@ def gen_path(occupied, rng, graph, unit_grid, min_len, max_len, attempts=400):
     return None
 
 
-def is_solvable(paths, unit_grid):
+def is_solvable(paths, unit_grid, graph):
     """True if there's some order to tap paths in that clears the whole board -
     mirrors game.js exactly: a path can go once its exit ray (checked against
-    only the paths still on the board) is clear, and clearing it can unblock
+    only the paths still on the board, INCLUDING its own cells - self-collision
+    counts too, changed 2026-08-17) is clear, and clearing it can unblock
     others. This is deliberately weaker than requiring every path clear
     simultaneously from the start - that would make blocking (the actual
-    puzzle mechanic) impossible to ever generate."""
+    puzzle mechanic) impossible to ever generate. Self-collision never actually
+    triggers here in practice since gen_path() already rejects any path whose
+    own exit ray would hit its own body at generation time - this just keeps
+    the check honest rather than silently assuming that guarantee holds."""
     n = len(paths)
     cleared = [False] * n
     occupied = set()
@@ -170,7 +242,7 @@ def is_solvable(paths, unit_grid):
         for i, (cells, exit_dir) in enumerate(paths):
             if cleared[i]:
                 continue
-            if exit_ray_clear(*cells[-1], exit_dir, occupied, set(cells), unit_grid):
+            if exit_ray_clear(*cells[-1], exit_dir, occupied, set(), unit_grid, graph):
                 cleared[i] = True
                 occupied -= set(cells)
                 remaining -= 1
@@ -178,14 +250,45 @@ def is_solvable(paths, unit_grid):
     return remaining == 0
 
 
-def try_generate(seed, graph, unit_grid, num_paths, min_len, max_len):
+def fill_to_saturation(paths, occupied, rng, graph, unit_grid, filler_min_len=2,
+                        filler_max_len=5, max_consecutive_fail=60, cross_bias=0.0):
+    """Tops up an already-solvable path set with short filler paths dropped into
+    whatever cells are still empty, re-checking is_solvable() after each addition
+    and discarding any filler that would break it. Cranking the main generator's
+    own length/path-count knobs plateaus around ~50-55% fill on AWAKENING before
+    solvability starts failing outright ~15-20% of the time (probed directly,
+    2026-08-17) - short filler slots into leftover gaps far more reliably than
+    asking gen_path's single random walk to blanket a whole shape from scratch,
+    because each addition only has to fit whatever room is left, not compete
+    with everything else being placed at once."""
+    paths = list(paths)
+    occupied = set(occupied)
+    consecutive_fail = 0
+    while consecutive_fail < max_consecutive_fail:
+        result = gen_path(occupied, rng, graph, unit_grid, filler_min_len, filler_max_len,
+                           attempts=200, cross_bias=cross_bias)
+        if not result:
+            consecutive_fail += 1
+            continue
+        cells, exit_dir = result
+        candidate = paths + [(cells, exit_dir)]
+        if is_solvable(candidate, unit_grid, graph):
+            paths = candidate
+            occupied |= set(cells)
+            consecutive_fail = 0
+        else:
+            consecutive_fail += 1
+    return paths, occupied
+
+
+def try_generate(seed, graph, unit_grid, num_paths, min_len, max_len, cross_bias=0.0):
     rng = random.Random(seed)
     occupied = set()
     paths = []
     tries = 0
     while len(paths) < num_paths and tries < 600:
         tries += 1
-        result = gen_path(occupied, rng, graph, unit_grid, min_len, max_len, attempts=800)
+        result = gen_path(occupied, rng, graph, unit_grid, min_len, max_len, attempts=800, cross_bias=cross_bias)
         if not result:
             continue
         cells, exit_dir = result
@@ -195,7 +298,7 @@ def try_generate(seed, graph, unit_grid, num_paths, min_len, max_len):
     if len(paths) < num_paths:
         return None
 
-    if not is_solvable(paths, unit_grid):
+    if not is_solvable(paths, unit_grid, graph):
         return None
     return paths
 
@@ -254,3 +357,34 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+def solve_rounds(paths, unit_grid, graph):
+    """Like is_solvable() but returns the number of sequential clearing 'rounds'
+    needed (None if unsolvable) - a proxy for how layered/blocked a level's
+    dependency structure is, used to pick harder candidate boards among several
+    generated attempts rather than just accepting the first solvable one."""
+    n = len(paths)
+    cleared = [False] * n
+    occupied = set()
+    for cells, _ in paths:
+        occupied.update(cells)
+    rounds = 0
+    remaining = n
+    progress = True
+    while progress and remaining > 0:
+        progress = False
+        this_round = []
+        for i, (cells, exit_dir) in enumerate(paths):
+            if cleared[i]:
+                continue
+            if exit_ray_clear(*cells[-1], exit_dir, occupied, set(), unit_grid, graph):
+                this_round.append(i)
+        if this_round:
+            rounds += 1
+            for i in this_round:
+                cleared[i] = True
+                occupied -= set(paths[i][0])
+                remaining -= 1
+            progress = True
+    return rounds if remaining == 0 else None

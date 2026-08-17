@@ -16,6 +16,7 @@ const Scene3D = (() => {
   // square, so each face's canvas is simply unitGrid*PX_PER_CELL on a side.
   // 32 keeps the densest tier's unitGrid (6) well inside a crisp 384px face.
   const PX_PER_CELL = 32;
+  const EDGES = ['top', 'bottom', 'left', 'right'];
   // World-space length of the whole polycube's LONGEST bounding-box axis -
   // kept constant across every level (same role the old fixed CUBE_SIZE=2
   // played) so the camera never needs to re-frame per level; only the
@@ -91,7 +92,10 @@ const Scene3D = (() => {
   // when a path successfully exits, distinct from the small in-shape slide.
   let fxCanvas = null, fxCtx = null;
   let activeShots = [];
-  const EXIT_SHOT_COLOR = '#FFA500';
+  // Matches COLOR_MOVING so the in-shape slide and the screen-space exit
+  // flourish read as one continuous line/color, not two (was orange vs.
+  // green - reported as visually confusing, single color requested).
+  const EXIT_SHOT_COLOR = COLOR_MOVING;
   const EXIT_SHOT_DURATION_MS = 260;
   let faceIndexByKey = {};       // faceKey -> index into faceCanvases/materials/geometry groups
 
@@ -459,11 +463,49 @@ const Scene3D = (() => {
       const i = faceIndexByKey[key];
       if (i === undefined) return;
       const ctx = faceContexts[i];
-      ctx.fillStyle = Storage.get('theme') === 'dark' ? '#1a1a2e' : '#ffffff';
+      const dark = Storage.get('theme') === 'dark';
+      ctx.fillStyle = dark ? '#1a1a2e' : '#ffffff';
       ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 
+      // Face-boundary seam: findBlocker() only ever checks the head's own
+      // face (see [[arrowflow_open_issues]]) - a path can look like it
+      // crosses another path's line when really they're on two different
+      // faces that happen to align visually from the current angle. Drawing
+      // a border around each face's own canvas gives a constant visual cue
+      // for "this is a separate face" without touching blocking logic.
+      // Only drawn on edges where the neighbor face (via the adjacency
+      // graph) actually turns a corner (different outward direction) - two
+      // coplanar faces from different cubes of the same polycube (e.g. two
+      // cubes glued side by side, both contributing to one flat exterior
+      // wall) share NO real visual seam and should read as one continuous
+      // sheet, not a grid of squares. Reported directly with a screenshot
+      // circling exactly those flush, same-plane seams as ones that
+      // shouldn't be there.
+      ctx.strokeStyle = dark ? 'rgba(255,255,255,0.35)' : 'rgba(20,30,50,0.28)';
+      const bw = PX_PER_CELL * 0.12;
+      const W = ctx.canvas.width, H = ctx.canvas.height;
+      ctx.lineWidth = bw;
+      const thisFace = currentGraph.faceByKey[key];
+      EDGES.forEach(edge => {
+        const [neighborKey] = currentGraph.adj[key][edge];
+        const neighborFace = currentGraph.faceByKey[neighborKey];
+        if (neighborFace && neighborFace.d === thisFace.d) return; // coplanar continuation - no seam
+        ctx.beginPath();
+        if (edge === 'top') { ctx.moveTo(0, bw / 2); ctx.lineTo(W, bw / 2); }
+        else if (edge === 'bottom') { ctx.moveTo(0, H - bw / 2); ctx.lineTo(W, H - bw / 2); }
+        else if (edge === 'left') { ctx.moveTo(bw / 2, 0); ctx.lineTo(bw / 2, H); }
+        else if (edge === 'right') { ctx.moveTo(W - bw / 2, 0); ctx.lineTo(W - bw / 2, H); }
+        ctx.stroke();
+      });
+
       paths.forEach(p => {
-        if (!p.cleared && p.segments.some(s => segFaceKey(s) === key)) {
+        // A path that's already committed to exiting ('moving') is drawn as
+        // instantly gone from the face, not progressively slid off - see
+        // the exit-shot flourish in shootExitArrow()/drawExitShots(), which
+        // is now the ONLY visual for a clearing path (previously the two
+        // ran concurrently at different speeds and read as two disconnected
+        // lines, reported directly with a screenshot).
+        if (!p.cleared && p.status !== 'moving' && p.segments.some(s => segFaceKey(s) === key)) {
           const highlighted = p.id === highlightPathId && performance.now() < highlightUntil;
           drawPathOnFace(ctx, p, key, highlighted);
         }

@@ -86,12 +86,12 @@ from polycube import PolycubeGraph
 # same lesson as v10) raised fill from v10's ~29-40% to ~30-51% on these
 # tiers. AWAKENING/MOMENTUM unchanged - already matched the target density.
 TIERS = [
-    dict(name='AWAKENING', start=1, end=50, n_cubes=(2, 10), unit_grid=6, paths=(26, 85), length=(7, 9)),
-    dict(name='MOMENTUM', start=51, end=100, n_cubes=(10, 14), unit_grid=6, paths=(85, 112), length=(8, 10)),
-    dict(name='CASCADE', start=101, end=150, n_cubes=(14, 17), unit_grid=7, paths=(105, 122), length=(8, 12)),
-    dict(name='VORTEX', start=151, end=200, n_cubes=(17, 20), unit_grid=7, paths=(122, 138), length=(8, 13)),
-    dict(name='LABYRINTH', start=201, end=250, n_cubes=(20, 23), unit_grid=8, paths=(138, 155), length=(9, 13)),
-    dict(name='ASCENSION', start=251, end=300, n_cubes=(23, 26), unit_grid=8, paths=(155, 165), length=(9, 13)),
+    dict(name='AWAKENING', start=1, end=50, n_cubes=(4, 10), unit_grid=6, paths=(22, 70), length=(9, 12)),
+    dict(name='MOMENTUM', start=51, end=100, n_cubes=(12, 16), unit_grid=6, paths=(70, 95), length=(10, 13)),
+    dict(name='CASCADE', start=101, end=150, n_cubes=(14, 17), unit_grid=7, paths=(95, 110), length=(11, 15)),
+    dict(name='VORTEX', start=151, end=200, n_cubes=(17, 20), unit_grid=7, paths=(110, 125), length=(11, 16)),
+    dict(name='LABYRINTH', start=201, end=250, n_cubes=(20, 23), unit_grid=8, paths=(125, 140), length=(12, 16)),
+    dict(name='ASCENSION', start=251, end=300, n_cubes=(23, 26), unit_grid=8, paths=(140, 148), length=(12, 17)),
 ]
 
 # The first 5 levels are always a single plain cube (onboarding - don't hit a
@@ -215,7 +215,7 @@ def lerp_int(lo, hi, frac):
 TIME_BUDGET_SEC = 25
 
 
-def generate_one(level_id, tier, seed_budget=1500, shape_attempts=4):
+def generate_one(level_id, tier, seed_budget=1500, shape_attempts=4, cross_bias=0.0):
     start_time = time.time()
     def out_of_time():
         return time.time() - start_time > TIME_BUDGET_SEC
@@ -263,7 +263,7 @@ def generate_one(level_id, tier, seed_budget=1500, shape_attempts=4):
         for offset in range(seed_budget):
             if offset % 20 == 0 and out_of_time():
                 break
-            result = try_generate(base_seed + offset, graph, unit_grid, capped_paths, min_len, max_len)
+            result = try_generate(base_seed + offset, graph, unit_grid, capped_paths, min_len, max_len, cross_bias=cross_bias)
             if result:
                 return result, capped_paths, difficulty, shape, unit_grid
 
@@ -281,7 +281,7 @@ def generate_one(level_id, tier, seed_budget=1500, shape_attempts=4):
         for offset in range(seed_budget):
             if offset % 20 == 0 and out_of_time():
                 break
-            result = try_generate(base_seed + offset, graph, unit_grid, tried_paths, min_len, max_len)
+            result = try_generate(base_seed + offset, graph, unit_grid, tried_paths, min_len, max_len, cross_bias=cross_bias)
             if result:
                 paths = result
                 break

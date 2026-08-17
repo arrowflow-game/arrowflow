@@ -106,5 +106,19 @@ const Polycube = (() => {
     return { faces, faceByKey, faceEdges, adj };
   }
 
-  return { AXIS_SIGN, ROWCOL_AXIS, faceKey, faceCorners, buildGraph };
+  // True if faceKey's edge in `direction` is a genuine exterior boundary of
+  // the WHOLE polycube - wraps to another exposed face of the SAME physical
+  // unit cube - rather than an interior seam bordering a DIFFERENT cube
+  // glued onto the shape. Mirrors tools/generate_level.py's is_open_edge()
+  // exactly (see its comment for the full why) - the level generator already
+  // guarantees every path's exitDir is open, but findBlocker() checks this
+  // too as defense-in-depth rather than trusting level data unconditionally.
+  const DIR_TO_EDGE = { up: 'top', down: 'bottom', left: 'left', right: 'right' };
+  function isOpenEdge(faceKey, direction, graph) {
+    const edge = DIR_TO_EDGE[direction];
+    const [neighborKey] = graph.adj[faceKey][edge];
+    return neighborKey.split('|')[0] === faceKey.split('|')[0];
+  }
+
+  return { AXIS_SIGN, ROWCOL_AXIS, faceKey, faceCorners, buildGraph, isOpenEdge };
 })();

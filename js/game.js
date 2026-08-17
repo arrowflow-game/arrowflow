@@ -29,6 +29,7 @@ const Game = (() => {
     state = {
       levelNum: n,
       levelData: data,
+      graph: Polycube.buildGraph(data.shape), // for findBlocker()'s open-edge check
       paths: data.paths, // deeply cloned in getLevel()
       moves: 0,
       hintsUsed: 0,
@@ -109,11 +110,27 @@ const Game = (() => {
 
       blockDist++;
       if (checkR < 0 || checkR >= unitGrid || checkC < 0 || checkC >= unitGrid) {
-        break; // Reached edge, free!
+        // Reached this face's own edge - only actually free if that edge is a
+        // real exterior boundary of the shape, not a seam into another cube's
+        // face (see Polycube.isOpenEdge()). The generator already guarantees
+        // every path's exitDir is open, so this should never trip on
+        // generated data - it's a defensive backstop, not the primary fix.
+        if (!Polycube.isOpenEdge(headKey, path.exitDir, state.graph)) {
+          blockedBy = { id: null, wall: true };
+        }
+        break;
       }
 
+      // Self-collision now counts too (changed 2026-08-17, was previously
+      // excluded via `obstacle.id !== path.id`) - matches
+      // tools/generate_level.py's gen_path(), which now rejects any path
+      // whose own exit ray would run through its own earlier body at
+      // generation time (verified: 0/300 levels have one). Kept as a real
+      // check rather than a no-op for defense-in-depth: if it ever
+      // triggers, that's a real dead-end bug in the level data worth
+      // surfacing, not something to silently allow through.
       const obstacle = getPathCell(headKey, checkR, checkC);
-      if (obstacle && obstacle.id !== path.id) {
+      if (obstacle) {
         blockedBy = obstacle;
         break;
       }
@@ -165,6 +182,16 @@ const Game = (() => {
     state.lastMovePathId = path.id;
     state.canUndo = false; // becomes undoable once the slide finishes, see animateLogic
 
+    // A 'moving' path is drawn as instantly gone (see scene.js's updateFrame) rather
+    // than progressively slid off - redraw its faces right now so the line vanishes
+    // on this exact frame, in sync with the exit-shot flourish that's about to fire.
+    // Previously the in-shape slide animated over up to ~(L+3)/0.32 frames while the
+    // flourish finished in ~410ms regardless of length - on a long path the two fell
+    // out of sync and read as two disconnected lines (reported directly with a
+    // screenshot: a short stray line floating apart from the arrow already at the
+    // screen edge).
+    Scene3D.updateFrame(state.paths, new Set(path.segments.map(segFaceKey)));
+
     Scene3D.shootExitArrow(path);
     Sound.playSlide();
     UI.updateHUD(buildHudPayload());
@@ -210,15 +237,17 @@ const Game = (() => {
     const dirtyFaces = new Set();
 
     state.paths.forEach(p => {
-      if (p.status === 'moving' || p.status === 'bumped' || p.status === 'bumped_return') {
+      if (p.status === 'bumped' || p.status === 'bumped_return') {
         // Capture before this tick's status flip, so the final frame where a
-        // path finishes (moving -> done, or bumped_return -> idle) still redraws.
-        // Only the faces actually inside the currently-drawn [startD,endD] window
-        // (matches scene.js's own strokePath range) need to redraw - marking the
+        // path finishes (bumped_return -> idle) still redraws. Only the faces
+        // actually inside the currently-drawn [startD,endD] window (matches
+        // scene.js's own strokePath range) need to redraw - marking the
         // path's entire face list here was forcing every face a long path ever
         // touches to re-upload its texture for the whole animation, even faces
         // the slide-out already scrolled past. That's the main GPU cost on denser,
-        // multi-face-crossing levels.
+        // multi-face-crossing levels. ('moving' paths are excluded here - see
+        // handlePathTap(), which redraws their faces once, immediately, instead
+        // of every frame, since a moving path is drawn as instantly gone now.)
         const L = p.segments.length - 1;
         const off = p.progress || 0;
         const lo = Math.max(0, Math.floor(off));
@@ -231,11 +260,15 @@ const Game = (() => {
       }
 
       if (p.status === 'moving') {
-        p.progress += 0.32; // speed - bumped up from 0.2, reported as feeling too slow
-        needsUpdate = true;
-        // Total length of path = p.segments.length - 1
-        // It needs to slide completely off, so progress needs to reach length + a few extra cells
-        if (p.progress > p.segments.length + 3) {
+        // Fixed short grace period instead of one proportional to path length -
+        // the path is already drawn as instantly gone (see handlePathTap()), so
+        // this now only times the undo/win bookkeeping below, roughly matching
+        // the exit-shot flourish's own ~410ms duration (see EXIT_SHOT_DURATION_MS
+        // in scene.js) rather than however long the old length-based slide took.
+        // No needsUpdate here - the path was already redrawn as gone the instant
+        // it started moving (handlePathTap()), so nothing visually changes per tick.
+        p.progress += 1;
+        if (p.progress > 24) {
           p.status = 'done';
           p.cleared = true;
           state.clearedCount++;
@@ -243,9 +276,8 @@ const Game = (() => {
           UI.updateHUD(buildHudPayload());
           if (state.clearedCount >= state.paths.length) {
             // Re-check at fire time: an undo in the meantime could have
-            // dropped clearedCount back below the total. Short delay only to let the
-            // last piece's slide animation read as finished before the modal appears.
-            setTimeout(() => { if (state.clearedCount >= state.paths.length) onWin(); }, 200);
+            // dropped clearedCount back below the total.
+            setTimeout(() => { if (state.clearedCount >= state.paths.length) onWin(); }, 100);
           }
         }
       } else if (p.status === 'bumped') {

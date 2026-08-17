@@ -3,7 +3,7 @@
    ============================================ */
 
 const UI = (() => {
-  const DIFFICULTY_LABELS = { easy: 'ง่าย', medium: 'ปานกลาง', hard: 'ยาก' };
+  const DIFFICULTY_LABELS = { easy: 'ง่าย', medium: 'ปานกลาง', hard: 'ยาก', extreme: 'สุดโหด' };
   const TOTAL_LEVELS = 300; // matches manifest.json's "300 levels" and the menu progress bar
 
   function applySound(enabled) {
