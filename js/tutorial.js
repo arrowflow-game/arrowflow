@@ -23,8 +23,8 @@ const Tutorial = (() => {
     {
       id: 'tap',
       icon: '👆',
-      title: 'แตะเพื่อเลื่อนออก',
-      text: 'แตะเส้นทางที่ชี้ออกนอกลูกบาศก์ เพื่อเลื่อนมันออกจากด้าน',
+      titleKey: 'tutorial.tap.title',
+      textKey: 'tutorial.tap.text',
       getRect: () => centerRect(260, 0.30),
       mode: 'event',
       waitEvents: ['tap-success']
@@ -32,8 +32,8 @@ const Tutorial = (() => {
     {
       id: 'rotate',
       icon: '🔄',
-      title: 'หมุนลูกบาศก์',
-      text: 'ลากนิ้วหรือเมาส์บนหน้าจอ เพื่อหมุนดูรอบลูกบาศก์',
+      titleKey: 'tutorial.rotate.title',
+      textKey: 'tutorial.rotate.text',
       getRect: () => centerRect(300, 0.26),
       mode: 'gesture',
       gestureType: 'rotate',
@@ -42,8 +42,8 @@ const Tutorial = (() => {
     {
       id: 'zoom',
       icon: '🔍',
-      title: 'ซูมเข้า-ออก',
-      text: 'ใช้สองนิ้วบีบ (มือถือ) หรือเลื่อนล้อเมาส์ (คอมพิวเตอร์) เพื่อซูม',
+      titleKey: 'tutorial.zoom.title',
+      textKey: 'tutorial.zoom.text',
       getRect: () => centerRect(300, 0.26),
       mode: 'gesture',
       gestureType: 'zoom',
@@ -52,8 +52,8 @@ const Tutorial = (() => {
     {
       id: 'hint',
       icon: '💡',
-      title: 'ใช้ไอเทมคำใบ้',
-      text: 'แตะปุ่มคำใบ้เพื่อไฮไลต์เส้นทางที่แนะนำให้เลื่อนออกต่อไป',
+      titleKey: 'tutorial.hint.title',
+      textKey: 'tutorial.hint.text',
       getRect: () => {
         const el = document.getElementById('btn-hint');
         const r = el.getBoundingClientRect();
@@ -66,8 +66,8 @@ const Tutorial = (() => {
     {
       id: 'wrong-tap',
       icon: '💔',
-      title: 'ระวังหัวใจ!',
-      text: 'ถ้าแตะเส้นทางที่ยังออกไม่ได้ (ถูกบล็อกอยู่) หัวใจจะลดลง 1 ดวง — หมดหัวใจแล้วต้องเริ่มด่านใหม่',
+      titleKey: 'tutorial.wrong_tap.title',
+      textKey: 'tutorial.wrong_tap.text',
       getRect: () => {
         const el = document.getElementById('hud-lives-row');
         const r = el.getBoundingClientRect();
@@ -81,7 +81,7 @@ const Tutorial = (() => {
       // purely visual demo - a heart icon "breaking" - that never touches Game's
       // actual state, then a button lets the player continue when ready.
       mode: 'demo',
-      continueLabel: 'เข้าใจแล้ว เริ่มเล่นเลย!'
+      continueLabelKey: 'tutorial.wrong_tap.continue'
     }
   ];
 
@@ -91,6 +91,7 @@ const Tutorial = (() => {
   let els = {};
   let repositionHandler = null;
   let hintsAtStart = 0;
+  let tapHighlightInterval = null;
 
   function init() {
     if (typeof Game !== 'undefined' && Game.setOnEvent) Game.setOnEvent(handleGameEvent);
@@ -146,7 +147,7 @@ const Tutorial = (() => {
         '<p id="tut-text"></p>' +
         '<div class="tutorial-demo-hearts" id="tut-demo-hearts"></div>' +
         '<button id="tut-continue" class="btn btn-primary btn-sm" style="display:none;"></button>' +
-        '<button id="tut-skip" class="tutorial-skip">ข้ามบทแนะนำ</button>' +
+        '<button id="tut-skip" class="tutorial-skip"></button>' +
       '</div>';
     document.body.appendChild(overlay);
 
@@ -163,6 +164,7 @@ const Tutorial = (() => {
       skipBtn: overlay.querySelector('#tut-skip')
     };
 
+    els.skipBtn.textContent = I18N.t('tutorial.skip');
     els.continueBtn.addEventListener('click', () => advanceStep());
     els.skipBtn.addEventListener('click', () => finish());
 
@@ -189,20 +191,47 @@ const Tutorial = (() => {
     gestureAccum = 0;
     const step = STEPS[idx];
 
-    els.progress.textContent = 'ขั้นตอนที่ ' + (idx + 1) + ' / ' + STEPS.length;
+    els.progress.textContent = I18N.t('tutorial.progress', { step: idx + 1, total: STEPS.length });
     els.icon.textContent = step.icon;
-    els.title.textContent = step.title;
-    els.text.textContent = step.text;
+    els.title.textContent = I18N.t(step.titleKey);
+    els.text.textContent = I18N.t(step.textKey);
 
     const isDemo = step.mode === 'demo';
     els.continueBtn.style.display = isDemo ? 'inline-flex' : 'none';
-    els.continueBtn.textContent = step.continueLabel || 'ต่อไป';
+    els.continueBtn.textContent = step.continueLabelKey ? I18N.t(step.continueLabelKey) : I18N.t('tutorial.next');
     els.demoHearts.style.display = 'none';
     els.demoHearts.innerHTML = '';
 
     positionForCurrentStep();
 
     if (isDemo) playHeartDemo();
+
+    if (tapHighlightInterval) { clearInterval(tapHighlightInterval); tapHighlightInterval = null; }
+    if (step.id === 'tap') startTapHighlight();
+  }
+
+  // Points the player at a path that's actually exitable right now (never a
+  // blocked one - level 1 can otherwise put a blocked path front-and-center,
+  // which reads as "nothing happens" on tap and burns a heart with no
+  // explanation this early). Also gets the shape to auto-rotate to face it
+  // (see Scene3D.highlightPath's snapToFace), so the player doesn't have to
+  // already know how to rotate (that's step 2) just to find it.
+  // Re-fired every 3s since the highlight glow itself fades after
+  // HINT_HIGHLIGHT_MS (3500ms in scene.js) and this step can wait indefinitely
+  // for the real tap - but only the FIRST fire snaps the camera. Re-snapping on
+  // every re-fire fought the player if they rotated away from the auto-picked
+  // angle on their own (reported directly: line the tap up, hold still for a
+  // moment, and the view snaps back to the original angle).
+  function startTapHighlight() {
+    let first = true;
+    const fire = () => {
+      if (typeof Game === 'undefined' || !Game.getFirstOpenPathId) return;
+      const id = Game.getFirstOpenPathId();
+      if (id != null && typeof Scene3D !== 'undefined' && Scene3D.highlightPath) Scene3D.highlightPath(id, first);
+      first = false;
+    };
+    fire();
+    tapHighlightInterval = setInterval(fire, 3000);
   }
 
   function playHeartDemo() {
@@ -247,6 +276,7 @@ const Tutorial = (() => {
   function finish() {
     if (!active) return;
     active = false;
+    if (tapHighlightInterval) { clearInterval(tapHighlightInterval); tapHighlightInterval = null; }
     // Step 4 calls the real useHint() so the highlighted-path demo is genuine, not
     // faked - but that means it genuinely spends one of the player's 3 starting
     // hints. Refund whatever was actually spent during the tutorial (only ever 0 or

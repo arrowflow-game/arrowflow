@@ -5,6 +5,7 @@
 const Scene3D = (() => {
   let scene, camera, renderer;
   let shapeMesh, backMesh, shapeGroup;
+  let currentTier = null;
   let faceCanvases = [];
   let faceContexts = [];
   let faceTextures = [];
@@ -40,6 +41,51 @@ const Scene3D = (() => {
   const COLOR_IDLE_DARK = '#00f5ff';
   const COLOR_MOVING = '#2ecc71';
   const COLOR_BLOCKED = '#ff3b30';
+
+  // Per-tier scene background mood - escalates from a calm/neutral tone at the
+  // start of the campaign toward a warm, intense tone at ASCENSION (the final,
+  // hardest tier), plus pseudo-tiers for DAILY and REMIX (post-300 endless) modes.
+  // Kept close to each theme's own --bg-primary so the shift reads as "mood", not
+  // a jarring color swap.
+  const TIER_COLORS = {
+    AWAKENING: { light: '#dff0fb', dark: '#0d0d1a' },
+    MOMENTUM:  { light: '#d6ecff', dark: '#0f1430' },
+    CASCADE:   { light: '#cfe8ff', dark: '#0a1a3a' },
+    VORTEX:    { light: '#c9e0ff', dark: '#12103a' },
+    LABYRINTH: { light: '#e8dcff', dark: '#1a0d33' },
+    ASCENSION: { light: '#ffd9d0', dark: '#2a0a12' },
+    REMIX:     { light: '#ffb199', dark: '#3a0508' },
+    DAILY:     { light: '#fff3c4', dark: '#241a05' }
+  };
+  const MOOD_TRANSITION_MS = 600;
+  let moodFrom = null, moodTo = null, moodStart = 0;
+  let milestoneMoodActive = false;
+
+  function tierMoodColor(tier) {
+    const pair = TIER_COLORS[tier] || TIER_COLORS.AWAKENING;
+    return pair[Storage.get('theme') === 'dark' ? 'dark' : 'light'];
+  }
+
+  function setSceneMood(tier, isMilestone) {
+    const hex = tierMoodColor(tier);
+    moodFrom = scene.background ? scene.background.clone() : new THREE.Color(hex);
+    moodTo = new THREE.Color(hex);
+    moodStart = performance.now();
+    if (!scene.background) scene.background = moodFrom.clone();
+    milestoneMoodActive = !!isMilestone;
+  }
+
+  // Called on a light/dark theme toggle mid-level: re-picks the current
+  // tier's color pair for the new theme instantly (no transition - it's a
+  // deliberate user action, not a level change).
+  function refreshMoodForTheme() {
+    if (!currentTier) return;
+    const hex = tierMoodColor(currentTier);
+    moodFrom = new THREE.Color(hex);
+    moodTo = new THREE.Color(hex);
+    moodStart = 0;
+    scene.background = new THREE.Color(hex);
+  }
 
   function getPathColor(path) {
     if (path.status === 'bumped' || path.status === 'bumped_return' || path.wasBlocked) return COLOR_BLOCKED;
@@ -439,11 +485,13 @@ const Scene3D = (() => {
     shapeGroup.add(shapeMesh);
   }
 
-  function setLevelData(shape, unitGrid, paths) {
+  function setLevelData(shape, unitGrid, paths, tier, isMilestone) {
     rebuildGeometry(shape, unitGrid);
     highlightPathId = null;
     highlightedFaceIndices = [];
     updateFrame(paths, true);
+    currentTier = tier || currentTier;
+    setSceneMood(currentTier, isMilestone);
   }
 
   function segFaceKey(s) { return Polycube.faceKey(s.cube, s.dir); }
@@ -545,13 +593,21 @@ const Scene3D = (() => {
     highlightedFaceIndices = [];
   }
 
-  function highlightPath(id) {
+  // `snap` defaults true (useHint()'s one-shot use of this). The tutorial's tap
+  // step re-fires this repeatedly to keep the glow from fading while it waits
+  // for the player - passing snap:false there stops each re-fire from yanking
+  // the camera back to face the target if the player has since rotated away on
+  // their own (reported directly: rotate to line the tap up, hold still for a
+  // moment, and the view "bounces back" - that was this re-snapping every 3s).
+  function highlightPath(id, snap = true) {
     highlightPathId = id;
     highlightUntil = performance.now() + HINT_HIGHLIGHT_MS;
     const path = currentPaths.find(p => p.id === id);
     if (path && path.segments.length) {
-      const head = path.segments.find(s => s.isHead) || path.segments[path.segments.length - 1];
-      snapToFace(head.cube, head.dir);
+      if (snap) {
+        const head = path.segments.find(s => s.isHead) || path.segments[path.segments.length - 1];
+        snapToFace(head.cube, head.dir);
+      }
       boostHighlightedFacesOpacity(path);
     }
   }
@@ -784,6 +840,14 @@ const Scene3D = (() => {
 
   function animate() {
     requestAnimationFrame(animate);
+    if (moodTo && scene.background) {
+      const t = Math.min(1, (performance.now() - moodStart) / MOOD_TRANSITION_MS);
+      scene.background.copy(moodFrom).lerp(moodTo, t);
+      if (milestoneMoodActive) {
+        const pulse = 1 + 0.06 * Math.sin(performance.now() / 300);
+        scene.background.multiplyScalar(pulse);
+      }
+    }
     if (highlightPathId) {
       if (performance.now() < highlightUntil) {
         updateFrame(currentPaths);
@@ -909,5 +973,5 @@ const Scene3D = (() => {
   function setOnArrowTap(cb) { onArrowTapCallback = cb; }
   function setOnGesture(cb) { onGestureCallback = cb; }
 
-  return { init, setLevelData, updateFrame, setOnArrowTap, setOnGesture, highlightPath, shootExitArrow };
+  return { init, setLevelData, updateFrame, setOnArrowTap, setOnGesture, highlightPath, shootExitArrow, refreshMoodForTheme };
 })();

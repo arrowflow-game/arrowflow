@@ -6,7 +6,9 @@ const Game = (() => {
   const LIVES_MAX = 3;
 
   let state = {
+    mode: 'campaign', // 'campaign' | 'daily' | 'remix'
     levelNum: 1,
+    remixIndex: 0,
     levelData: null,
     paths: [],
     moves: 0,
@@ -31,15 +33,23 @@ const Game = (() => {
   function setOnEvent(cb) { onEventCallback = cb; }
   function fireEvent(name, data) { if (onEventCallback) onEventCallback(name, data); }
 
-  function loadLevel(n) {
-    const data = getLevel(n);
-    if (!data) return false;
+  function isMilestoneLevel(n) { return typeof n === 'number' && n % 10 === 0; }
 
+  function localDateStr() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  // Shared setup used by loadLevel/loadDailyLevel/loadRemixLevel - only the
+  // mode tag, the level-number bookkeeping field, and the source data differ.
+  function applyLevelState(mode, data, extra) {
     state = {
-      levelNum: n,
+      mode,
+      levelNum: extra.levelNum,
+      remixIndex: extra.remixIndex || 0,
       levelData: data,
       graph: Polycube.buildGraph(data.shape), // for findBlocker()'s open-edge check
-      paths: data.paths, // deeply cloned in getLevel()
+      paths: data.paths, // deeply cloned by the caller's data getter
       moves: 0,
       hintsUsed: 0,
       clearedCount: 0,
@@ -51,20 +61,46 @@ const Game = (() => {
       startTime: Date.now()
     };
 
-    Scene3D.setLevelData(data.shape, data.unitGrid, state.paths);
+    Scene3D.setLevelData(data.shape, data.unitGrid, state.paths, extra.sceneTier || data.tier, extra.isMilestone || false);
     UI.hideAllModals();
     UI.updateHUD(buildHudPayload());
 
     if (animationFrameId) cancelAnimationFrame(animationFrameId);
     animateLogic();
-    fireEvent('level-loaded', n);
+    fireEvent('level-loaded', state.levelNum);
+  }
+
+  function loadLevel(n) {
+    const data = getLevel(n);
+    if (!data) return false;
+    applyLevelState('campaign', data, { levelNum: n, isMilestone: isMilestoneLevel(n) });
+    return true;
+  }
+
+  function loadDailyLevel() {
+    const dateStr = localDateStr();
+    const data = getDailyLevel(dateStr);
+    if (!data) return false;
+    applyLevelState('daily', data, { levelNum: 'daily-' + dateStr, sceneTier: 'DAILY' });
+    return true;
+  }
+
+  function loadRemixLevel(remixIndex) {
+    const data = Remix.getRemixLevel(remixIndex);
+    if (!data) return false;
+    applyLevelState('remix', data, { levelNum: 'remix-' + remixIndex, remixIndex, sceneTier: 'REMIX' });
     return true;
   }
 
   function buildHudPayload() {
+    let levelLabel = state.levelNum;
+    if (state.mode === 'daily') levelLabel = 'DAILY';
+    else if (state.mode === 'remix') levelLabel = 'R' + (state.remixIndex + 1);
     return {
-      level: state.levelNum,
+      level: levelLabel,
+      mode: state.mode,
       tier: state.levelData.tier,
+      isMilestone: isMilestoneLevel(state.levelNum),
       difficulty: state.levelData.difficulty,
       remaining: state.paths.length - state.clearedCount,
       hints: Storage.get('hints'),
@@ -209,17 +245,34 @@ const Game = (() => {
     fireEvent('tap-success', path);
   }
 
+  // Shared by useHint() and the tutorial's getFirstOpenPathId() - both need
+  // "the first path that can exit right now", but only useHint() should
+  // spend a hint/touch Storage.
+  function findOpenPath() {
+    return state.paths.find(p => !p.cleared && p.status === 'idle' && !findBlocker(p).blockedBy);
+  }
+
   function useHint() {
     if (state.failed || state.won) return;
     if (Storage.get('hints') <= 0) return;
 
-    const target = state.paths.find(p => !p.cleared && p.status === 'idle' && !findBlocker(p).blockedBy);
+    const target = findOpenPath();
     if (!target) return;
 
     Storage.addHints(-1);
     state.hintsUsed++;
     Scene3D.highlightPath(target.id);
     UI.updateHUD(buildHudPayload());
+  }
+
+  // Read-only lookup for the tutorial's tap step - points the player at a path
+  // that's actually exitable right now (never a blocked one), without spending
+  // a hint or touching Storage. Returns null if the level somehow starts with
+  // no open path at all (shouldn't happen - the generator guarantees at least
+  // one - but the tutorial handles null by just not highlighting anything).
+  function getFirstOpenPathId() {
+    const target = findOpenPath();
+    return target ? target.id : null;
   }
 
   function undo() {
@@ -241,7 +294,19 @@ const Game = (() => {
   }
 
   function restart() {
-    loadLevel(state.levelNum);
+    if (state.mode === 'daily') loadDailyLevel();
+    else if (state.mode === 'remix') loadRemixLevel(state.remixIndex);
+    else loadLevel(state.levelNum);
+  }
+
+  // Fail-screen "watch ad to continue" placeholder (see Storage.useRewardedAd) - refills
+  // lives and clears the fail flag WITHOUT reloading the level, so already-cleared paths,
+  // move count, and hints-used all stay intact (unlike restart()).
+  function continueAfterFail() {
+    if (!state.failed) return;
+    state.lives = LIVES_MAX;
+    state.failed = false;
+    UI.updateHUD(buildHudPayload());
   }
 
   function animateLogic() {
@@ -338,12 +403,20 @@ const Game = (() => {
 
     const elapsedSec = (Date.now() - state.startTime) / 1000;
     const score = computeScore(elapsedSec);
+    const isCampaignFinale = state.mode === 'campaign' && state.levelNum === 300;
 
-    Storage.completeLevel(state.levelNum, stars, state.moves, score, elapsedSec);
+    if (state.mode === 'daily') {
+      const rewarded = Storage.completeDaily();
+      if (rewarded) Storage.addHints(2); // bonus hints, only on first completion of the day
+    } else if (state.mode === 'remix') {
+      Storage.completeRemix(state.remixIndex, stars, score);
+    } else {
+      Storage.completeLevel(state.levelNum, stars, state.moves, score, elapsedSec);
+    }
     UI.updateHUD(buildHudPayload());
     Sound.playWin();
     Haptics.win();
-    UI.showWin(state.levelNum, state.hintsUsed, stars, score, elapsedSec);
+    UI.showWin(state.levelNum, state.hintsUsed, stars, score, elapsedSec, state.mode, isCampaignFinale);
   }
 
   function onFail() {
@@ -355,7 +428,15 @@ const Game = (() => {
   // unlike loadLevel(), this is safe to call mid-level (won't reset progress/hearts/moves).
   function redrawTheme() {
     Scene3D.updateFrame(state.paths, true);
+    Scene3D.refreshMoodForTheme();
   }
 
-  return { loadLevel, onArrowTap, useHint, undo, restart, redrawTheme, setOnEvent, getLevelNum: () => state.levelNum };
+  return {
+    loadLevel, loadDailyLevel, loadRemixLevel, onArrowTap, useHint, undo, restart, continueAfterFail, redrawTheme, setOnEvent,
+    getLevelNum: () => state.levelNum,
+    getMode: () => state.mode,
+    getRemixIndex: () => state.remixIndex,
+    getHudPayload: () => state.levelData ? buildHudPayload() : null,
+    getFirstOpenPathId
+  };
 })();

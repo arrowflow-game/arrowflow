@@ -3,7 +3,6 @@
    ============================================ */
 
 const UI = (() => {
-  const DIFFICULTY_LABELS = { easy: 'ง่าย', medium: 'ปานกลาง', hard: 'ยาก', extreme: 'สุดโหด' };
   const TOTAL_LEVELS = 300; // matches manifest.json's "300 levels" and the menu progress bar
 
   function applySound(enabled) {
@@ -36,8 +35,12 @@ const UI = (() => {
     setSwitch('toggle-music', Storage.get('music') !== false);
     setSwitch('toggle-sfx', Storage.get('sound') !== false);
     setSwitch('toggle-vibration', Storage.get('vibration') !== false);
+    const isEn = I18N.currentLang() === 'en';
+    setSwitch('toggle-lang', isEn);
+    const langLabel = document.getElementById('lang-label');
+    if (langLabel) langLabel.textContent = I18N.t('settings.language') + ' (' + (isEn ? 'Eng' : 'ไทย') + ')';
     const nickBtn = document.getElementById('btn-edit-nickname');
-    if (nickBtn) nickBtn.textContent = Leaderboard.getNickname() || 'ตั้งชื่อ';
+    if (nickBtn) nickBtn.textContent = Leaderboard.getNickname() || I18N.t('settings.nickname_btn');
   }
 
   function showScreen(id) {
@@ -67,6 +70,13 @@ const UI = (() => {
     document.getElementById('menu-cur-lvl').textContent = cl;
     document.getElementById('menu-total-stars').textContent = '★ ' + ts;
     document.getElementById('menu-prog').style.width = ((cl / TOTAL_LEVELS) * 100) + '%';
+
+    const dailyBtn = document.getElementById('btn-daily');
+    if (dailyBtn) {
+      const done = Storage.isDailyCompletedToday();
+      dailyBtn.classList.toggle('daily-done', done);
+      dailyBtn.textContent = I18N.t(done ? 'menu.daily_done' : 'menu.daily');
+    }
   }
 
   function buildStatsScreen() {
@@ -80,12 +90,13 @@ const UI = (() => {
     document.getElementById('stats-levels-completed').textContent = entries.length + ' / ' + TOTAL_LEVELS;
 
     const bestEntry = entries.reduce((best, e) => (!best || (e.score || 0) > (best.score || 0)) ? e : best, null);
-    document.getElementById('stats-best-level').textContent = bestEntry ? ('ด่าน ' + bestEntry.level + ' (' + bestEntry.score + ' คะแนน)') : '—';
+    document.getElementById('stats-best-level').textContent = bestEntry
+      ? I18N.t('stats.best_row', { level: bestEntry.level, score: bestEntry.score }) : '—';
 
     const list = document.getElementById('stats-level-list');
     list.innerHTML = '';
     if (entries.length === 0) {
-      list.innerHTML = '<div class="stats-empty">ยังไม่มีด่านที่ผ่าน</div>';
+      list.innerHTML = '<div class="stats-empty">' + escapeHtml(I18N.t('stats.empty')) + '</div>';
       return;
     }
     // Most recently reached (highest level) first, matches how a player wants to check progress.
@@ -93,7 +104,7 @@ const UI = (() => {
       const row = document.createElement('div');
       row.className = 'stats-row';
       row.innerHTML =
-        '<span class="stats-row-lvl">ด่าน ' + e.level + '</span>' +
+        '<span class="stats-row-lvl">' + escapeHtml(I18N.t('stats.row_level')) + ' ' + e.level + '</span>' +
         '<span class="stats-row-stars">' + '★'.repeat(e.stars || 0) + '☆'.repeat(3 - (e.stars || 0)) + '</span>' +
         '<span class="stats-row-time">' + (e.time != null ? formatTime(e.time) : '—') + '</span>' +
         '<span class="stats-row-score">' + (e.score || 0) + '</span>';
@@ -101,18 +112,37 @@ const UI = (() => {
     });
   }
 
+  function buildStoreScreen() {
+    document.getElementById('store-hint-count').textContent = Storage.get('hints');
+    const btn = document.getElementById('btn-store-hint-ad');
+    const remainingEl = document.getElementById('store-hint-ad-remaining');
+    const remaining = Storage.remainingRewardedAds('hint');
+    if (remaining <= 0) {
+      btn.disabled = true;
+      remainingEl.textContent = I18N.t('store.ads_remaining', { n: 0 });
+    } else {
+      btn.disabled = false;
+      remainingEl.textContent = I18N.t('store.ads_remaining', { n: remaining });
+    }
+  }
+
   function updateHUD(payload) {
-    const { level, tier, difficulty, remaining, hints, lives, livesMax, canUndo } = payload;
+    const { level, tier, isMilestone, difficulty, remaining, hints, lives, livesMax, canUndo } = payload;
 
     document.getElementById('hud-lvl-num').textContent = level;
-    document.getElementById('hud-tier').textContent = tier;
+    const tierEl = document.getElementById('hud-tier');
+    // Campaign tier names (AWAKENING, ASCENSION, ...) are stylistic/branding,
+    // kept as-is in both languages - only the DAILY/REMIX pseudo-tiers are
+    // actual UI copy worth translating.
+    tierEl.textContent = tier === 'DAILY' ? I18N.t('hud.tier.daily') : tier === 'REMIX' ? I18N.t('hud.tier.remix') : tier;
+    tierEl.classList.toggle('milestone', !!isMilestone);
     document.getElementById('hud-hints').textContent = hints;
 
     const arrowsEl = document.getElementById('hud-arrows-remaining');
     if (arrowsEl) arrowsEl.textContent = remaining;
 
     const diffEl = document.getElementById('hud-difficulty');
-    if (diffEl) diffEl.textContent = DIFFICULTY_LABELS[difficulty] || difficulty || '';
+    if (diffEl) diffEl.textContent = difficulty ? I18N.t('difficulty.' + difficulty) : '';
 
     const livesRow = document.getElementById('hud-lives-row');
     if (livesRow) {
@@ -128,7 +158,7 @@ const UI = (() => {
 
   const CONFETTI_COLORS = ['#1a7fe8', '#4a9ff5', '#fbbf24', '#2ecc71', '#ff3b30'];
 
-  function burstConfetti() {
+  function burstConfetti(intensity) {
     const area = document.getElementById('confetti-area');
     if (!area) return;
     area.innerHTML = ''; // clear any still-running burst from a rapid replay
@@ -147,7 +177,7 @@ const UI = (() => {
     const ctx = canvas.getContext('2d');
     ctx.scale(dpr, dpr);
 
-    const COUNT = 90;
+    const COUNT = Math.round(90 * (intensity || 1));
     const GRAVITY = 0.28;
     const DRAG = 0.988;
     const DURATION = 2200;
@@ -198,8 +228,17 @@ const UI = (() => {
     return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
   }
 
-  function showWin(levelNum, hints, stars, score, elapsedSec) {
-    document.getElementById('modal-win').classList.remove('hidden');
+  function showWin(levelNum, hints, stars, score, elapsedSec, mode, isCampaignFinale) {
+    const winModal = document.getElementById('modal-win');
+    winModal.classList.remove('hidden');
+    winModal.classList.toggle('campaign-complete', !!isCampaignFinale);
+    const titleEl = document.getElementById('win-title');
+    if (titleEl) titleEl.textContent = I18N.t(isCampaignFinale ? 'win.finale_title' : 'win.title');
+    const subEl = document.getElementById('win-sub');
+    if (subEl) {
+      subEl.classList.toggle('hidden', !isCampaignFinale);
+      subEl.textContent = isCampaignFinale ? I18N.t('win.finale_sub') : '';
+    }
     document.getElementById('ws-hints').textContent = hints;
     const scoreEl = document.getElementById('ws-score');
     if (scoreEl) scoreEl.textContent = score;
@@ -210,13 +249,29 @@ const UI = (() => {
       if (idx < stars) el.classList.add('earned');
       else el.classList.remove('earned');
     });
-    burstConfetti();
+    burstConfetti(isCampaignFinale ? 2 : 1);
+
+    const isCampaign = !mode || mode === 'campaign';
+
+    // Personal best / world best / rank are per-campaign-level concepts -
+    // Daily/Remix track their own progress separately (see Storage.completeDaily/
+    // completeRemix) and don't participate in the per-level leaderboard.
+    const personalBestEl = document.getElementById('ws-personal-best');
+    const worldBestEl = document.getElementById('ws-level-world-best');
+    const rankEl = document.getElementById('ws-rank');
+    const badge = document.getElementById('win-rank-badge');
+
+    if (!isCampaign) {
+      if (personalBestEl) personalBestEl.textContent = score;
+      if (worldBestEl) worldBestEl.textContent = '—';
+      if (badge) badge.classList.add('hidden');
+      return;
+    }
 
     // Personal best for THIS level - Storage.completeLevel() (called just
     // before showWin, see game.js's onWin) already merged this run's score
     // into the stored per-level best, so reading it back here naturally
     // shows whichever is higher: this run, or a past one.
-    const personalBestEl = document.getElementById('ws-personal-best');
     if (personalBestEl) {
       const levelData = Storage.getLevelData(levelNum);
       personalBestEl.textContent = levelData ? levelData.score : score;
@@ -225,7 +280,6 @@ const UI = (() => {
     // World best for this level - best-effort, submitted then re-fetched so
     // a new personal record shows up immediately as the world best too
     // rather than waiting for a stale read.
-    const worldBestEl = document.getElementById('ws-level-world-best');
     if (worldBestEl) {
       worldBestEl.textContent = '…';
       Leaderboard.submitLevelScore(levelNum, score)
@@ -237,8 +291,6 @@ const UI = (() => {
 
     // Submit + fetch rank are both best-effort network calls - never block the
     // win screen on them, just fill the badge in once (if) they resolve.
-    const rankEl = document.getElementById('ws-rank');
-    const badge = document.getElementById('win-rank-badge');
     if (rankEl && badge) {
       if (!Leaderboard.getNickname()) {
         badge.classList.add('hidden');
@@ -258,7 +310,7 @@ const UI = (() => {
     document.getElementById('modal-leaderboard').classList.remove('hidden');
     const myRow = document.getElementById('lb-my-row');
     const list = document.getElementById('lb-list');
-    myRow.textContent = 'กำลังโหลด…';
+    myRow.textContent = I18N.t('leaderboard.loading');
     list.innerHTML = '';
 
     const nickname = Leaderboard.getNickname();
@@ -270,11 +322,11 @@ const UI = (() => {
 
     const myProgress = progressLabel(Storage.get('highestUnlocked') || 1);
     myRow.textContent = nickname
-      ? ('คุณ: ' + nickname + ' — อันดับ ' + (myRank != null ? '#' + myRank : '—') + ' (' + myScore + ' คะแนน, ' + myProgress + ')')
-      : 'ตั้งชื่อผู้เล่นเพื่อเข้าร่วมอันดับ';
+      ? I18N.t('leaderboard.my_row', { nickname, rank: myRank != null ? '#' + myRank : '—', score: myScore, progress: myProgress })
+      : I18N.t('leaderboard.set_nickname');
 
     if (top.length === 0) {
-      list.innerHTML = '<div class="lb-empty">ยังไม่มีข้อมูลอันดับ (ตรวจสอบการเชื่อมต่อ)</div>';
+      list.innerHTML = '<div class="lb-empty">' + escapeHtml(I18N.t('leaderboard.empty')) + '</div>';
       return;
     }
     top.forEach((p, idx) => {
@@ -295,7 +347,7 @@ const UI = (() => {
   // leaderboard rather than looking like just another number.
   function progressLabel(highestLevel) {
     const lvl = Math.min(highestLevel || 1, TOTAL_LEVELS);
-    return lvl >= TOTAL_LEVELS ? '🏁 จบเกม!' : ('ด่าน ' + lvl);
+    return lvl >= TOTAL_LEVELS ? I18N.t('progress.done') : (I18N.t('progress.level') + ' ' + lvl);
   }
 
   function escapeHtml(s) {
@@ -310,7 +362,39 @@ const UI = (() => {
   }
 
   function showFail() {
+    updateFailContinueAdUI();
     document.getElementById('modal-fail').classList.remove('hidden');
+  }
+
+  // Fail-screen "watch ad to continue" placeholder button state - shows remaining daily
+  // uses, hides the button entirely once the cap is hit (falls back to plain restart).
+  function updateFailContinueAdUI() {
+    const btn = document.getElementById('btn-fail-continue-ad');
+    const remainingEl = document.getElementById('fail-continue-ad-remaining');
+    const remaining = Storage.remainingRewardedAds('continue');
+    if (remaining <= 0) {
+      btn.classList.add('hidden');
+      remainingEl.classList.add('hidden');
+    } else {
+      btn.classList.remove('hidden');
+      remainingEl.classList.remove('hidden');
+      btn.disabled = false;
+      btn.textContent = I18N.t('fail.continue_ad');
+      remainingEl.textContent = I18N.t('store.ads_remaining', { n: remaining });
+    }
+  }
+
+  // Fakes a rewarded-ad watch (no real ad SDK yet - see plan) - disables the button,
+  // shows a loading state briefly, then calls onGranted(). Swap the setTimeout body for
+  // a real ad-network call later; everything downstream (caps, reward granting) is real.
+  function playFakeRewardedAd(btn, onGranted) {
+    btn.disabled = true;
+    const original = btn.textContent;
+    btn.textContent = I18N.t('store.ad_loading');
+    setTimeout(() => {
+      btn.textContent = original;
+      onGranted();
+    }, 1200);
   }
 
   function hideAllModals() {
@@ -370,6 +454,10 @@ const UI = (() => {
       document.getElementById('modal-pause').classList.remove('hidden');
     });
     document.getElementById('btn-resume').addEventListener('click', () => document.getElementById('modal-pause').classList.add('hidden'));
+    document.getElementById('btn-restart').addEventListener('click', () => {
+      document.getElementById('modal-pause').classList.add('hidden');
+      Game.restart();
+    });
     document.getElementById('btn-quit').addEventListener('click', () => {
       document.getElementById('modal-pause').classList.add('hidden');
       updateMenu();
@@ -387,14 +475,40 @@ const UI = (() => {
       document.getElementById('modal-settings').classList.add('hidden');
     });
 
+    // Resets the 'seen' flag and reloads level 1, which makes Tutorial's own
+    // 'level-loaded' listener re-arm it - no direct coupling to the Tutorial
+    // module needed here, same as any other level load.
+    document.getElementById('btn-replay-tutorial').addEventListener('click', () => {
+      hideAllModals();
+      Storage.set('tutorialSeen', false);
+      Game.loadLevel(1);
+      showScreen('screen-game');
+    });
+
     document.getElementById('btn-next').addEventListener('click', () => {
       hideAllModals();
-      Game.loadLevel(Game.getLevelNum() + 1);
+      const mode = Game.getMode();
+      if (mode === 'remix') {
+        Game.loadRemixLevel(Game.getRemixIndex() + 1);
+      } else if (mode === 'daily') {
+        // Only one puzzle per day - "next" just returns to the menu.
+        updateMenu();
+        showScreen('screen-menu');
+      } else {
+        const cur = Game.getLevelNum();
+        if (cur >= TOTAL_LEVELS) Game.loadRemixLevel(0); // campaign just finished -> REMIX
+        else Game.loadLevel(cur + 1);
+      }
     });
 
     document.getElementById('btn-replay').addEventListener('click', () => {
       hideAllModals();
-      Game.loadLevel(Game.getLevelNum());
+      Game.restart();
+    });
+
+    document.getElementById('btn-daily').addEventListener('click', () => {
+      Game.loadDailyLevel();
+      showScreen('screen-game');
     });
 
     document.getElementById('btn-hint').addEventListener('click', () => Game.useHint());
@@ -413,6 +527,16 @@ const UI = (() => {
     document.getElementById('toggle-vibration').addEventListener('click', () => {
       applyVibration(Storage.get('vibration') === false);
       syncSettingsUI();
+    });
+
+    document.getElementById('toggle-lang').addEventListener('click', () => {
+      I18N.setLang(I18N.currentLang() === 'en' ? 'th' : 'en');
+      syncSettingsUI();
+      updateMenu();
+      // Re-render the in-game HUD's translated text (difficulty badge, DAILY/
+      // REMIX tier label) if a level is currently loaded.
+      const hudPayload = Game.getHudPayload();
+      if (hudPayload) updateHUD(hudPayload);
     });
 
     document.getElementById('btn-nickname-confirm').addEventListener('click', () => {
@@ -445,6 +569,33 @@ const UI = (() => {
       document.getElementById('modal-fail').classList.add('hidden');
       updateMenu();
       showScreen('screen-menu');
+    });
+
+    document.getElementById('btn-fail-continue-ad').addEventListener('click', (e) => {
+      playFakeRewardedAd(e.currentTarget, () => {
+        if (!Storage.useRewardedAd('continue')) { updateFailContinueAdUI(); return; }
+        document.getElementById('modal-fail').classList.add('hidden');
+        Game.continueAfterFail();
+      });
+    });
+
+    document.getElementById('btn-store').addEventListener('click', () => {
+      buildStoreScreen();
+      showScreen('screen-store');
+    });
+    document.getElementById('btn-back-store').addEventListener('click', () => showScreen('screen-menu'));
+
+    document.getElementById('btn-store-hint-ad').addEventListener('click', (e) => {
+      playFakeRewardedAd(e.currentTarget, () => {
+        if (!Storage.useRewardedAd('hint')) { buildStoreScreen(); return; }
+        Storage.addHints(1);
+        buildStoreScreen();
+      });
+    });
+
+    // Hint packs are visual-only placeholders - no payment processor wired up yet.
+    document.querySelectorAll('.store-pack-btn').forEach(btn => {
+      btn.addEventListener('click', () => alert(I18N.t('store.coming_soon')));
     });
   }
 

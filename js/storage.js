@@ -1,6 +1,21 @@
 ﻿const Storage = (() => {
   const KEY = 'arrowflow3d_save';
-  const defaults = { currentLevel: 1, highestUnlocked: 1, levelData: {}, totalStars: 0, totalScore: 0, hints: 3, theme: 'light', sound: true, music: true, vibration: true, tutorialSeen: false };
+  const TOTAL_LEVELS = 300; // kept in sync with TOTAL_LEVELS in js/ui.js
+  const defaults = {
+    currentLevel: 1, highestUnlocked: 1, levelData: {}, totalStars: 0, totalScore: 0, hints: 3,
+    theme: 'light', sound: true, music: true, vibration: true, tutorialSeen: false, lang: 'en',
+    dailyLastCompletedDate: null, dailyStreak: 0,
+    remixHighest: 0, remixBestScoreByLevel: {},
+    continueAdsUsedToday: 0, continueAdsDate: null,
+    hintAdsUsedToday: 0, hintAdsDate: null
+  };
+
+  const REWARDED_AD_DAILY_CAP = 3;
+
+  function localDateStr() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
 
   function load() {
     try { const raw = localStorage.getItem(KEY); return raw ? { ...defaults, ...JSON.parse(raw) } : { ...defaults }; }
@@ -21,8 +36,11 @@
       const bestTime = prev && prev.time != null ? Math.min(prev.time, timeSec) : timeSec;
       _state.levelData[levelNum] = { stars: bestStars, moves: bestMoves, score: bestScore, time: bestTime, completed: true };
       if (levelNum >= _state.highestUnlocked) {
-        _state.highestUnlocked = levelNum + 1;
-        _state.currentLevel = levelNum + 1;
+        // Capped at TOTAL_LEVELS: the campaign is a fixed 300-level set, not
+        // endless (see [[arrowflow_level_roadmap]]) - progress past 300 lives
+        // separately in remixHighest, never here.
+        _state.highestUnlocked = Math.min(TOTAL_LEVELS, levelNum + 1);
+        _state.currentLevel = Math.min(TOTAL_LEVELS, levelNum + 1);
       }
       _state.totalStars = Object.values(_state.levelData).reduce((s, d) => s + (d.stars || 0), 0);
       _state.totalScore = Object.values(_state.levelData).reduce((s, d) => s + (d.score || 0), 0);
@@ -30,6 +48,47 @@
     },
     getLevelData: (n) => _state.levelData[n] || null,
     getAllLevelData: () => _state.levelData,
-    addHints: (n) => { _state.hints = Math.max(0, _state.hints + n); save(_state); }
+    addHints: (n) => { _state.hints = Math.max(0, _state.hints + n); save(_state); },
+
+    // Daily Challenge - deliberately separate from campaign progress above.
+    isDailyCompletedToday: () => _state.dailyLastCompletedDate === localDateStr(),
+    completeDaily() {
+      const today = localDateStr();
+      if (_state.dailyLastCompletedDate === today) return false; // already claimed, no double reward
+      const y = new Date(); y.setDate(y.getDate() - 1);
+      const yesterdayStr = `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, '0')}-${String(y.getDate()).padStart(2, '0')}`;
+      _state.dailyStreak = _state.dailyLastCompletedDate === yesterdayStr ? _state.dailyStreak + 1 : 1;
+      _state.dailyLastCompletedDate = today;
+      save(_state);
+      return true;
+    },
+
+    // REMIX (post-campaign endless) - also separate from campaign progress.
+    completeRemix(remixIndex, stars, score) {
+      _state.remixHighest = Math.max(_state.remixHighest, remixIndex + 1);
+      const prev = _state.remixBestScoreByLevel[remixIndex];
+      _state.remixBestScoreByLevel[remixIndex] = prev ? Math.max(prev, score) : score;
+      save(_state);
+    },
+
+    // Rewarded-ad placeholders (no real ad SDK yet - see [[arrowflow_daily_remix_i18n]]-era
+    // memory system). 'continue' = fail-screen continue, 'hint' = store's free-hint ad. Each
+    // has its own independent daily cap, reset on calendar-day rollover like dailyStreak above.
+    remainingRewardedAds(kind) {
+      const usedKey = kind === 'hint' ? 'hintAdsUsedToday' : 'continueAdsUsedToday';
+      const dateKey = kind === 'hint' ? 'hintAdsDate' : 'continueAdsDate';
+      const used = _state[dateKey] === localDateStr() ? _state[usedKey] : 0;
+      return Math.max(0, REWARDED_AD_DAILY_CAP - used);
+    },
+    useRewardedAd(kind) {
+      const usedKey = kind === 'hint' ? 'hintAdsUsedToday' : 'continueAdsUsedToday';
+      const dateKey = kind === 'hint' ? 'hintAdsDate' : 'continueAdsDate';
+      const today = localDateStr();
+      if (_state[dateKey] !== today) { _state[usedKey] = 0; _state[dateKey] = today; }
+      if (_state[usedKey] >= REWARDED_AD_DAILY_CAP) return false;
+      _state[usedKey]++;
+      save(_state);
+      return true;
+    }
   };
 })();
