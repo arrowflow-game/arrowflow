@@ -3,6 +3,10 @@
    ============================================ */
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Best-effort analytics/crash logging - set up first so the global error
+  // handler below is listening before anything else can throw.
+  Analytics.init();
+
   // Init UI
   I18N.applyToDOM();
   UI.applyTheme(Storage.get('theme'));

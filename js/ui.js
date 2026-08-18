@@ -520,6 +520,7 @@ const UI = (() => {
       const btn = e.currentTarget;
       btn.disabled = true;
       btn.textContent = I18N.t('reset.working');
+      Analytics.logEvent('progress_reset', {});
       await Leaderboard.resetIdentity();
       Storage.resetAll();
       location.reload();
@@ -614,6 +615,7 @@ const UI = (() => {
     document.getElementById('btn-fail-continue-ad').addEventListener('click', (e) => {
       playFakeRewardedAd(e.currentTarget, () => {
         if (!Storage.useRewardedAd('continue')) { updateFailContinueAdUI(); return; }
+        Analytics.logEvent('continue_ad_used', {});
         document.getElementById('modal-fail').classList.add('hidden');
         Game.continueAfterFail();
       });
@@ -643,14 +645,19 @@ const UI = (() => {
     document.getElementById('btn-store-hint-ad').addEventListener('click', (e) => {
       playFakeRewardedAd(e.currentTarget, () => {
         if (!Storage.useRewardedAd('hint')) { buildStoreScreen(); return; }
+        Analytics.logEvent('hint_ad_used', {});
         Storage.addHints(1);
         buildStoreScreen();
       });
     });
 
     // Hint packs are visual-only placeholders - no payment processor wired up yet.
+    // Logged anyway so real purchase demand is visible before building real IAP.
     document.querySelectorAll('.store-pack-btn').forEach(btn => {
-      btn.addEventListener('click', () => alert(I18N.t('store.coming_soon')));
+      btn.addEventListener('click', () => {
+        Analytics.logEvent('pack_purchase_clicked', { hints: btn.dataset.hints || null });
+        alert(I18N.t('store.coming_soon'));
+      });
     });
   }
 

@@ -416,11 +416,17 @@ const Game = (() => {
     UI.updateHUD(buildHudPayload());
     Sound.playWin();
     Haptics.win();
+    Analytics.logEvent('level_complete', {
+      mode: state.mode, level: state.levelNum, stars, score,
+      hints_used: state.hintsUsed, time_sec: Math.round(elapsedSec)
+    });
+    if (isCampaignFinale) Analytics.logEvent('campaign_complete', {});
     UI.showWin(state.levelNum, state.hintsUsed, stars, score, elapsedSec, state.mode, isCampaignFinale);
   }
 
   function onFail() {
     Sound.playFail();
+    Analytics.logEvent('level_fail', { mode: state.mode, level: state.levelNum });
     UI.showFail();
   }
 
