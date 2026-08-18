@@ -90,6 +90,7 @@ const Tutorial = (() => {
   let gestureAccum = 0;
   let els = {};
   let repositionHandler = null;
+  let hintsAtStart = 0;
 
   function init() {
     if (typeof Game !== 'undefined' && Game.setOnEvent) Game.setOnEvent(handleGameEvent);
@@ -125,6 +126,7 @@ const Tutorial = (() => {
     if (Storage.get('tutorialSeen')) return;
     if (active) return;
     active = true;
+    hintsAtStart = Storage.get('hints');
     buildDOM();
     // Small delay so the HUD/scene has finished its own load-in before the first
     // spotlight measures element positions.
@@ -245,6 +247,13 @@ const Tutorial = (() => {
   function finish() {
     if (!active) return;
     active = false;
+    // Step 4 calls the real useHint() so the highlighted-path demo is genuine, not
+    // faked - but that means it genuinely spends one of the player's 3 starting
+    // hints. Refund whatever was actually spent during the tutorial (only ever 0 or
+    // 1 in practice) so a first-time player doesn't start the real game down a hint
+    // just for having followed the tutorial.
+    const spent = hintsAtStart - Storage.get('hints');
+    if (spent > 0) Storage.addHints(spent);
     Storage.set('tutorialSeen', true);
     if (els.overlay) els.overlay.remove();
     if (repositionHandler) window.removeEventListener('resize', repositionHandler);
