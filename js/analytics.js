@@ -20,7 +20,8 @@ const Analytics = (() => {
     projectId: "arrowflow-8d6a8",
     storageBucket: "arrowflow-8d6a8.firebasestorage.app",
     messagingSenderId: "968667057133",
-    appId: "1:968667057133:web:f8cad8133133f4aed8f5e4"
+    appId: "1:968667057133:web:f8cad8133133f4aed8f5e4",
+    measurementId: "G-1TVVKGR7KF"
   };
 
   let analytics = null;
