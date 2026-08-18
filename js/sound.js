@@ -137,5 +137,20 @@ const Sound = (() => {
     }
   }
 
+  // Web Audio keeps running even once the app is backgrounded/minimized (unlike
+  // <video>/<audio> elements, the browser/WebView doesn't pause it for you) - without
+  // this, background music plays on indefinitely after the player leaves the app.
+  let wasMusicPlaying = false;
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      wasMusicPlaying = musicPlaying;
+      stopMusic();
+      if (ctx && ctx.state === 'running') ctx.suspend();
+    } else {
+      if (ctx && ctx.state === 'suspended') ctx.resume();
+      if (wasMusicPlaying) startMusic();
+    }
+  });
+
   return { playSlide, playBump, playWin, playFail, startMusic, stopMusic };
 })();
