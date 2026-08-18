@@ -13,7 +13,7 @@ const I18N = (() => {
       'menu.levels': '☰ ด่าน',
       'menu.daily': '📅 รายวัน',
       'menu.daily_done': '✅ รายวัน (เล่นแล้ว)',
-      'menu.stats': '📊 สถิติ',
+      'menu.ranking': '🏆 อันดับ',
       'menu.store': '🛒 ร้านค้า',
       'menu.tagline': 'เลื่อนลูกศรออกจากลูกบาศก์ให้หมด!',
       'menu.level_label': 'ด่าน',
@@ -26,7 +26,9 @@ const I18N = (() => {
 
       'levels.title': 'เลือกด่าน',
 
-      'stats.title': 'สถิติ',
+      'ranking.title': '🏆 อันดับ',
+      'ranking.world_section': '🌍 อันดับโลก',
+      'ranking.personal_section': '📊 สถิติของฉัน',
       'stats.total_score': 'คะแนนรวม',
       'stats.total_stars': 'ดาวรวม',
       'stats.levels_completed': 'ด่านที่ผ่าน',
@@ -128,7 +130,7 @@ const I18N = (() => {
       'menu.levels': '☰ Levels',
       'menu.daily': '📅 Daily',
       'menu.daily_done': '✅ Daily (Done)',
-      'menu.stats': '📊 Stats',
+      'menu.ranking': '🏆 Ranking',
       'menu.store': '🛒 Store',
       'menu.tagline': 'Slide all arrows off the cube!',
       'menu.level_label': 'Level',
@@ -141,7 +143,9 @@ const I18N = (() => {
 
       'levels.title': 'SELECT LEVEL',
 
-      'stats.title': 'Stats',
+      'ranking.title': '🏆 Ranking',
+      'ranking.world_section': '🌍 World Ranking',
+      'ranking.personal_section': '📊 My Stats',
       'stats.total_score': 'Total Score',
       'stats.total_stars': 'Total Stars',
       'stats.levels_completed': 'Levels Cleared',

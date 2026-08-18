@@ -1,0 +1,54 @@
+rules_version = '2';
+
+// ArrowFlow global leaderboard - Firestore Security Rules.
+// Public read (no auth needed to view rankings), write only by the doc's own
+// anonymous-auth uid, with type/range bounds on every field so a tampered
+// client (bypassing this app's own JS and hitting Firestore directly) can't
+// write garbage/oversized/wrong-type values that would corrupt the
+// leaderboard or feed unescaped/malformed data back into other players' UI.
+//
+// This is a coarse sanity check, NOT real anti-cheat - it blocks obviously
+// invalid values (wrong type, absurd magnitude) but cannot tell a genuine
+// high score from a plausible-looking faked one, since the client still
+// computes and submits its own score with no server-side verification of
+// how it was earned. Closing that gap fully needs a server (e.g. a Cloud
+// Function that recomputes the score from a verified play log) - out of
+// scope for a client-only Firestore backend.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // One doc per player, keyed by their Firebase Anonymous Auth uid.
+    match /players/{uid} {
+      allow read: if true;
+      allow write: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.data.nickname is string
+        && request.resource.data.nickname.size() > 0
+        && request.resource.data.nickname.size() <= 20
+        && request.resource.data.totalScore is int
+        && request.resource.data.totalScore >= 0
+        && request.resource.data.totalScore <= 10000000
+        && request.resource.data.highestLevel is int
+        && request.resource.data.highestLevel >= 1
+        && request.resource.data.highestLevel <= 300;
+    }
+
+    // One doc per campaign level (1-300), holding the single highest score
+    // anyone has ever gotten on that level. Any authenticated (anonymous)
+    // player may write, but only a strictly-higher score than what's already
+    // stored is accepted - mirrors the transaction js/leaderboard.js's
+    // submitLevelScore() already does client-side, enforced again here so a
+    // client can't skip that check by writing directly.
+    match /levelBests/{levelId} {
+      allow read: if true;
+      allow write: if request.auth != null
+        && request.resource.data.nickname is string
+        && request.resource.data.nickname.size() > 0
+        && request.resource.data.nickname.size() <= 20
+        && request.resource.data.score is int
+        && request.resource.data.score >= 0
+        && request.resource.data.score <= 50000
+        && (!resource.exists() || request.resource.data.score > resource.data.score);
+    }
+  }
+}

@@ -4,6 +4,9 @@
 
 const UI = (() => {
   const TOTAL_LEVELS = 300; // matches manifest.json's "300 levels" and the menu progress bar
+  // Which screen the Store's back button returns to - the menu button and the in-game
+  // HUD shortcut both open the same screen-store, but need to land back in different places.
+  let storeReturnScreen = 'screen-menu';
 
   function applySound(enabled) {
     Storage.set('sound', enabled);
@@ -306,10 +309,9 @@ const UI = (() => {
     }
   }
 
-  async function openLeaderboardModal() {
-    document.getElementById('modal-leaderboard').classList.remove('hidden');
-    const myRow = document.getElementById('lb-my-row');
-    const list = document.getElementById('lb-list');
+  // Shared by the win-screen's quick "ดูอันดับ" modal and the main-menu Ranking
+  // screen - both just point it at their own myRow/list elements.
+  async function renderLeaderboard(myRow, list) {
     myRow.textContent = I18N.t('leaderboard.loading');
     list.innerHTML = '';
 
@@ -332,13 +334,31 @@ const UI = (() => {
     top.forEach((p, idx) => {
       const row = document.createElement('div');
       row.className = 'lb-row' + (nickname && p.nickname === nickname && p.totalScore === myScore ? ' lb-me' : '');
+      // p.totalScore/p.nickname come from Firestore, written by other players' own
+      // clients (Firestore Security Rules are the real gate, not this app's own
+      // submitScore() call) - coerce/escape both before touching innerHTML so a
+      // tampered doc (e.g. totalScore written as a string via a raw SDK call,
+      // bypassing this app's Math.round()) can't inject markup into every other
+      // player's leaderboard view.
       row.innerHTML =
         '<span class="lb-rank">' + (idx + 1) + '</span>' +
         '<span class="lb-name">' + escapeHtml(p.nickname) + '</span>' +
         '<span class="lb-progress">' + progressLabel(p.highestLevel) + '</span>' +
-        '<span class="lb-score">' + p.totalScore + '</span>';
+        '<span class="lb-score">' + (Number(p.totalScore) || 0) + '</span>';
       list.appendChild(row);
     });
+  }
+
+  function openLeaderboardModal() {
+    document.getElementById('modal-leaderboard').classList.remove('hidden');
+    renderLeaderboard(document.getElementById('lb-my-row'), document.getElementById('lb-list'));
+  }
+
+  // Ranking screen (main menu) = world leaderboard + the personal per-level
+  // history that used to live on its own "Stats" screen, merged into one.
+  function buildRankingScreen() {
+    renderLeaderboard(document.getElementById('ranking-my-row'), document.getElementById('ranking-lb-list'));
+    buildStatsScreen();
   }
 
   // A player who has cleared/unlocked level 300 gets a "จบเกม!" (done) badge
@@ -443,11 +463,11 @@ const UI = (() => {
 
     document.getElementById('btn-back-lvl').addEventListener('click', () => showScreen('screen-menu'));
 
-    document.getElementById('btn-stats').addEventListener('click', () => {
-      buildStatsScreen();
-      showScreen('screen-stats');
+    document.getElementById('btn-ranking').addEventListener('click', () => {
+      buildRankingScreen();
+      showScreen('screen-ranking');
     });
-    document.getElementById('btn-back-stats').addEventListener('click', () => showScreen('screen-menu'));
+    document.getElementById('btn-back-ranking').addEventListener('click', () => showScreen('screen-menu'));
 
     document.getElementById('btn-pause').addEventListener('click', () => {
       document.getElementById('pause-lvl').textContent = Storage.get('currentLevel');
@@ -580,10 +600,25 @@ const UI = (() => {
     });
 
     document.getElementById('btn-store').addEventListener('click', () => {
+      storeReturnScreen = 'screen-menu';
       buildStoreScreen();
       showScreen('screen-store');
     });
-    document.getElementById('btn-back-store').addEventListener('click', () => showScreen('screen-menu'));
+    document.getElementById('btn-hud-store').addEventListener('click', () => {
+      storeReturnScreen = 'screen-game';
+      buildStoreScreen();
+      showScreen('screen-store');
+    });
+    document.getElementById('btn-back-store').addEventListener('click', () => {
+      // Buying/ad-earning hints in-level doesn't otherwise touch the HUD until the next
+      // updateHUD() call (e.g. on hint use) - refresh it immediately so the count shown
+      // in the HUD matches what the store just showed.
+      if (storeReturnScreen === 'screen-game') {
+        const hudHints = document.getElementById('hud-hints');
+        if (hudHints) hudHints.textContent = Storage.get('hints');
+      }
+      showScreen(storeReturnScreen);
+    });
 
     document.getElementById('btn-store-hint-ad').addEventListener('click', (e) => {
       playFakeRewardedAd(e.currentTarget, () => {
@@ -615,5 +650,5 @@ const UI = (() => {
     }, 100);
   }
 
-  return { showScreen, applyTheme, applySound, applyMusic, applyVibration, updateMenu, updateHUD, showWin, showFail, hideAllModals, wireEvents, runSplash, buildStatsScreen, promptNicknameIfNeeded };
+  return { showScreen, applyTheme, applySound, applyMusic, applyVibration, updateMenu, updateHUD, showWin, showFail, hideAllModals, wireEvents, runSplash, buildStatsScreen, buildRankingScreen, promptNicknameIfNeeded };
 })();

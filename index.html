@@ -55,7 +55,7 @@
           <button id="btn-daily" class="btn btn-outline" data-i18n="menu.daily">📅 Daily</button>
         </div>
         <div class="menu-btn-row">
-          <button id="btn-stats" class="btn btn-outline" data-i18n="menu.stats">📊 สถิติ</button>
+          <button id="btn-ranking" class="btn btn-outline" data-i18n="menu.ranking">🏆 อันดับ</button>
           <button id="btn-store" class="btn btn-outline" data-i18n="menu.store">🛒 ร้านค้า</button>
         </div>
       </div>
@@ -95,7 +95,10 @@
           <div class="hud-difficulty-badge" id="hud-difficulty">ปานกลาง</div>
         </div>
       </div>
-      <button id="btn-hint" class="hud-hint-btn">💡 <span id="hud-hints">3</span></button>
+      <div class="hud-controls-group hud-right-group">
+        <button id="btn-hint" class="hud-hint-btn">💡 <span id="hud-hints">3</span></button>
+        <button id="btn-hud-store" class="icon-btn hud-store-icon" aria-label="Store">🛒</button>
+      </div>
     </header>
     <div class="hud-instruction" id="hud-instruction" data-i18n="hud.instruction">Drag to rotate • Tap a path to slide it off!</div>
     <footer class="hud-bottom">
@@ -121,36 +124,43 @@
     </div>
   </div>
 
-  <!-- STATS -->
-  <div id="screen-stats" class="ovr-screen levels-ovr">
+  <!-- RANKING (world leaderboard + personal per-level history, merged) -->
+  <div id="screen-ranking" class="ovr-screen levels-ovr">
     <div class="levels-panel">
       <div class="levels-hdr">
-        <button id="btn-back-stats" class="icon-btn">←</button>
-        <h2 data-i18n="stats.title">สถิติ</h2>
+        <button id="btn-back-ranking" class="icon-btn">←</button>
+        <h2 data-i18n="ranking.title">🏆 อันดับ</h2>
         <span></span>
       </div>
-      <div class="stats-summary">
-        <div class="stats-summary-card">
-          <div class="stats-summary-lbl" data-i18n="stats.total_score">คะแนนรวม</div>
-          <div class="stats-summary-val" id="stats-total-score">0</div>
+      <div class="ranking-scroll">
+        <div class="ranking-section-hdr" data-i18n="ranking.world_section">🌍 อันดับโลก</div>
+        <div class="lb-my-row" id="ranking-my-row"></div>
+        <div class="lb-list" id="ranking-lb-list"></div>
+
+        <div class="ranking-section-hdr" data-i18n="ranking.personal_section">📊 สถิติของฉัน</div>
+        <div class="stats-summary">
+          <div class="stats-summary-card">
+            <div class="stats-summary-lbl" data-i18n="stats.total_score">คะแนนรวม</div>
+            <div class="stats-summary-val" id="stats-total-score">0</div>
+          </div>
+          <div class="stats-summary-card">
+            <div class="stats-summary-lbl" data-i18n="stats.total_stars">ดาวรวม</div>
+            <div class="stats-summary-val" id="stats-total-stars">0</div>
+          </div>
+          <div class="stats-summary-card">
+            <div class="stats-summary-lbl" data-i18n="stats.levels_completed">ด่านที่ผ่าน</div>
+            <div class="stats-summary-val" id="stats-levels-completed">0 / 300</div>
+          </div>
+          <div class="stats-summary-card">
+            <div class="stats-summary-lbl" data-i18n="stats.best_level">คะแนนสูงสุด</div>
+            <div class="stats-summary-val stats-summary-val-sm" id="stats-best-level">—</div>
+          </div>
         </div>
-        <div class="stats-summary-card">
-          <div class="stats-summary-lbl" data-i18n="stats.total_stars">ดาวรวม</div>
-          <div class="stats-summary-val" id="stats-total-stars">0</div>
+        <div class="stats-list-hdr">
+          <span data-i18n="stats.col_level">ด่าน</span><span data-i18n="stats.col_stars">ดาว</span><span data-i18n="stats.col_time">เวลา</span><span data-i18n="stats.col_score">คะแนน</span>
         </div>
-        <div class="stats-summary-card">
-          <div class="stats-summary-lbl" data-i18n="stats.levels_completed">ด่านที่ผ่าน</div>
-          <div class="stats-summary-val" id="stats-levels-completed">0 / 300</div>
-        </div>
-        <div class="stats-summary-card">
-          <div class="stats-summary-lbl" data-i18n="stats.best_level">คะแนนสูงสุด</div>
-          <div class="stats-summary-val stats-summary-val-sm" id="stats-best-level">—</div>
-        </div>
+        <div class="stats-list-wrap" id="stats-level-list"></div>
       </div>
-      <div class="stats-list-hdr">
-        <span data-i18n="stats.col_level">ด่าน</span><span data-i18n="stats.col_stars">ดาว</span><span data-i18n="stats.col_time">เวลา</span><span data-i18n="stats.col_score">คะแนน</span>
-      </div>
-      <div class="stats-list-wrap" id="stats-level-list"></div>
     </div>
   </div>
 
@@ -298,11 +308,14 @@
     </div>
   </div>
 
-  <!-- Scripts: Three.js first, then game modules -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+  <!-- Scripts: Three.js first, then game modules. integrity/crossorigin (SRI) on the
+       CDN-hosted ones so a compromised/MITM'd CDN response gets rejected by the browser
+       instead of silently executing - pin the exact r128 / 10.14.1 file hashes, so bumping
+       either library's version later needs a matching hash recompute, not just a URL edit. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" integrity="sha384-CI3ELBVUz9XQO+97x6nwMDPosPR5XvsxW2ua7N1Xeygeh1IxtgqtCkGfQY9WWdHu" crossorigin="anonymous"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js" integrity="sha384-ZaR6mWzmJtrRibZ1Vm7SoHFr8OXjyAuGAXalGDKqbxFT18oi/z+oZLIRFkpeNor1" crossorigin="anonymous"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js" integrity="sha384-I1LYojsZ5RM1cOda44Z2h42Qa6YfsQ1XkXxREnhp4ueYBR/4d1pG1K+NZM537Vsj" crossorigin="anonymous"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js" integrity="sha384-Ke0FJhH7LyRqDxZ0wt+/OXV38yfQVu7g9VPEEGjYmB4RVOY/ta04uecRhsMwT7V3" crossorigin="anonymous"></script>
   <script src="js/storage.js"></script>
   <script src="js/i18n.js"></script>
   <script src="js/leaderboard.js"></script>
