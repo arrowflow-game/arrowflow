@@ -19,3 +19,4 @@ android/build/
 android/captures/
 *.jks
 *.keystore
+*.p12
