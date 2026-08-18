@@ -8,3 +8,14 @@ tools/__pycache__/
 tools/campaign_gen.log
 tools/campaign_output.js
 tools/*.bak
+
+# Capacitor / Android app wrap (see scripts/build-www.js)
+node_modules/
+www/
+android/local.properties
+android/.gradle/
+android/app/build/
+android/build/
+android/captures/
+*.jks
+*.keystore
