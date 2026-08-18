@@ -15,8 +15,17 @@
         <item name="android:background">@null</item>
     </style>
 
-
+    <!-- This is the theme actually applied to MainActivity for its whole lifetime (see
+         AndroidManifest.xml android:theme) - Capacitor's template never switches away from
+         the splash theme after launch. targetSdk 35 (Android 15) makes edge-to-edge the
+         default, drawing the WebView under the status bar AND the bottom nav/gesture bar -
+         this covered the top HUD buttons and put the bottom undo button inside the
+         gesture-nav swipe zone (taps there were being read as a system back gesture instead
+         of clicks). windowOptOutEdgeToEdgeEnforcement is Android 15's official temporary
+         opt-out; it's ignored on API 36+, where proper WindowInsets handling will be needed
+         instead. -->
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@drawable/splash</item>
+        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
     </style>
 </resources>
