@@ -3,6 +3,15 @@
    ============================================ */
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Android 15+ (targetSdk 35) enforces edge-to-edge by default, so the WebView
+  // draws under the OS status bar and covers the top HUD buttons unless we opt
+  // out. capacitor.config.json's plugins.StatusBar.overlaysWebView already does
+  // this on native launch; this JS call is a belt-and-suspenders backup (no-op
+  // on the plain web build, where window.Capacitor isn't injected).
+  if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
+    try { window.Capacitor.Plugins.StatusBar.setOverlaysWebView({ overlay: false }); } catch (e) {}
+  }
+
   // Best-effort analytics/crash logging - set up first so the global error
   // handler below is listening before anything else can throw.
   Analytics.init();

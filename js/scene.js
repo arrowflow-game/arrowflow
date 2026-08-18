@@ -179,9 +179,9 @@ const Scene3D = (() => {
     scene = new THREE.Scene();
 
     camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
-    camera.position.set(3, 3, 4);
-    camera.lookAt(0, 0, 0);
-    cameraDistance = camera.position.length();
+    // Mid-range start (vs. the old ~5.83, close to MIN_CAMERA_DISTANCE) so the shape
+    // doesn't fill the whole screen on level load - reported as feeling too zoomed in.
+    setCameraDistance(7.5);
 
     shapeGroup = new THREE.Group();
     scene.add(shapeGroup);
@@ -890,9 +890,10 @@ const Scene3D = (() => {
   }
 
   // Degrees of rotation per pixel of drag - lowered from 0.5, then 0.32
-  // (2026-08-15), then 0.2, then again here (2026-08-17) after a third
-  // report that long sessions still felt dizzying.
-  const DRAG_SENSITIVITY = 0.1;
+  // (2026-08-15), then 0.2, then 0.1 (2026-08-17) after a third report
+  // that long sessions still felt dizzying; bumped back up slightly here
+  // (2026-08-18) after that landed as feeling too slow.
+  const DRAG_SENSITIVITY = 0.15;
 
   function applyDragRotation(dx, dy) {
     const deltaRotationQuaternion = new THREE.Quaternion().setFromEuler(
