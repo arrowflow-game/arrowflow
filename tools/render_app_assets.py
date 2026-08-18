@@ -1,8 +1,13 @@
 """
 One-off generator for the Android app icon / splash source PNGs (resources/*.png),
-consumed by `npx @capacitor/assets generate`. Renders small HTML/SVG snippets with
-headless Chromium (same Playwright already used by tools/e2e_smoke_test.py) instead
-of needing ImageMagick/Inkscape, neither of which is installed on this machine.
+consumed by `npx @capacitor/assets generate`.
+
+The icon is a hand-authored glossy-cube illustration (resources/icon-source.png,
+transparent bg) rather than something generated here - this script just composites
+it into the three files Android's adaptive-icon system needs (foreground/background/
+legacy) at the right scale and padding. The splash screen is still rendered from HTML/
+CSS via headless Chromium (same Playwright already used by tools/e2e_smoke_test.py)
+since no ImageMagick/Inkscape is installed on this machine.
 
 Not part of any build step - run manually whenever the brand mark changes, then
 re-run `npx @capacitor/assets generate --android` and commit the regenerated
@@ -10,6 +15,7 @@ android/ resources.
 """
 import pathlib
 from playwright.sync_api import sync_playwright
+from PIL import Image, ImageDraw
 
 OUT = pathlib.Path(__file__).parent.parent / "resources"
 OUT.mkdir(exist_ok=True)
@@ -17,6 +23,7 @@ OUT.mkdir(exist_ok=True)
 ACCENT = "#1a7fe8"
 SPLASH_BG = "#dff0fb"
 FONT = "'Outfit', 'Arial', sans-serif"
+ICON_BG = (15, 20, 38, 255)  # dark navy, sampled from the cube artwork's own glassy faces
 
 ARROW_SVG = """
 <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
@@ -26,30 +33,30 @@ ARROW_SVG = """
 
 def page_html(size, body):
     return f"""<!DOCTYPE html><html><head><style>
-    html,body{{margin:0;padding:0;width:{size}px;height:{size}px;overflow:hidden;}}
+    html,body{{margin:0;padding:0;width:{size}px;height:{size}px;overflow:hidden;background:transparent;}}
     </style></head><body>{body}</body></html>"""
 
-def icon_foreground(size=1024):
-    # Adaptive-icon foreground: transparent bg, glyph kept inside the ~66% safe zone.
-    glyph = int(size * 0.5)
-    off = (size - glyph) // 2
-    body = f'<div style="position:absolute;left:{off}px;top:{off}px;width:{glyph}px;height:{glyph}px;">{ARROW_SVG}</div>'
-    return page_html(size, body), True
+def _composite_icon(scale, bg=None, radius=None, size=1024):
+    src = Image.open(OUT / "icon-source.png").convert("RGBA")
+    canvas = Image.new("RGBA", (size, size), bg or (0, 0, 0, 0))
+    new_w = int(size * scale)
+    resized = src.resize((new_w, new_w), Image.LANCZOS)
+    off = (size - new_w) // 2
+    canvas.alpha_composite(resized, (off, off))
+    if radius:
+        mask = Image.new("L", (size, size), 0)
+        ImageDraw.Draw(mask).rounded_rectangle([0, 0, size, size], radius=radius, fill=255)
+        canvas.putalpha(Image.composite(canvas.split()[3], Image.new("L", (size, size), 0), mask))
+    return canvas
 
-def icon_background(size=1024):
-    body = f'<div style="width:{size}px;height:{size}px;background:{ACCENT};"></div>'
-    return page_html(size, body), False
-
-def icon_legacy(size=1024):
-    glyph = int(size * 0.5)
-    off = (size - glyph) // 2
-    body = (
-        f'<div style="width:{size}px;height:{size}px;background:{ACCENT};'
-        f'border-radius:{int(size*0.2)}px;position:relative;box-sizing:border-box;">'
-        f'<div style="position:absolute;left:{off}px;top:{off-int(size*0.04)}px;width:{glyph}px;height:{glyph}px;">{ARROW_SVG}</div>'
-        f'</div>'
-    )
-    return page_html(size, body), False
+def write_icons():
+    # foreground: transparent, scaled to sit within the adaptive-icon ~66% safe zone
+    _composite_icon(0.70).save(OUT / "icon-foreground.png")
+    # background: solid fill only (shows past the foreground's silhouette/mask)
+    Image.new("RGBA", (1024, 1024), ICON_BG).save(OUT / "icon-background.png")
+    # legacy/Play-Store icon: must be fully opaque, so solid bg + rounded corners
+    _composite_icon(0.84, bg=ICON_BG, radius=int(1024 * 0.2)).save(OUT / "icon.png")
+    print("wrote icon-foreground.png, icon-background.png, icon.png")
 
 def splash(size=2732):
     badge = int(size * 0.22)
@@ -74,21 +81,18 @@ def splash(size=2732):
     """
     return page_html(size, body), False
 
-TARGETS = {
-    "icon-foreground.png": icon_foreground,
-    "icon-background.png": icon_background,
-    "icon.png": icon_legacy,
+SPLASH_TARGETS = {
     "splash.png": splash,
     "splash-dark.png": splash,
 }
 
 def main():
+    write_icons()
     with sync_playwright() as p:
         browser = p.chromium.launch()
-        for name, fn in TARGETS.items():
+        for name, fn in SPLASH_TARGETS.items():
             html, transparent = fn()
-            size = 2732 if "splash" in name else 1024
-            page = browser.new_page(viewport={"width": size, "height": size})
+            page = browser.new_page(viewport={"width": 2732, "height": 2732})
             page.set_content(html)
             page.screenshot(path=str(OUT / name), omit_background=transparent)
             page.close()
