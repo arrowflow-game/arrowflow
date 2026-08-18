@@ -57,7 +57,15 @@ const I18N = (() => {
       'settings.tutorial': '🎓 บทแนะนำ',
       'settings.tutorial_btn': 'ดูอีกครั้ง',
       'settings.language': '🌐 ภาษา',
+      'settings.reset': '🗑️ ล้างข้อมูล',
+      'settings.reset_btn': 'ล้างข้อมูล',
       'settings.close': 'ปิด',
+
+      'reset.title': '⚠️ ล้างข้อมูล?',
+      'reset.warning': 'การกระทำนี้จะลบความคืบหน้า ดาว คะแนน คำใบ้ และชื่อผู้เล่นทั้งหมดในเครื่องนี้ ไม่สามารถย้อนกลับได้ (คะแนนที่เคยขึ้นอันดับโลกแล้วจะยังคงอยู่ในตารางเหมือนเดิม)',
+      'reset.confirm': 'ล้างข้อมูลและเริ่มใหม่',
+      'reset.cancel': 'ยกเลิก',
+      'reset.working': 'กำลังล้างข้อมูล...',
 
       'win.title': 'ผ่านด่านแล้ว!',
       'win.finale_title': '🏆 จบแคมเปญแล้ว!',
@@ -174,7 +182,15 @@ const I18N = (() => {
       'settings.tutorial': '🎓 Tutorial',
       'settings.tutorial_btn': 'Replay',
       'settings.language': '🌐 Language',
+      'settings.reset': '🗑️ Reset Progress',
+      'settings.reset_btn': 'Reset',
       'settings.close': 'Close',
+
+      'reset.title': '⚠️ Reset progress?',
+      'reset.warning': "This deletes all progress, stars, score, hints, and your player name on this device. This can't be undone (any score you already have on the world ranking stays exactly as it is).",
+      'reset.confirm': 'Reset & Start Over',
+      'reset.cancel': 'Cancel',
+      'reset.working': 'Resetting...',
 
       'win.title': 'LEVEL COMPLETE!',
       'win.finale_title': '🏆 CAMPAIGN COMPLETE!',

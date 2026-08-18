@@ -234,9 +234,25 @@
           <span class="settings-label" data-i18n="settings.tutorial">🎓 บทแนะนำ</span>
           <button id="btn-replay-tutorial" class="btn btn-outline btn-sm" data-i18n="settings.tutorial_btn">ดูอีกครั้ง</button>
         </div>
+        <div class="settings-row">
+          <span class="settings-label" data-i18n="settings.reset">🗑️ ล้างข้อมูล</span>
+          <button id="btn-open-reset" class="btn btn-outline btn-sm" data-i18n="settings.reset_btn">ล้างข้อมูล</button>
+        </div>
       </div>
       <div class="modal-btns">
         <button id="btn-settings-close" class="btn btn-primary" data-i18n="settings.close">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RESET CONFIRM MODAL -->
+  <div id="modal-reset-confirm" class="modal-overlay hidden">
+    <div class="modal-box">
+      <h2 class="modal-title" data-i18n="reset.title">⚠️ ล้างข้อมูล?</h2>
+      <p class="modal-sub" data-i18n="reset.warning">การกระทำนี้จะลบความคืบหน้า ดาว คะแนน คำใบ้ และชื่อผู้เล่นทั้งหมดในเครื่องนี้ ไม่สามารถย้อนกลับได้ (คะแนนที่เคยขึ้นอันดับโลกแล้วจะยังคงอยู่ในตารางเหมือนเดิม)</p>
+      <div class="modal-btns">
+        <button id="btn-reset-confirm" class="btn btn-primary reset-danger-btn" data-i18n="reset.confirm">ล้างข้อมูลและเริ่มใหม่</button>
+        <button id="btn-reset-cancel" class="btn btn-outline" data-i18n="reset.cancel">ยกเลิก</button>
       </div>
     </div>
   </div>

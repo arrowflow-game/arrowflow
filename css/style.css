@@ -66,6 +66,7 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font-main); colo
 button { border: none; background: none; font-family: inherit; cursor: pointer; }
 .btn { padding: 12px 24px; border-radius: 99px; font-weight: 800; font-size: 1rem; display: inline-flex; align-items: center; justify-content: center; gap: 8px; transition: all var(--transition); }
 .btn-primary { background: var(--accent); color: var(--text-on-btn); box-shadow: 0 4px 15px rgba(26,127,232,0.3); }
+.reset-danger-btn { background: #ff3b30; box-shadow: 0 4px 15px rgba(255,59,48,0.3); }
 .btn-primary:active { transform: scale(0.95); }
 .btn-outline { border: 2px solid var(--accent); color: var(--accent); background: var(--bg-card); }
 .btn-secondary { background: var(--bg-secondary); color: var(--text-primary); }

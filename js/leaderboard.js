@@ -47,6 +47,22 @@ const Leaderboard = (() => {
     return Storage.get('nickname') || null;
   }
 
+  // "ล้างข้อมูล" (reset progress) support - signs out of the current anonymous
+  // Firebase session so the next signInAnonymously() (on reload, via ensureInit())
+  // gets a BRAND NEW uid. The old uid's players/{uid} Firestore doc is untouched -
+  // it stays on the world leaderboard forever under its old nickname/score, frozen
+  // at whatever it last had, since nothing will ever write to that uid again. Without
+  // this, resetting local data alone would keep re-using the same uid, and the next
+  // submitScore() would silently overwrite the old leaderboard entry instead of
+  // starting a fresh one - see the aa/bb conversation this was designed around.
+  async function resetIdentity() {
+    try {
+      if (typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length) {
+        await firebase.auth().signOut();
+      }
+    } catch {}
+  }
+
   function setNickname(name) {
     const clean = String(name).trim().slice(0, 20);
     Storage.set('nickname', clean);
@@ -147,6 +163,6 @@ const Leaderboard = (() => {
 
   return {
     ensureInit, getNickname, setNickname, submitScore, fetchTop, fetchMyRank,
-    submitLevelScore, fetchLevelBest
+    submitLevelScore, fetchLevelBest, resetIdentity
   };
 })();

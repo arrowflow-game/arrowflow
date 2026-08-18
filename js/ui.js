@@ -505,6 +505,26 @@ const UI = (() => {
       showScreen('screen-game');
     });
 
+    document.getElementById('btn-open-reset').addEventListener('click', () => {
+      document.getElementById('modal-settings').classList.add('hidden');
+      document.getElementById('modal-reset-confirm').classList.remove('hidden');
+    });
+    document.getElementById('btn-reset-cancel').addEventListener('click', () => {
+      document.getElementById('modal-reset-confirm').classList.add('hidden');
+    });
+    document.getElementById('btn-reset-confirm').addEventListener('click', async (e) => {
+      // Sign out of the current anonymous Firebase session FIRST (so a fresh uid
+      // gets minted on next load - see Leaderboard.resetIdentity()), then clear
+      // local save data, then hard-reload so every module (Game/UI/Tutorial/
+      // Leaderboard) re-initializes clean rather than trying to patch live state.
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      btn.textContent = I18N.t('reset.working');
+      await Leaderboard.resetIdentity();
+      Storage.resetAll();
+      location.reload();
+    });
+
     document.getElementById('btn-next').addEventListener('click', () => {
       hideAllModals();
       const mode = Game.getMode();

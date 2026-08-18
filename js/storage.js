@@ -71,6 +71,18 @@
       save(_state);
     },
 
+    // "ล้างข้อมูล" (reset progress) from Settings - wipes everything EXCEPT the player's
+    // own device preferences (theme/sound/music/vibration/lang), which aren't "game
+    // progress" and would be surprising to lose. Deliberately drops `nickname` (not in
+    // `defaults`, so it's absent after this) - the caller (ui.js) also signs out of
+    // Firebase so the next nickname+play starts a genuinely new leaderboard identity,
+    // leaving the old one's entry frozen in place rather than overwritten.
+    resetAll() {
+      const keep = { theme: _state.theme, sound: _state.sound, music: _state.music, vibration: _state.vibration, lang: _state.lang };
+      _state = { ...defaults, ...keep };
+      save(_state);
+    },
+
     // Rewarded-ad placeholders (no real ad SDK yet - see [[arrowflow_daily_remix_i18n]]-era
     // memory system). 'continue' = fail-screen continue, 'hint' = store's free-hint ad. Each
     // has its own independent daily cap, reset on calendar-day rollover like dailyStreak above.
