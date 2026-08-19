@@ -8,14 +8,16 @@
    a deliberate product choice (no web monetization story to protect, and the
    daily-cap gating in js/storage.js still applies either way), not a bug.
 
-   TODO: swap REWARDED_AD_UNIT_ID below, and the AdMob Application ID
-   meta-data in android/app/src/main/AndroidManifest.xml, for real values once
-   a real AdMob account + ad units exist. Both currently use Google's own
-   published TEST ids, safe to ship during development but never real ads.
+   Real App ID (AndroidManifest.xml) and Ad Unit ID (below) for com.arrowflow.game
+   were created 2026-08-19. prepare() still passes isTesting:true, so ad requests
+   currently only ever serve Google's test creative regardless of using the real
+   unit ID - safe during development (never tap your own live ads - AdMob policy
+   violation) and required until the app has actually gone through Play Store
+   review. Flip isTesting off only when ready to serve/earn real ads.
    ============================================ */
 
 const Ads = (() => {
-  const REWARDED_AD_UNIT_ID = 'ca-app-pub-3940256099942544/5224354917'; // Google test rewarded unit
+  const REWARDED_AD_UNIT_ID = 'ca-app-pub-5407872195671640/2365362318';
 
   let initialized = false;
   let adReady = false;

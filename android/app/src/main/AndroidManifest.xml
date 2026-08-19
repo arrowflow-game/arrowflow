@@ -28,12 +28,14 @@
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
 
-        <!-- TODO: replace with the real AdMob Application ID once a real AdMob
-             account + ad units exist (see js/ads.js). This is Google's own
-             published TEST App ID - safe to ship during development, never real ads. -->
+        <!-- Real AdMob Application ID for com.arrowflow.game (created 2026-08-19).
+             js/ads.js still forces isTesting:true on ad requests, so this real App
+             ID currently only ever serves Google's test creative - safe to leave
+             wired up before store review. Flip isTesting off in js/ads.js only when
+             actually ready to serve/earn real ads. -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-3940256099942544~3347511713" />
+            android:value="ca-app-pub-5407872195671640~7800792878" />
     </application>
 
     <!-- Permissions -->
