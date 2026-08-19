@@ -21,6 +21,11 @@ document.addEventListener('DOMContentLoaded', () => {
   // loading at that moment.
   Ads.init();
 
+  // Pre-fetch the "remove ads" IAP's localized store price (native only, no-op
+  // on web) so the buy buttons can show a real price instead of the fallback
+  // as soon as they're first rendered.
+  Iap.init();
+
   // Init UI
   I18N.applyToDOM();
   UI.applyTheme(Storage.get('theme'));

@@ -119,14 +119,58 @@ const UI = (() => {
     document.getElementById('store-hint-count').textContent = Storage.get('hints');
     const btn = document.getElementById('btn-store-hint-ad');
     const remainingEl = document.getElementById('store-hint-ad-remaining');
-    const remaining = Storage.remainingRewardedAds('hint');
-    if (remaining <= 0) {
-      btn.disabled = true;
-      remainingEl.textContent = I18N.t('store.ads_remaining', { n: 0 });
+    const adsRemoved = Storage.isAdsRemoved();
+    // Ads-removed players see no "watch ad" buttons anywhere at all, per the
+    // product decision that the purchase means literally no ads shown, ever
+    // (see [[arrowflow_monetization_placeholder]]) - not just the display ones.
+    if (adsRemoved) {
+      btn.classList.add('hidden');
+      remainingEl.classList.add('hidden');
     } else {
-      btn.disabled = false;
-      remainingEl.textContent = I18N.t('store.ads_remaining', { n: remaining });
+      btn.classList.remove('hidden');
+      remainingEl.classList.remove('hidden');
+      const remaining = Storage.remainingRewardedAds('hint');
+      btn.disabled = remaining <= 0;
+      remainingEl.textContent = I18N.t('store.ads_remaining', { n: Math.max(0, remaining) });
     }
+
+    const section = document.getElementById('store-remove-ads-section');
+    const statusEl = document.getElementById('store-remove-ads-status');
+    const forever = Storage.get('adsRemovedForever');
+    if (!Iap.isNative()) {
+      section.classList.add('hidden');
+    } else {
+      section.classList.remove('hidden');
+      // Once "forever" is owned every tier is redundant - just show status, no
+      // buy buttons at all. A still-active timed tier (not forever) still shows
+      // all 4 buttons: any of them can be bought again to extend/upgrade.
+      if (forever) {
+        statusEl.textContent = I18N.t('iap.active_status_forever');
+      } else if (adsRemoved) {
+        statusEl.textContent = I18N.t('iap.active_status', { n: Storage.daysAdsRemovedLeft() });
+      } else {
+        statusEl.textContent = '';
+      }
+      REMOVE_ADS_TIER_KEYS.forEach(key => {
+        const btn = document.getElementById('btn-remove-ads-' + key);
+        if (forever) { btn.classList.add('hidden'); return; }
+        btn.classList.remove('hidden');
+        btn.disabled = false;
+        btn.textContent = key === 'forever'
+          ? I18N.t('iap.buy_forever', { price: removeAdsPriceLabel('forever') })
+          : I18N.t('iap.buy_days', { days: key, price: removeAdsPriceLabel(key) });
+      });
+    }
+
+    // Hint packs - show the real Play Billing price once js/iap.js has fetched
+    // it (native only); otherwise leave the static data-i18n price already in
+    // the HTML (a reasonable approximation, already tuned per-locale in i18n.js)
+    // untouched rather than overwriting it with a guess.
+    document.querySelectorAll('.store-pack-btn').forEach(btn => {
+      const key = btn.dataset.hints;
+      const livePrice = Iap.isNative() ? Iap.hintPackPriceLabel(key) : null;
+      if (livePrice) btn.textContent = I18N.t('iap.hint_pack_label', { n: key, price: livePrice });
+    });
   }
 
   function updateHUD(payload) {
@@ -157,6 +201,86 @@ const UI = (() => {
 
     const undoBtn = document.getElementById('btn-undo');
     if (undoBtn) undoBtn.disabled = !canUndo;
+
+    updateRemoveAdsHud();
+  }
+
+  // "Remove ads" IAP (js/iap.js + Storage.grantAdsRemoved/grantAdsRemovedForever) -
+  // real money, so unlike the rewarded-ad fallback this has NO web/test equivalent
+  // (see iap.js). Every surface that offers it is hidden outright when
+  // Iap.isNative() is false rather than shown disabled, since there's nothing a
+  // player on web could ever do with it. 4 tiers (7/15/30 days + forever) all buy
+  // buttons live only in the Store screen - the HUD badge and fail-modal button
+  // are single "go choose a tier" shortcuts into the Store, not direct purchases,
+  // so there's exactly one purchase flow (buildStoreScreen's buttons) to reason about.
+  const REMOVE_ADS_TIER_KEYS = ['7', '15', '30', 'forever'];
+  const REMOVE_ADS_FALLBACK_PRICES = { '7': '$0.99', '15': '$1.99', '30': '$2.99', forever: '$7.99' };
+
+  function removeAdsPriceLabel(tierKey) {
+    return Iap.priceLabel(tierKey) || REMOVE_ADS_FALLBACK_PRICES[tierKey];
+  }
+
+  // HUD badge: a single status/CTA pill. Not-yet-removed -> tappable shortcut into
+  // the Store's remove-ads section. Removed (any tier, including forever) -> a
+  // non-interactive status readout instead, so the player can still see their
+  // remaining paid time without a second button competing for the same spot.
+  function updateRemoveAdsHud() {
+    const btn = document.getElementById('btn-hud-remove-ads');
+    if (!btn) return;
+    if (!Iap.isNative()) { btn.classList.add('hidden'); return; }
+    btn.classList.remove('hidden');
+    const label = document.getElementById('hud-remove-ads-label');
+    const forever = Storage.get('adsRemovedForever');
+    if (forever) {
+      btn.classList.add('active');
+      btn.disabled = true;
+      label.textContent = '♾️';
+    } else if (Storage.isAdsRemoved()) {
+      btn.classList.add('active');
+      btn.disabled = true;
+      label.textContent = I18N.t('iap.days_left', { n: Storage.daysAdsRemovedLeft() });
+    } else {
+      btn.classList.remove('active');
+      btn.disabled = false;
+      label.textContent = I18N.t('iap.hud_cta_label');
+    }
+  }
+
+  // Opens the Store screen scrolled to the remove-ads section - shared by the HUD
+  // badge and the fail-modal nudge, both of which only make sense as a shortcut
+  // once ads aren't already removed (buildStoreScreen/updateFailContinueAdUI hide
+  // them otherwise, so this never needs to guard against the "already owned" case).
+  function openStoreForRemoveAds(returnScreen) {
+    storeReturnScreen = returnScreen;
+    buildStoreScreen();
+    showScreen('screen-store');
+    const section = document.getElementById('store-remove-ads-section');
+    if (section && section.scrollIntoView) section.scrollIntoView({ block: 'nearest' });
+  }
+
+  // The one real purchase flow, called only from the Store screen's 4 tier
+  // buttons. onGranted/onFailed handling (Storage update, UI refresh, alert) is
+  // identical across tiers, so this is the single place that logic lives.
+  function handlePurchaseRemoveAdsTier(btn, tierKey) {
+    if (!Iap.isNative()) return;
+    btn.disabled = true;
+    Iap.purchaseRemoveAds(tierKey,
+      (days) => {
+        if (tierKey === 'forever') Storage.set('adsRemovedForever', true);
+        else Storage.grantAdsRemoved(days);
+        Analytics.logEvent('remove_ads_purchased', { tier: tierKey, days: days || null });
+        updateRemoveAdsHud();
+        buildStoreScreen();
+        updateFailContinueAdUI();
+        alert(tierKey === 'forever'
+          ? I18N.t('iap.purchase_success_forever')
+          : I18N.t('iap.purchase_success', { n: Storage.daysAdsRemovedLeft() }));
+      },
+      () => {
+        btn.disabled = false;
+        alert(I18N.t('iap.purchase_failed'));
+      }
+    );
   }
 
   const CONFETTI_COLORS = ['#1a7fe8', '#4a9ff5', '#fbbf24', '#2ecc71', '#ff3b30'];
@@ -391,8 +515,9 @@ const UI = (() => {
   function updateFailContinueAdUI() {
     const btn = document.getElementById('btn-fail-continue-ad');
     const remainingEl = document.getElementById('fail-continue-ad-remaining');
+    const adsRemoved = Storage.isAdsRemoved();
     const remaining = Storage.remainingRewardedAds('continue');
-    if (remaining <= 0) {
+    if (adsRemoved || remaining <= 0) {
       btn.classList.add('hidden');
       remainingEl.classList.add('hidden');
     } else {
@@ -401,6 +526,19 @@ const UI = (() => {
       btn.disabled = false;
       btn.textContent = I18N.t('fail.continue_ad');
       remainingEl.textContent = I18N.t('store.ads_remaining', { n: remaining });
+    }
+
+    // Promotional nudge toward the "remove ads" IAP - a shortcut into the Store's
+    // tier picker (see openStoreForRemoveAds), not a direct purchase. Only makes
+    // sense to show while the player doesn't already have it, and only where a
+    // real purchase is possible at all (native builds - see [[arrowflow_monetization_placeholder]]).
+    const removeAdsBtn = document.getElementById('btn-fail-remove-ads');
+    if (!Iap.isNative() || adsRemoved) {
+      removeAdsBtn.classList.add('hidden');
+    } else {
+      removeAdsBtn.classList.remove('hidden');
+      removeAdsBtn.disabled = false;
+      removeAdsBtn.textContent = I18N.t('iap.fail_hint');
     }
   }
 
@@ -626,6 +764,18 @@ const UI = (() => {
       }, () => alert(I18N.t('store.ad_failed')));
     });
 
+    document.getElementById('btn-fail-remove-ads').addEventListener('click', () => {
+      document.getElementById('modal-fail').classList.add('hidden');
+      openStoreForRemoveAds('screen-game');
+    });
+    document.getElementById('btn-hud-remove-ads').addEventListener('click', () => {
+      if (Storage.isAdsRemoved()) return; // status-only pill once owned, see updateRemoveAdsHud()
+      openStoreForRemoveAds('screen-game');
+    });
+    document.querySelectorAll('.remove-ads-tier-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => handlePurchaseRemoveAdsTier(e.currentTarget, e.currentTarget.dataset.tier));
+    });
+
     document.getElementById('btn-store').addEventListener('click', () => {
       storeReturnScreen = 'screen-menu';
       buildStoreScreen();
@@ -656,12 +806,32 @@ const UI = (() => {
       }, () => alert(I18N.t('store.ad_failed')));
     });
 
-    // Hint packs are visual-only placeholders - no payment processor wired up yet.
-    // Logged anyway so real purchase demand is visible before building real IAP.
+    // Hint packs - real Google Play Billing purchase (js/iap.js). data-hints
+    // doubles as the pack key ('10'/'30'/'100') since HINT_PACKS in iap.js is
+    // keyed by the same hint count. Falls back to the coming-soon alert on
+    // web/test builds where there's no purchase SDK at all (see iap.js).
     document.querySelectorAll('.store-pack-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        Analytics.logEvent('pack_purchase_clicked', { hints: btn.dataset.hints || null });
-        alert(I18N.t('store.coming_soon'));
+      btn.addEventListener('click', (e) => {
+        const packKey = btn.dataset.hints;
+        if (!Iap.isNative()) {
+          Analytics.logEvent('pack_purchase_clicked', { hints: packKey || null });
+          alert(I18N.t('store.coming_soon'));
+          return;
+        }
+        e.currentTarget.disabled = true;
+        Iap.purchaseHintPack(packKey,
+          (hints) => {
+            Storage.addHints(hints);
+            Analytics.logEvent('hint_pack_purchased', { hints });
+            e.currentTarget.disabled = false;
+            buildStoreScreen();
+            alert(I18N.t('iap.hint_pack_success', { n: hints }));
+          },
+          () => {
+            e.currentTarget.disabled = false;
+            alert(I18N.t('iap.purchase_failed'));
+          }
+        );
       });
     });
   }

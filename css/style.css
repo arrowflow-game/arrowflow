@@ -112,6 +112,24 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
 .hud-tier-label { font-size: 0.75rem; font-weight: 800; letter-spacing: 2px; color: var(--text-secondary); pointer-events: none; white-space: nowrap; }
 .hud-instruction { margin-top: auto; margin-bottom: 20px; background: rgba(0,0,0,0.5); color: #fff; padding: 8px 16px; border-radius: 99px; font-size: 0.85rem; font-weight: 700; transition: opacity 0.5s; pointer-events: none; }
 
+/* Floating "remove ads" CTA - sits outside .hud-top/.hud-bottom (the only two
+   children .game-hud restores pointer-events to), so it needs its own
+   pointer-events:auto to stay tappable. Filled/accent (vs. the outlined pills
+   used elsewhere in the HUD) is the deliberate "stand out" cue, per the
+   product decision to keep this prominent on the left edge during gameplay. */
+.hud-remove-ads-btn {
+  position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+  pointer-events: auto; z-index: 5;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  background: var(--accent); color: var(--text-on-btn); border: none;
+  border-radius: 16px; padding: 10px 8px; max-width: 64px;
+  font-weight: 800; font-size: 0.68rem; text-align: center; line-height: 1.2;
+  box-shadow: 0 4px 15px rgba(26,127,232,0.35);
+}
+.hud-remove-ads-btn.active { background: var(--bg-card); color: var(--accent); border: 2px solid var(--accent); box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+.hud-remove-ads-btn.hidden { display: none; }
+.hud-remove-ads-icon { font-size: 1.3rem; }
+
 .hud-star { font-size: 1.5rem; color: #ccc; transition: color 0.3s; }
 .hud-star.earned { color: var(--star-color); }
 .hud-undo-btn { padding: 8px 16px; font-size: 0.85rem; border: 2px solid var(--accent); background: var(--bg-card); border-radius: 99px; font-weight: 800; color: var(--accent); }

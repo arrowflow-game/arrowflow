@@ -7,7 +7,8 @@
     dailyLastCompletedDate: null, dailyStreak: 0,
     remixHighest: 0, remixBestScoreByLevel: {},
     continueAdsUsedToday: 0, continueAdsDate: null,
-    hintAdsUsedToday: 0, hintAdsDate: null
+    hintAdsUsedToday: 0, hintAdsDate: null,
+    adsRemovedUntil: 0, adsRemovedForever: false
   };
 
   const REWARDED_AD_DAILY_CAP = 3;
@@ -72,13 +73,15 @@
     },
 
     // "ล้างข้อมูล" (reset progress) from Settings - wipes everything EXCEPT the player's
-    // own device preferences (theme/sound/music/vibration/lang), which aren't "game
-    // progress" and would be surprising to lose. Deliberately drops `nickname` (not in
-    // `defaults`, so it's absent after this) - the caller (ui.js) also signs out of
-    // Firebase so the next nickname+play starts a genuinely new leaderboard identity,
-    // leaving the old one's entry frozen in place rather than overwritten.
+    // own device preferences (theme/sound/music/vibration/lang) and the paid
+    // adsRemovedUntil entitlement, none of which are "game progress" and would be
+    // surprising to lose - especially real money already spent. Deliberately drops
+    // `nickname` (not in `defaults`, so it's absent after this) - the caller (ui.js)
+    // also signs out of Firebase so the next nickname+play starts a genuinely new
+    // leaderboard identity, leaving the old one's entry frozen in place rather than
+    // overwritten.
     resetAll() {
-      const keep = { theme: _state.theme, sound: _state.sound, music: _state.music, vibration: _state.vibration, lang: _state.lang };
+      const keep = { theme: _state.theme, sound: _state.sound, music: _state.music, vibration: _state.vibration, lang: _state.lang, adsRemovedUntil: _state.adsRemovedUntil, adsRemovedForever: _state.adsRemovedForever };
       _state = { ...defaults, ...keep };
       save(_state);
     },
@@ -101,6 +104,18 @@
       _state[usedKey]++;
       save(_state);
       return true;
+    },
+
+    // "Remove ads" IAP (real money, js/iap.js) - a time-boxed grant rather than a
+    // permanent flag or an auto-renewing subscription (see [[arrowflow_monetization_placeholder]]),
+    // so a repeat purchase just extends the window. grantAdsRemoved() extends from
+    // whichever is later - now or the current expiry - so buying early never wastes
+    // remaining paid-for days.
+    isAdsRemoved: () => _state.adsRemovedUntil > Date.now(),
+    daysAdsRemovedLeft: () => Math.max(0, Math.ceil((_state.adsRemovedUntil - Date.now()) / 86400000)),
+    grantAdsRemoved(days) {
+      _state.adsRemovedUntil = Math.max(_state.adsRemovedUntil, Date.now()) + days * 86400000;
+      save(_state);
     }
   };
 })();

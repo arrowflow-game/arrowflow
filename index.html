@@ -100,6 +100,10 @@
         <button id="btn-hud-store" class="icon-btn hud-store-icon" aria-label="Store">🛒</button>
       </div>
     </header>
+    <button id="btn-hud-remove-ads" class="hud-remove-ads-btn hidden" aria-label="Remove ads">
+      <span class="hud-remove-ads-icon">🚫📺</span>
+      <span id="hud-remove-ads-label" class="hud-remove-ads-label"></span>
+    </button>
     <div class="hud-instruction" id="hud-instruction" data-i18n="hud.instruction">Drag to rotate • Tap a path to slide it off!</div>
     <footer class="hud-bottom">
       <div class="hud-stars-row">
@@ -171,6 +175,16 @@
         <button id="btn-back-store" class="icon-btn">←</button>
         <h2 data-i18n="store.title">🛒 ร้านค้า</h2>
         <span></span>
+      </div>
+      <div class="store-section" id="store-remove-ads-section">
+        <div class="store-section-hdr"><span data-i18n="iap.store_section">🚫📺 ปิดโฆษณา</span></div>
+        <div id="store-remove-ads-status" class="fail-ad-remaining"></div>
+        <div class="store-packs">
+          <button class="btn btn-outline remove-ads-tier-btn" id="btn-remove-ads-7" data-tier="7"></button>
+          <button class="btn btn-outline remove-ads-tier-btn" id="btn-remove-ads-15" data-tier="15"></button>
+          <button class="btn btn-outline remove-ads-tier-btn" id="btn-remove-ads-30" data-tier="30"></button>
+          <button class="btn btn-primary remove-ads-tier-btn" id="btn-remove-ads-forever" data-tier="forever"></button>
+        </div>
       </div>
       <div class="store-section">
         <div class="store-section-hdr">
@@ -318,6 +332,7 @@
       <div class="modal-btns">
         <button id="btn-fail-continue-ad" class="btn btn-secondary" data-i18n="fail.continue_ad">📺 ดูโฆษณาเพื่อต่อชีวิต</button>
         <div id="fail-continue-ad-remaining" class="fail-ad-remaining"></div>
+        <button id="btn-fail-remove-ads" class="btn btn-outline hidden"></button>
         <button id="btn-fail-restart" class="btn btn-primary" data-i18n="fail.restart">↺ ลองอีกครั้ง</button>
         <button id="btn-fail-quit" class="btn btn-ghost" data-i18n="fail.quit">✕ เมนู</button>
       </div>
@@ -337,6 +352,7 @@
   <script src="js/i18n.js"></script>
   <script src="js/analytics.js"></script>
   <script src="js/ads.js"></script>
+  <script src="js/iap.js"></script>
   <script src="js/leaderboard.js"></script>
   <script src="js/sound.js"></script>
   <script src="js/haptics.js"></script>
