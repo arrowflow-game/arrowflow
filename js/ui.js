@@ -404,17 +404,22 @@ const UI = (() => {
     }
   }
 
-  // Fakes a rewarded-ad watch (no real ad SDK yet - see plan) - disables the button,
-  // shows a loading state briefly, then calls onGranted(). Swap the setTimeout body for
-  // a real ad-network call later; everything downstream (caps, reward granting) is real.
-  function playFakeRewardedAd(btn, onGranted) {
+  // Drives a rewarded-ad button through Ads.showRewardedAd() - disables/relabels the
+  // button while the ad loads/plays (DOM stays ui.js's job, ads.js never touches it),
+  // then restores it either way. onGranted only runs on a real earned reward (or the
+  // web/test fallback); onFailed runs on a genuine no-fill/dismiss-without-reward.
+  function watchRewardedAd(btn, onGranted, onFailed) {
     btn.disabled = true;
     const original = btn.textContent;
     btn.textContent = I18N.t('store.ad_loading');
-    setTimeout(() => {
-      btn.textContent = original;
-      onGranted();
-    }, 1200);
+    Ads.showRewardedAd(
+      () => { btn.textContent = original; onGranted(); },
+      () => {
+        btn.textContent = original;
+        btn.disabled = false;
+        if (onFailed) onFailed();
+      }
+    );
   }
 
   function hideAllModals() {
@@ -613,12 +618,12 @@ const UI = (() => {
     });
 
     document.getElementById('btn-fail-continue-ad').addEventListener('click', (e) => {
-      playFakeRewardedAd(e.currentTarget, () => {
+      watchRewardedAd(e.currentTarget, () => {
         if (!Storage.useRewardedAd('continue')) { updateFailContinueAdUI(); return; }
         Analytics.logEvent('continue_ad_used', {});
         document.getElementById('modal-fail').classList.add('hidden');
         Game.continueAfterFail();
-      });
+      }, () => alert(I18N.t('store.ad_failed')));
     });
 
     document.getElementById('btn-store').addEventListener('click', () => {
@@ -643,12 +648,12 @@ const UI = (() => {
     });
 
     document.getElementById('btn-store-hint-ad').addEventListener('click', (e) => {
-      playFakeRewardedAd(e.currentTarget, () => {
+      watchRewardedAd(e.currentTarget, () => {
         if (!Storage.useRewardedAd('hint')) { buildStoreScreen(); return; }
         Analytics.logEvent('hint_ad_used', {});
         Storage.addHints(1);
         buildStoreScreen();
-      });
+      }, () => alert(I18N.t('store.ad_failed')));
     });
 
     // Hint packs are visual-only placeholders - no payment processor wired up yet.

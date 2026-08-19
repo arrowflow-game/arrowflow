@@ -16,6 +16,11 @@ document.addEventListener('DOMContentLoaded', () => {
   // handler below is listening before anything else can throw.
   Analytics.init();
 
+  // Pre-load the first rewarded ad now (native only, no-op on web) so it's
+  // ready by the time the player first taps a "watch ad" button instead of
+  // loading at that moment.
+  Ads.init();
+
   // Init UI
   I18N.applyToDOM();
   UI.applyTheme(Storage.get('theme'));

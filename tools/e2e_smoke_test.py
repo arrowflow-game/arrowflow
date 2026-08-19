@@ -96,6 +96,11 @@ def test_hint(page):
     assert after == before - 1, f"hint count didn't decrement: {before} -> {after}"
 
 
+# Both ad tests below exercise js/ads.js's *web-fallback* path only (headless
+# Chromium has no window.Capacitor, so Ads.isNative() is false and every
+# showRewardedAd() call takes the instant-grant fallback after ~1200ms, same
+# as before real AdMob existed). They do not - and cannot - verify the real
+# AdMob SDK path; that only runs on-device inside the native app.
 @check("Fail-screen continue-ad grants a life and enforces the daily cap")
 def test_fail_continue_ad(page):
     for i in range(3):
