@@ -1,4 +1,4 @@
-package com.arrowflow.game;
+package com.arrowflowgame.puzzle;
 
 import com.getcapacitor.BridgeActivity;
 

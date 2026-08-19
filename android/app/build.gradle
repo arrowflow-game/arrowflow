@@ -1,10 +1,10 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace "com.arrowflow.game"
+    namespace "com.arrowflowgame.puzzle"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.arrowflow.game"
+        applicationId "com.arrowflowgame.puzzle"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         // Play Console requires versionCode to strictly increase on every upload - CI passes

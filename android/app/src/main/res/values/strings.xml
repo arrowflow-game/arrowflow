@@ -2,6 +2,6 @@
 <resources>
     <string name="app_name">ArrowFlow</string>
     <string name="title_activity_main">ArrowFlow</string>
-    <string name="package_name">com.arrowflow.game</string>
-    <string name="custom_url_scheme">com.arrowflow.game</string>
+    <string name="package_name">com.arrowflowgame.puzzle</string>
+    <string name="custom_url_scheme">com.arrowflowgame.puzzle</string>
 </resources>

@@ -28,7 +28,7 @@
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
 
-        <!-- Real AdMob Application ID for com.arrowflow.game (created 2026-08-19).
+        <!-- Real AdMob Application ID for com.arrowflowgame.puzzle (created 2026-08-19).
              js/ads.js still forces isTesting:true on ad requests, so this real App
              ID currently only ever serves Google's test creative - safe to leave
              wired up before store review. Flip isTesting off in js/ads.js only when

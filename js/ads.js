@@ -8,7 +8,7 @@
    a deliberate product choice (no web monetization story to protect, and the
    daily-cap gating in js/storage.js still applies either way), not a bug.
 
-   Real App ID (AndroidManifest.xml) and Ad Unit ID (below) for com.arrowflow.game
+   Real App ID (AndroidManifest.xml) and Ad Unit ID (below) for com.arrowflowgame.puzzle
    were created 2026-08-19. prepare() still passes isTesting:true, so ad requests
    currently only ever serve Google's test creative regardless of using the real
    unit ID - safe during development (never tap your own live ads - AdMob policy
