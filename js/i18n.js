@@ -15,6 +15,7 @@ const I18N = (() => {
       'menu.daily_done': '✅ รายวัน (เล่นแล้ว)',
       'menu.ranking': '🏆 อันดับ',
       'menu.store': '🛒 ร้านค้า',
+      'menu.skins': '🎨 สกิน',
       'menu.tagline': 'เลื่อนลูกศรออกจากลูกบาศก์ให้หมด!',
       'menu.level_label': 'ด่าน',
 
@@ -25,6 +26,13 @@ const I18N = (() => {
       'hud.tier.remix': 'เรมิกซ์',
 
       'levels.title': 'เลือกด่าน',
+
+      'skins.title': '🎨 สกิน',
+      'skins.locked': 'ปลดล็อคที่ด่าน {n}',
+      'skins.tutorial_title': '🎨 เปลี่ยนสกินได้แล้ว!',
+      'skins.tutorial_text': 'แตะที่สกินซึ่งปลดล็อคแล้วเพื่อเปลี่ยนสีลูกบาศก์และเส้นทางทันที',
+      'skins.tutorial_got_it': 'เข้าใจแล้ว',
+      'win.new_skin': '🎉 ปลดล็อคสกินใหม่: {name}!',
 
       'ranking.title': '🏆 อันดับ',
       'ranking.world_section': '🌍 อันดับโลก',
@@ -160,6 +168,7 @@ const I18N = (() => {
       'menu.daily_done': '✅ Daily (Done)',
       'menu.ranking': '🏆 Ranking',
       'menu.store': '🛒 Store',
+      'menu.skins': '🎨 Skins',
       'menu.tagline': 'Slide all arrows off the cube!',
       'menu.level_label': 'Level',
 
@@ -170,6 +179,13 @@ const I18N = (() => {
       'hud.tier.remix': 'REMIX',
 
       'levels.title': 'SELECT LEVEL',
+
+      'skins.title': '🎨 Skins',
+      'skins.locked': 'Unlock at level {n}',
+      'skins.tutorial_title': '🎨 Skins unlocked!',
+      'skins.tutorial_text': 'Tap an unlocked skin to instantly recolor the cube and paths.',
+      'skins.tutorial_got_it': 'Got it',
+      'win.new_skin': '🎉 New skin unlocked: {name}!',
 
       'ranking.title': '🏆 Ranking',
       'ranking.world_section': '🌍 World Ranking',

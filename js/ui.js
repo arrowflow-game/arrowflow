@@ -355,8 +355,24 @@ const UI = (() => {
     return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
   }
 
-  function showWin(levelNum, hints, stars, score, elapsedSec, mode, isCampaignFinale) {
+  function showWin(levelNum, hints, stars, score, elapsedSec, mode, isCampaignFinale, newlyUnlockedSkin) {
     const winModal = document.getElementById('modal-win');
+    const skinBtn = document.getElementById('win-new-skin');
+    if (skinBtn) {
+      if (newlyUnlockedSkin) {
+        const name = newlyUnlockedSkin.name[I18N.currentLang()] || newlyUnlockedSkin.name.en;
+        skinBtn.textContent = I18N.t('win.new_skin', { name });
+        skinBtn.classList.remove('hidden');
+        skinBtn.onclick = () => {
+          winModal.classList.add('hidden');
+          buildSkinsScreen();
+          showScreen('screen-skins');
+        };
+      } else {
+        skinBtn.classList.add('hidden');
+        skinBtn.onclick = null;
+      }
+    }
     winModal.classList.remove('hidden');
     winModal.classList.toggle('campaign-complete', !!isCampaignFinale);
     const titleEl = document.getElementById('win-title');
@@ -485,6 +501,104 @@ const UI = (() => {
     buildStatsScreen();
   }
 
+  // Rebuilds the whole grid on every open (cheap - only 13 skins, unlike the
+  // level grid's buffered-render trick) so a just-crossed unlock threshold or
+  // a freshly-selected skin always reflects current Storage state.
+  function buildSkinsScreen() {
+    const wrap = document.getElementById('skins-grid');
+    wrap.innerHTML = '';
+    const unlocked = Storage.get('highestUnlocked') || 1;
+    const selected = Storage.get('selectedSkin');
+    const dark = Storage.get('theme') === 'dark';
+    Skins.ALL.forEach(skin => {
+      const isUnlocked = unlocked >= skin.unlockLevel;
+      const btn = document.createElement('button');
+      btn.className = 'skin-btn' + (isUnlocked ? '' : ' locked') + (isUnlocked && selected === skin.id ? ' selected' : '');
+      btn.dataset.skinId = skin.id;
+      const pathColor = dark ? skin.colors.path.dark : skin.colors.path.light;
+      const faceColor = dark ? skin.colors.face.dark : skin.colors.face.light;
+      const swatch = document.createElement('span');
+      swatch.className = 'skin-swatch';
+      swatch.style.background = faceColor;
+      swatch.style.color = pathColor;
+      btn.appendChild(swatch);
+      const nameEl = document.createElement('span');
+      nameEl.className = 'skin-btn-name';
+      nameEl.textContent = skin.name[I18N.currentLang()] || skin.name.en;
+      btn.appendChild(nameEl);
+      if (!isUnlocked) {
+        const lockEl = document.createElement('span');
+        lockEl.className = 'skin-btn-lock';
+        lockEl.textContent = '🔒 ' + I18N.t('skins.locked', { n: skin.unlockLevel });
+        btn.appendChild(lockEl);
+      } else {
+        btn.addEventListener('click', () => {
+          Storage.set('selectedSkin', skin.id);
+          buildSkinsScreen();
+          Game.redrawTheme();
+        });
+      }
+      wrap.appendChild(btn);
+    });
+
+    // One-shot spotlight the very first time the player has ANY skin besides
+    // the always-unlocked default to actually switch to - teaches "tap a
+    // swatch to apply it" without building out a full multi-step Tutorial.js
+    // flow for what's really a single action. Targets the newest unlocked
+    // skin specifically (not just "first not-locked" in DOM order, which
+    // would highlight the always-unlocked 'default' entry itself and point
+    // the player at nothing new). Runs after appendChild above so
+    // getBoundingClientRect() sees real, laid-out elements.
+    if (!Storage.get('skinTutorialSeen')) {
+      const unlockedNonDefault = Skins.ALL.filter(s => s.id !== 'default' && unlocked >= s.unlockLevel);
+      const newest = unlockedNonDefault[unlockedNonDefault.length - 1];
+      if (newest && newest.id !== selected) {
+        const target = wrap.querySelector('[data-skin-id="' + newest.id + '"]');
+        if (target) setTimeout(() => showSkinTutorial(target), 50);
+      }
+    }
+  }
+
+  let skinTutorialEls = null;
+  function dismissSkinTutorial() {
+    if (!skinTutorialEls) return;
+    Storage.set('skinTutorialSeen', true);
+    skinTutorialEls.overlay.remove();
+    skinTutorialEls = null;
+  }
+  function showSkinTutorial(targetBtn) {
+    dismissSkinTutorial();
+    const overlay = document.createElement('div');
+    overlay.className = 'tutorial-overlay';
+    overlay.innerHTML =
+      '<div class="tutorial-spotlight" id="skin-tut-spotlight"></div>' +
+      '<div class="tutorial-bubble" id="skin-tut-bubble">' +
+        '<div class="tutorial-icon">🎨</div>' +
+        '<h3>' + escapeHtml(I18N.t('skins.tutorial_title')) + '</h3>' +
+        '<p>' + escapeHtml(I18N.t('skins.tutorial_text')) + '</p>' +
+        '<button id="skin-tut-gotit" class="btn btn-primary btn-sm"></button>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    const spotlight = overlay.querySelector('#skin-tut-spotlight');
+    const bubble = overlay.querySelector('#skin-tut-bubble');
+    const r = targetBtn.getBoundingClientRect();
+    spotlight.style.left = (r.left - 6) + 'px';
+    spotlight.style.top = (r.top - 6) + 'px';
+    spotlight.style.width = (r.width + 12) + 'px';
+    spotlight.style.height = (r.height + 12) + 'px';
+    const spotBottom = r.top + r.height;
+    bubble.style.left = '50%';
+    bubble.style.transform = 'translateX(-50%)';
+    bubble.style.top = Math.min(window.innerHeight - 220, spotBottom + 16) + 'px';
+    overlay.querySelector('#skin-tut-gotit').textContent = I18N.t('skins.tutorial_got_it');
+    overlay.querySelector('#skin-tut-gotit').addEventListener('click', dismissSkinTutorial);
+    skinTutorialEls = { overlay };
+    // Tapping the actual highlighted skin should count as "got it" too - the
+    // click still fires normally (this listener doesn't stopPropagation) so
+    // the real skin-select handler on targetBtn also runs.
+    targetBtn.addEventListener('click', dismissSkinTutorial, { once: true });
+  }
+
   // A player who has cleared/unlocked level 300 gets a "จบเกม!" (done) badge
   // instead of a bare "300/300" number - reads better as a finish line, and
   // matches the request that finishing the whole campaign stand out on the
@@ -611,6 +725,15 @@ const UI = (() => {
       showScreen('screen-ranking');
     });
     document.getElementById('btn-back-ranking').addEventListener('click', () => showScreen('screen-menu'));
+
+    document.getElementById('btn-skins').addEventListener('click', () => {
+      buildSkinsScreen();
+      showScreen('screen-skins');
+    });
+    document.getElementById('btn-back-skins').addEventListener('click', () => {
+      dismissSkinTutorial();
+      showScreen('screen-menu');
+    });
 
     document.getElementById('btn-pause').addEventListener('click', () => {
       document.getElementById('pause-lvl').textContent = Storage.get('currentLevel');

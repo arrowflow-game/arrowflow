@@ -9,7 +9,8 @@
     continueAdsUsedToday: 0, continueAdsDate: null,
     hintAdsUsedToday: 0, hintAdsDate: null,
     adsRemovedUntil: 0, adsRemovedForever: false,
-    levelsSinceInterstitial: 0, nextInterstitialThreshold: 0
+    levelsSinceInterstitial: 0, nextInterstitialThreshold: 0,
+    selectedSkin: null, skinTutorialSeen: false
   };
 
   const REWARDED_AD_DAILY_CAP = 3;

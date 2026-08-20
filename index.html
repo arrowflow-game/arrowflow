@@ -58,6 +58,9 @@
           <button id="btn-ranking" class="btn btn-outline" data-i18n="menu.ranking">🏆 อันดับ</button>
           <button id="btn-store" class="btn btn-outline" data-i18n="menu.store">🛒 ร้านค้า</button>
         </div>
+        <div class="menu-btn-row">
+          <button id="btn-skins" class="btn btn-outline" data-i18n="menu.skins">🎨 สกิน</button>
+        </div>
       </div>
       <div class="menu-progress-wrap">
         <div class="menu-progress-info">
@@ -127,6 +130,17 @@
       </div>
       <div class="tier-tabs-wrap" id="tier-tabs"></div>
       <div class="levels-grid-wrap" id="levels-grid"></div>
+    </div>
+  </div>
+
+  <!-- SKINS -->
+  <div id="screen-skins" class="ovr-screen levels-ovr">
+    <div class="levels-panel">
+      <div class="levels-hdr">
+        <button id="btn-back-skins" class="icon-btn">←</button>
+        <h2 data-i18n="skins.title">SKINS</h2>
+      </div>
+      <div class="levels-grid-wrap skins-grid-wrap" id="skins-grid"></div>
     </div>
   </div>
 
@@ -293,6 +307,7 @@
         <span><span data-i18n="win.world_best">สูงสุดโลกด่านนี้:</span> <b id="ws-level-world-best">…</b></span>
       </div>
       <div class="win-rank-badge" id="win-rank-badge"><span data-i18n="win.rank">🏆 อันดับโลก:</span> <span id="ws-rank">…</span></div>
+      <button id="win-new-skin" class="win-new-skin-btn hidden"></button>
       <div class="modal-btns">
         <button id="btn-next"   class="btn btn-primary btn-lg" data-i18n="win.next">NEXT LEVEL →</button>
         <button id="btn-view-leaderboard" class="btn btn-outline" data-i18n="win.leaderboard">🏆 ดูอันดับ</button>
@@ -374,6 +389,7 @@
   <script src="js/daily-levels.js"></script>
   <script src="js/remix.js"></script>
   <script src="js/polycube.js"></script>
+  <script src="js/skins.js"></script>
   <script src="js/scene.js"></script>
   <script src="js/game.js"></script>
   <script src="js/ui.js"></script>

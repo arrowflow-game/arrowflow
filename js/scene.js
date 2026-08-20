@@ -54,8 +54,14 @@ const Scene3D = (() => {
     VORTEX:    { light: '#c9e0ff', dark: '#12103a' },
     LABYRINTH: { light: '#e8dcff', dark: '#1a0d33' },
     ASCENSION: { light: '#ffd9d0', dark: '#2a0a12' },
-    REMIX:     { light: '#ffb199', dark: '#3a0508' },
-    DAILY:     { light: '#fff3c4', dark: '#241a05' }
+    // REMIX.light was originally a much more saturated coral (#ffb199) than
+    // every other tier's light-theme color (all pale pastels) - reported
+    // directly as eye-straining background glare. Softened to match the
+    // same pastel intensity as the rest of the family.
+    REMIX:     { light: '#ffe0d8', dark: '#3a0508' },
+    // Softened alongside REMIX.light above, same eye-strain complaint -
+    // #fff3c4 was more saturated than the rest of the pastel family.
+    DAILY:     { light: '#fff8e1', dark: '#241a05' }
   };
   const MOOD_TRANSITION_MS = 600;
   let moodFrom = null, moodTo = null, moodStart = 0;
@@ -64,6 +70,59 @@ const Scene3D = (() => {
   function tierMoodColor(tier) {
     const pair = TIER_COLORS[tier] || TIER_COLORS.AWAKENING;
     return pair[Storage.get('theme') === 'dark' ? 'dark' : 'light'];
+  }
+
+  // --- Small hex color helpers for the skin "variant" effect below - pure
+  // functions, no state, kept minimal (no need for HSL here).
+  function hexToRgb(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+  }
+  function rgbToHex(r, g, b) {
+    const c = v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
+    return '#' + c(r) + c(g) + c(b);
+  }
+  function mixHex(a, b, t) {
+    const ca = hexToRgb(a), cb = hexToRgb(b);
+    return rgbToHex(ca.r + (cb.r - ca.r) * t, ca.g + (cb.g - ca.g) * t, ca.b + (cb.b - ca.b) * t);
+  }
+  function darkenHex(hex, factor) {
+    const c = hexToRgb(hex);
+    return rgbToHex(c.r * factor, c.g * factor, c.b * factor);
+  }
+
+  // Special-occasion color intensity - layered on TOP of whichever base color
+  // is already active (the 'default' look or a chosen skin, see activeSkin()
+  // below), completely independent of skin data itself. Blends the base color
+  // toward the level's own background mood color (tierMoodColor) so the
+  // result can never clash with the backdrop by construction, then darkens
+  // the face (not the path, to keep arrows legible) for a heavier/more
+  // intense feel on genuinely hard milestone levels. 'epic' (every 100th
+  // level) is a deliberately stronger version of 'milestone' (every 10th) -
+  // per the user's request this is purely a cosmetic escalation, not a signal
+  // that level 100 is harder than level 90. 'daily'/'remix' use a much
+  // subtler blend + a slight darken - the original full-strength blend
+  // (0.30, no darken) toward a bright warm backdrop (DAILY/REMIX's own
+  // light-theme colors are both quite saturated) produced a face nearly as
+  // bright/saturated as the backdrop itself, which read as glare and a
+  // "doesn't match" clash rather than harmony (reported directly against a
+  // screenshot). Toning down the blend and adding a small darken keeps the
+  // festive tint recognizable without the glare.
+  const VARIANT_RECIPES = {
+    milestone: { faceBlend: 0.35, faceDarken: 0.85, pathBlend: 0.20 },
+    epic:      { faceBlend: 0.55, faceDarken: 0.72, pathBlend: 0.32 },
+    daily:     { faceBlend: 0.14, faceDarken: 0.93, pathBlend: 0.10 },
+    remix:     { faceBlend: 0.14, faceDarken: 0.93, pathBlend: 0.10 }
+  };
+  let currentSkinVariant = 'normal';
+
+  function applyVariant(baseHex, kind) {
+    const recipe = VARIANT_RECIPES[currentSkinVariant];
+    if (!recipe) return baseHex;
+    const target = tierMoodColor(currentTier);
+    let mixed = mixHex(baseHex, target, kind === 'face' ? recipe.faceBlend : recipe.pathBlend);
+    if (kind === 'face' && recipe.faceDarken !== 1.0) mixed = darkenHex(mixed, recipe.faceDarken);
+    return mixed;
   }
 
   function setSceneMood(tier, isMilestone) {
@@ -87,10 +146,20 @@ const Scene3D = (() => {
     scene.background = new THREE.Color(hex);
   }
 
+  // Skin selection recolors only the face fill + idle path/arrow color -
+  // moving (green)/blocked (red) stay fixed status colors regardless of
+  // skin, and null (unset/invalid id) falls back to today's hardcoded look.
+  function activeSkin() {
+    return Skins.getById(Storage.get('selectedSkin'));
+  }
+
   function getPathColor(path) {
     if (path.status === 'bumped' || path.status === 'bumped_return' || path.wasBlocked) return COLOR_BLOCKED;
     if (path.status === 'moving' || path.status === 'done') return COLOR_MOVING;
-    return Storage.get('theme') === 'dark' ? COLOR_IDLE_DARK : COLOR_IDLE_LIGHT;
+    const dark = Storage.get('theme') === 'dark';
+    const skin = activeSkin();
+    const base = skin ? (dark ? skin.colors.path.dark : skin.colors.path.light) : (dark ? COLOR_IDLE_DARK : COLOR_IDLE_LIGHT);
+    return applyVariant(base, 'path');
   }
 
   // Pinch/scroll zoom: the camera dollies along its fixed initial viewing
@@ -485,12 +554,18 @@ const Scene3D = (() => {
     shapeGroup.add(shapeMesh);
   }
 
-  function setLevelData(shape, unitGrid, paths, tier, isMilestone) {
+  function setLevelData(shape, unitGrid, paths, tier, isMilestone, skinVariant) {
     rebuildGeometry(shape, unitGrid);
     highlightPathId = null;
     highlightedFaceIndices = [];
-    updateFrame(paths, true);
+    // currentTier/currentSkinVariant must be set BEFORE updateFrame() below -
+    // applyVariant() (used by updateFrame's face fill and getPathColor) reads
+    // both, and updateFrame used to run before currentTier was assigned here,
+    // which would have drawn the very first frame of a new level using the
+    // PREVIOUS level's tier/variant.
     currentTier = tier || currentTier;
+    currentSkinVariant = skinVariant || 'normal';
+    updateFrame(paths, true);
     setSceneMood(currentTier, isMilestone);
   }
 
@@ -502,6 +577,11 @@ const Scene3D = (() => {
   // every exposed face (level load / undo, where idle paths' appearance also
   // needs refreshing).
   function updateFrame(paths, dirtyFaces) {
+    // Guards a caller (e.g. picking a skin from the main menu, before any
+    // level has ever been loaded this session) asking for a full redraw
+    // while currentGraph is still null - nothing to redraw yet, the new
+    // colors apply naturally on the next real setLevelData() call.
+    if (dirtyFaces === true && !currentGraph) return;
     currentPaths = paths;
 
     const facesToRedraw = dirtyFaces === true
@@ -518,7 +598,9 @@ const Scene3D = (() => {
       if (i === undefined) return;
       const ctx = faceContexts[i];
       const dark = Storage.get('theme') === 'dark';
-      ctx.fillStyle = dark ? '#1a1a2e' : '#ffffff';
+      const skin = activeSkin();
+      const baseFace = skin ? (dark ? skin.colors.face.dark : skin.colors.face.light) : (dark ? '#1a1a2e' : '#ffffff');
+      ctx.fillStyle = applyVariant(baseFace, 'face');
       ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 
       // Face-boundary seam: findBlocker() only ever checks the head's own

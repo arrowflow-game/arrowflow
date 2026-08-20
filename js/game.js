@@ -35,6 +35,18 @@ const Game = (() => {
 
   function isMilestoneLevel(n) { return typeof n === 'number' && n % 10 === 0; }
 
+  // Which cosmetic color-intensity variant (see Scene3D's VARIANT_RECIPES)
+  // applies to a given campaign level - 'epic' (every 100th) is a
+  // deliberately stronger look than 'milestone' (every 10th), purely
+  // cosmetic escalation, not a real difficulty signal (that's still governed
+  // by tier/tools/generate_campaign.py, unchanged).
+  function skinVariantForLevel(n) {
+    if (typeof n !== 'number') return 'normal';
+    if (n % 100 === 0) return 'epic';
+    if (n % 10 === 0) return 'milestone';
+    return 'normal';
+  }
+
   function localDateStr() {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -61,8 +73,10 @@ const Game = (() => {
       startTime: Date.now()
     };
 
-    Scene3D.setLevelData(data.shape, data.unitGrid, state.paths, extra.sceneTier || data.tier, extra.isMilestone || false);
-    Sound.setLevelContext(mode, extra.isMilestone || false);
+    const skinVariant = extra.skinVariant || 'normal';
+    const isMilestone = skinVariant === 'milestone' || skinVariant === 'epic';
+    Scene3D.setLevelData(data.shape, data.unitGrid, state.paths, extra.sceneTier || data.tier, isMilestone, skinVariant);
+    Sound.setLevelContext(mode, isMilestone);
     UI.hideAllModals();
     UI.updateHUD(buildHudPayload());
 
@@ -74,7 +88,7 @@ const Game = (() => {
   function loadLevel(n) {
     const data = getLevel(n);
     if (!data) return false;
-    applyLevelState('campaign', data, { levelNum: n, isMilestone: isMilestoneLevel(n) });
+    applyLevelState('campaign', data, { levelNum: n, skinVariant: skinVariantForLevel(n) });
     return true;
   }
 
@@ -82,14 +96,14 @@ const Game = (() => {
     const dateStr = localDateStr();
     const data = getDailyLevel(dateStr);
     if (!data) return false;
-    applyLevelState('daily', data, { levelNum: 'daily-' + dateStr, sceneTier: 'DAILY' });
+    applyLevelState('daily', data, { levelNum: 'daily-' + dateStr, sceneTier: 'DAILY', skinVariant: 'daily' });
     return true;
   }
 
   function loadRemixLevel(remixIndex) {
     const data = Remix.getRemixLevel(remixIndex);
     if (!data) return false;
-    applyLevelState('remix', data, { levelNum: 'remix-' + remixIndex, remixIndex, sceneTier: 'REMIX' });
+    applyLevelState('remix', data, { levelNum: 'remix-' + remixIndex, remixIndex, sceneTier: 'REMIX', skinVariant: 'remix' });
     return true;
   }
 
@@ -406,13 +420,17 @@ const Game = (() => {
     const score = computeScore(elapsedSec);
     const isCampaignFinale = state.mode === 'campaign' && state.levelNum === 300;
 
+    let newlyUnlockedSkin = null;
     if (state.mode === 'daily') {
       const rewarded = Storage.completeDaily();
       if (rewarded) Storage.addHints(2); // bonus hints, only on first completion of the day
     } else if (state.mode === 'remix') {
       Storage.completeRemix(state.remixIndex, stars, score);
     } else {
+      const prevUnlocked = Storage.get('highestUnlocked') || 1;
       Storage.completeLevel(state.levelNum, stars, state.moves, score, elapsedSec);
+      const newUnlocked = Storage.get('highestUnlocked') || 1;
+      newlyUnlockedSkin = Skins.ALL.find(s => s.unlockLevel > prevUnlocked && s.unlockLevel <= newUnlocked) || null;
     }
     Storage.noteLevelCompletedForInterstitial();
     UI.updateHUD(buildHudPayload());
@@ -423,7 +441,7 @@ const Game = (() => {
       hints_used: state.hintsUsed, time_sec: Math.round(elapsedSec)
     });
     if (isCampaignFinale) Analytics.logEvent('campaign_complete', {});
-    UI.showWin(state.levelNum, state.hintsUsed, stars, score, elapsedSec, state.mode, isCampaignFinale);
+    UI.showWin(state.levelNum, state.hintsUsed, stars, score, elapsedSec, state.mode, isCampaignFinale, newlyUnlockedSkin);
   }
 
   function onFail() {

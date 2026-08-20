@@ -219,6 +219,15 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
 .lvl-btn.locked { background: var(--bg-secondary); color: var(--text-secondary); opacity: 0.6; }
 .lvl-btn-stars { font-size: 0.5rem; letter-spacing: 1px; color: var(--star-color); margin-top: 2px; }
 
+.skins-grid-wrap { grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.skin-btn { aspect-ratio: 1.3; border-radius: 14px; font-weight: 800; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; background: var(--bg-card); border: 2px solid transparent; box-shadow: 0 2px 8px rgba(0,0,0,0.05); transition: transform 0.2s; padding: 10px; }
+.skin-swatch { width: 44px; height: 44px; border-radius: 50%; border: 3px solid var(--bg-primary); box-shadow: 0 0 0 2px currentColor; }
+.skin-btn-name { font-size: 0.85rem; color: var(--text-primary); }
+.skin-btn.selected { border-color: var(--accent); }
+.skin-btn.locked { opacity: 0.55; background: var(--bg-secondary); }
+.skin-btn-lock { font-size: 0.7rem; color: var(--text-secondary); font-weight: 600; }
+.win-new-skin-btn { width: 100%; margin: 0 0 14px; padding: 10px; border-radius: 10px; border: 2px dashed var(--accent); background: transparent; color: var(--accent); font-weight: 800; font-size: 0.85rem; }
+
 /* Stats screen */
 .stats-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 0 20px 15px; }
 .stats-summary-card { background: var(--bg-card); border-radius: 12px; padding: 12px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
