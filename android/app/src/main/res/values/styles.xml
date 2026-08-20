@@ -17,15 +17,22 @@
 
     <!-- This is the theme actually applied to MainActivity for its whole lifetime (see
          AndroidManifest.xml android:theme) - Capacitor's template never switches away from
-         the splash theme after launch. targetSdk 35 (Android 15) makes edge-to-edge the
+         the splash theme after launch. targetSdk 35+ (Android 15/16) makes edge-to-edge the
          default, drawing the WebView under the status bar AND the bottom nav/gesture bar -
          this covered the top HUD buttons and put the bottom undo button inside the
          gesture-nav swipe zone (taps there were being read as a system back gesture instead
-         of clicks). windowOptOutEdgeToEdgeEnforcement is Android 15's official temporary
-         opt-out; it's ignored on API 36+, where proper WindowInsets handling will be needed
-         instead. -->
+         of clicks). First fix (targetSdk 35) was windowOptOutEdgeToEdgeEnforcement, Android
+         15's official opt-out - but that attribute is ignored by the OS on API 36+, AND
+         Capacitor's own CapacitorWebView.edgeToEdgeHandler() (Bridge.java, called
+         automatically on every WebView init) reads this exact theme attribute to decide
+         whether to compensate: finding it set to true made Capacitor think edge-to-edge was
+         opted out and skip adding margins, even on 36 where the OS enforces edge-to-edge
+         regardless - silently reintroducing the original bug. Removed the opt-out entirely
+         instead: Capacitor's default "auto" adjustMarginsForEdgeToEdge behavior (no
+         capacitor.config.json override needed) now detects enforced edge-to-edge itself and
+         applies WebView margins equal to the system bar insets on both API 35 and 36, so the
+         WebView content never draws under the status bar/gesture-nav on either version. -->
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@drawable/splash</item>
-        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
     </style>
 </resources>

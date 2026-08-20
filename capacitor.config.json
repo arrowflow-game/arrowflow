@@ -2,6 +2,9 @@
   "appId": "com.arrowflowgame.puzzle",
   "appName": "ArrowFlow",
   "webDir": "www",
+  "android": {
+    "adjustMarginsForEdgeToEdge": "auto"
+  },
   "plugins": {
     "StatusBar": {
       "overlaysWebView": false
