@@ -54,7 +54,10 @@ const Iap = (() => {
         // the common ones. Falls back to the hardcoded display prices in ui.js/
         // i18n if the store hasn't returned anything usable for a given product.
         const id = p.identifier || p.productIdentifier || p.productId;
-        const price = p.price || p.priceString || p.localizedPrice;
+        // priceString/localizedPrice are the currency-formatted strings (e.g. "฿33.00");
+        // p.price is a bare number with no currency sign - only fall back to it if
+        // neither formatted field is present.
+        const price = p.priceString || p.localizedPrice || p.price;
         if (id && price) cachedPriceLabels[id] = price;
       });
     } catch {
