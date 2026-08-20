@@ -184,6 +184,17 @@ const Sound = (() => {
     }
   }
 
+  // Pausing an <audio> element alone doesn't free its decoded/buffered data in
+  // every browser - clearing src and calling load() releases it for real.
+  // Without this, every level/context change (crossfadeTo) leaked the outgoing
+  // track's buffer, growing memory over a long session (reported directly as
+  // the game feeling increasingly laggy the longer it was played).
+  function releaseAudio(el) {
+    el.pause();
+    el.removeAttribute('src');
+    el.load();
+  }
+
   // --- Real-file playback, with the fallback wired into its error path.
   function playTrack(path, fadeIn) {
     currentTrackPath = path;
@@ -205,7 +216,7 @@ const Sound = (() => {
     const wasFallback = usingFallbackSynth;
     playTrack(path, true);
     if (wasFallback) stopFallbackMusic();
-    else if (outgoing) fadeVolume(outgoing, outgoing.volume, 0, MUSIC_FADE_SEC, () => outgoing.pause());
+    else if (outgoing) fadeVolume(outgoing, outgoing.volume, 0, MUSIC_FADE_SEC, () => releaseAudio(outgoing));
   }
 
   // Called whenever a level (or daily/remix run) is loaded - see js/game.js's
@@ -229,7 +240,7 @@ const Sound = (() => {
     if (!musicPlaying) return;
     musicPlaying = false;
     clearFades();
-    if (currentAudioEl) { currentAudioEl.pause(); currentAudioEl = null; }
+    if (currentAudioEl) { releaseAudio(currentAudioEl); currentAudioEl = null; }
     currentTrackPath = null;
     stopFallbackMusic();
   }
