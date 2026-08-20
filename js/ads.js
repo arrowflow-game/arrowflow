@@ -18,9 +18,11 @@
 
 const Ads = (() => {
   const REWARDED_AD_UNIT_ID = 'ca-app-pub-5407872195671640/2365362318';
+  const INTERSTITIAL_AD_UNIT_ID = 'ca-app-pub-5407872195671640/1567054452';
 
   let initialized = false;
   let adReady = false;
+  let interstitialReady = false;
 
   function isNative() {
     return typeof Capacitor !== 'undefined' && !!Capacitor.isNativePlatform && Capacitor.isNativePlatform();
@@ -36,6 +38,7 @@ const Ads = (() => {
       await admob().initialize({ initializeForTesting: true });
       initialized = true;
       await prepare();
+      await prepareInterstitial();
     } catch {
       // Best-effort - a failed init just means showRewardedAd() falls back
       // to fakeGrant() below via the adReady check, never blocks the game.
@@ -49,6 +52,16 @@ const Ads = (() => {
       adReady = true;
     } catch {
       adReady = false;
+    }
+  }
+
+  async function prepareInterstitial() {
+    if (!isNative() || !initialized) return;
+    try {
+      await admob().prepareInterstitial({ adId: INTERSTITIAL_AD_UNIT_ID, isTesting: true });
+      interstitialReady = true;
+    } catch {
+      interstitialReady = false;
     }
   }
 
@@ -94,5 +107,40 @@ const Ads = (() => {
     }
   }
 
-  return { init, showRewardedAd, isNative };
+  // showInterstitial(onClosed): the only entry point ui.js needs for the win-flow
+  // interstitial. onClosed always fires exactly once - whether the ad was shown and
+  // dismissed, failed to show, or there was no ad SDK/fill at all - since there's no
+  // reward to gate on here, callers should never be blocked waiting on it.
+  async function showInterstitial(onClosed) {
+    if (!isNative()) return onClosed();
+
+    if (!interstitialReady) await prepareInterstitial();
+    if (!interstitialReady) { onClosed(); return; }
+
+    const dismissListener = await admob().addListener('interstitialAdDismissed', () => {
+      dismissListener.remove();
+      failListener.remove();
+      interstitialReady = false;
+      prepareInterstitial(); // pre-load the next one for next time
+      onClosed();
+    });
+    const failListener = await admob().addListener('interstitialAdFailedToShow', () => {
+      dismissListener.remove();
+      failListener.remove();
+      interstitialReady = false;
+      prepareInterstitial();
+      onClosed();
+    });
+
+    try {
+      await admob().showInterstitial();
+    } catch {
+      dismissListener.remove();
+      failListener.remove();
+      interstitialReady = false;
+      onClosed();
+    }
+  }
+
+  return { init, showRewardedAd, showInterstitial, isNative };
 })();

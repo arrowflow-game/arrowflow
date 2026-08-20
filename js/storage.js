@@ -8,10 +8,15 @@
     remixHighest: 0, remixBestScoreByLevel: {},
     continueAdsUsedToday: 0, continueAdsDate: null,
     hintAdsUsedToday: 0, hintAdsDate: null,
-    adsRemovedUntil: 0, adsRemovedForever: false
+    adsRemovedUntil: 0, adsRemovedForever: false,
+    levelsSinceInterstitial: 0, nextInterstitialThreshold: 0
   };
 
   const REWARDED_AD_DAILY_CAP = 3;
+
+  function rollInterstitialThreshold() {
+    return 3 + Math.floor(Math.random() * 3); // 3, 4, or 5 inclusive
+  }
 
   function localDateStr() {
     const d = new Date();
@@ -111,10 +116,28 @@
     // so a repeat purchase just extends the window. grantAdsRemoved() extends from
     // whichever is later - now or the current expiry - so buying early never wastes
     // remaining paid-for days.
-    isAdsRemoved: () => _state.adsRemovedUntil > Date.now(),
+    isAdsRemoved: () => _state.adsRemovedForever || _state.adsRemovedUntil > Date.now(),
     daysAdsRemovedLeft: () => Math.max(0, Math.ceil((_state.adsRemovedUntil - Date.now()) / 86400000)),
     grantAdsRemoved(days) {
       _state.adsRemovedUntil = Math.max(_state.adsRemovedUntil, Date.now()) + days * 86400000;
+      save(_state);
+    },
+
+    // Interstitial ad cadence - a rolling counter (unlike the daily-reset rewarded-ad
+    // caps above), so it persists across calendar days and app restarts and only
+    // resets when an interstitial actually fires (see js/ui.js #btn-next handler).
+    noteLevelCompletedForInterstitial() {
+      if (!_state.nextInterstitialThreshold) _state.nextInterstitialThreshold = rollInterstitialThreshold();
+      _state.levelsSinceInterstitial++;
+      save(_state);
+    },
+    shouldShowInterstitial() {
+      if (!_state.nextInterstitialThreshold) _state.nextInterstitialThreshold = rollInterstitialThreshold();
+      return _state.levelsSinceInterstitial >= _state.nextInterstitialThreshold;
+    },
+    recordInterstitialShown() {
+      _state.levelsSinceInterstitial = 0;
+      _state.nextInterstitialThreshold = rollInterstitialThreshold();
       save(_state);
     }
   };

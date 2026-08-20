@@ -413,6 +413,7 @@ const Game = (() => {
     } else {
       Storage.completeLevel(state.levelNum, stars, state.moves, score, elapsedSec);
     }
+    Storage.noteLevelCompletedForInterstitial();
     UI.updateHUD(buildHudPayload());
     Sound.playWin();
     Haptics.win();

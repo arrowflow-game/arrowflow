@@ -669,8 +669,14 @@ const UI = (() => {
       location.reload();
     });
 
-    document.getElementById('btn-next').addEventListener('click', () => {
+    document.getElementById('btn-next').addEventListener('click', async () => {
       hideAllModals();
+
+      if (!Storage.isAdsRemoved() && Storage.shouldShowInterstitial()) {
+        await new Promise(resolve => Ads.showInterstitial(resolve));
+        Storage.recordInterstitialShown();
+      }
+
       const mode = Game.getMode();
       if (mode === 'remix') {
         Game.loadRemixLevel(Game.getRemixIndex() + 1);
