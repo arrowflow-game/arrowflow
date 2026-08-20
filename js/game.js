@@ -62,6 +62,7 @@ const Game = (() => {
     };
 
     Scene3D.setLevelData(data.shape, data.unitGrid, state.paths, extra.sceneTier || data.tier, extra.isMilestone || false);
+    Sound.setLevelContext(mode, extra.isMilestone || false);
     UI.hideAllModals();
     UI.updateHUD(buildHudPayload());
 

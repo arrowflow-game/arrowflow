@@ -86,6 +86,11 @@ const I18N = (() => {
       'nickname.confirm': 'เริ่มเล่น',
       'nickname.skip': 'ข้าม',
 
+      'daily_tip.title': '📅 รู้จักด่านรายวันหรือยัง?',
+      'daily_tip.text': 'ด่านปริศนาใหม่ทุกวัน เล่นจบครั้งแรกของวันรับ hint ฟรีทันที 2 อัน แถมเล่นต่อเนื่องทุกวันจะได้สถิติ streak สะสมด้วย!',
+      'daily_tip.go': 'ไปเล่นเลย',
+      'daily_tip.later': 'เล่นทีหลัง',
+
       'leaderboard.title': '🏆 อันดับโลก',
       'leaderboard.close': 'ปิด',
       'leaderboard.loading': 'กำลังโหลด…',
@@ -225,6 +230,11 @@ const I18N = (() => {
       'nickname.placeholder': 'Your nickname',
       'nickname.confirm': 'Start',
       'nickname.skip': 'Skip',
+
+      'daily_tip.title': '📅 Have you tried Daily Challenge?',
+      'daily_tip.text': 'A brand new puzzle every day - finish your first one of the day for 2 free hints, plus build up a streak by playing daily!',
+      'daily_tip.go': 'Play now',
+      'daily_tip.later': 'Maybe later',
 
       'leaderboard.title': '🏆 World Leaderboard',
       'leaderboard.close': 'Close',

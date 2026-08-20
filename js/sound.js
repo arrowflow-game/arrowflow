@@ -69,12 +69,61 @@ const Sound = (() => {
     tone(300, 120, 0.45, 'sawtooth', c.currentTime, 0.15);
   }
 
-  // --- Background music: a slow, looping ambient pad, synthesized the same
-  // way as the SFX above (no audio files). Four soft chords cycle indefinitely;
-  // each note fades in/out with its own envelope so chord changes crossfade
-  // smoothly rather than clicking, driven off the Web Audio clock (startTime
-  // params), not JS timer precision - the setTimeout below only needs to be
-  // roughly on time, not sample-accurate.
+  // --- Background music: real mp3 tracks (from Suno), multiple per context,
+  // randomized per level so it doesn't get repetitive - see setLevelContext().
+  // Falls back to a synthesized ambient chord loop (the original approach)
+  // whenever a track file is missing/fails to load, so the game never goes
+  // silent or errors out before the real audio files are actually in place.
+  const MUSIC_TRACKS = {
+    normal: ['audio/music-normal-1.mp3', 'audio/music-normal-2.mp3', 'audio/music-normal-3.mp3',
+             'audio/music-normal-4.mp3', 'audio/music-normal-5.mp3', 'audio/music-normal-6.mp3'],
+    milestone: ['audio/music-milestone-1.mp3', 'audio/music-milestone-2.mp3'],
+    daily: ['audio/music-daily-1.mp3', 'audio/music-daily-2.mp3']
+  };
+  const MUSIC_VOLUME = 0.5;
+  const MUSIC_FADE_SEC = 1.2;
+
+  let musicPlaying = false;
+  let currentAudioEl = null;
+  let currentTrackPath = null;
+  let pendingTrackPath = null; // set by setLevelContext() before music has actually started
+  let fadeIntervals = [];
+  let usingFallbackSynth = false;
+
+  function clearFades() {
+    fadeIntervals.forEach(clearInterval);
+    fadeIntervals = [];
+  }
+
+  function fadeVolume(el, from, to, seconds, onDone) {
+    const steps = 20;
+    const stepMs = (seconds * 1000) / steps;
+    let i = 0;
+    el.volume = from;
+    const timer = setInterval(() => {
+      i++;
+      el.volume = from + (to - from) * (i / steps);
+      if (i >= steps) {
+        clearInterval(timer);
+        el.volume = to;
+        if (onDone) onDone();
+      }
+    }, stepMs);
+    fadeIntervals.push(timer);
+  }
+
+  function pickTrackPath(trackKey) {
+    const pool = MUSIC_TRACKS[trackKey] || MUSIC_TRACKS.normal;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  function desiredTrackKey(mode, isMilestone) {
+    if (mode === 'daily') return 'daily';
+    if (isMilestone) return 'milestone';
+    return 'normal';
+  }
+
+  // --- Fallback: original synthesized ambient chord loop, unchanged.
   const MUSIC_CHORDS = [
     [261.63, 329.63, 392.00], // C major
     [196.00, 246.94, 293.66], // G major
@@ -84,9 +133,8 @@ const Sound = (() => {
   const MUSIC_STEP_DUR = 4.2; // seconds per chord
   const MUSIC_PEAK_GAIN = 0.045; // quiet pad, well under the SFX gains above
 
-  let musicPlaying = false;
-  let musicTimer = null;
-  let musicGain = null;
+  let fallbackTimer = null;
+  let fallbackGain = null;
 
   function playChord(freqs, startTime, duration) {
     const c = getCtx();
@@ -100,46 +148,95 @@ const Sound = (() => {
       amp.gain.setValueAtTime(MUSIC_PEAK_GAIN, startTime + duration - 1.4);
       amp.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
       osc.connect(amp);
-      amp.connect(musicGain);
+      amp.connect(fallbackGain);
       osc.start(startTime);
       osc.stop(startTime + duration + 0.05);
     });
   }
 
-  function scheduleMusicStep(stepIndex) {
-    if (!musicPlaying) return;
+  function scheduleFallbackStep(stepIndex) {
+    if (!usingFallbackSynth) return;
     const c = getCtx();
     playChord(MUSIC_CHORDS[stepIndex % MUSIC_CHORDS.length], c.currentTime + 0.02, MUSIC_STEP_DUR);
-    musicTimer = setTimeout(() => scheduleMusicStep(stepIndex + 1), MUSIC_STEP_DUR * 1000);
+    fallbackTimer = setTimeout(() => scheduleFallbackStep(stepIndex + 1), MUSIC_STEP_DUR * 1000);
+  }
+
+  function startFallbackMusic() {
+    if (usingFallbackSynth) return;
+    usingFallbackSynth = true;
+    const c = getCtx();
+    fallbackGain = c.createGain();
+    fallbackGain.gain.value = 1;
+    fallbackGain.connect(c.destination);
+    scheduleFallbackStep(0);
+  }
+
+  function stopFallbackMusic() {
+    if (!usingFallbackSynth) return;
+    usingFallbackSynth = false;
+    if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
+    if (fallbackGain) {
+      const c = getCtx();
+      const gainNode = fallbackGain;
+      gainNode.gain.setTargetAtTime(0, c.currentTime, 0.15);
+      setTimeout(() => { try { gainNode.disconnect(); } catch (e) {} }, 500);
+      fallbackGain = null;
+    }
+  }
+
+  // --- Real-file playback, with the fallback wired into its error path.
+  function playTrack(path, fadeIn) {
+    currentTrackPath = path;
+    const audio = new Audio(path);
+    audio.loop = true;
+    audio.volume = fadeIn ? 0 : MUSIC_VOLUME;
+    audio.addEventListener('error', () => {
+      if (currentAudioEl === audio) { currentAudioEl = null; currentTrackPath = null; }
+      startFallbackMusic();
+    });
+    audio.play().catch(() => {}); // startMusic() only ever runs from a real screen-change/user action
+    currentAudioEl = audio;
+    if (fadeIn) fadeVolume(audio, 0, MUSIC_VOLUME, MUSIC_FADE_SEC);
+  }
+
+  function crossfadeTo(path) {
+    clearFades();
+    const outgoing = usingFallbackSynth ? null : currentAudioEl;
+    const wasFallback = usingFallbackSynth;
+    playTrack(path, true);
+    if (wasFallback) stopFallbackMusic();
+    else if (outgoing) fadeVolume(outgoing, outgoing.volume, 0, MUSIC_FADE_SEC, () => outgoing.pause());
+  }
+
+  // Called whenever a level (or daily/remix run) is loaded - see js/game.js's
+  // applyLevelState(). Picks which track SHOULD be playing for this context;
+  // only actually swaps audio if it differs from what's currently playing.
+  function setLevelContext(mode, isMilestone) {
+    const path = pickTrackPath(desiredTrackKey(mode, isMilestone));
+    pendingTrackPath = path; // always kept current, so a later mute->unmute (no new level load in between) resumes on the right track
+    if (!musicPlaying) return;
+    if (path === currentTrackPath) return; // same file already playing, let it continue
+    crossfadeTo(path);
   }
 
   function startMusic() {
     if (musicPlaying || !musicEnabled()) return;
     musicPlaying = true;
-    const c = getCtx();
-    musicGain = c.createGain();
-    musicGain.gain.value = 1;
-    musicGain.connect(c.destination);
-    scheduleMusicStep(0);
+    playTrack(pendingTrackPath || pickTrackPath('normal'), true);
   }
 
   function stopMusic() {
     if (!musicPlaying) return;
     musicPlaying = false;
-    if (musicTimer) { clearTimeout(musicTimer); musicTimer = null; }
-    if (musicGain) {
-      const c = getCtx();
-      const gainNode = musicGain;
-      // Fade the whole music bus out quickly rather than cutting it off mid-note.
-      gainNode.gain.setTargetAtTime(0, c.currentTime, 0.15);
-      setTimeout(() => { try { gainNode.disconnect(); } catch (e) {} }, 500);
-      musicGain = null;
-    }
+    clearFades();
+    if (currentAudioEl) { currentAudioEl.pause(); currentAudioEl = null; }
+    currentTrackPath = null;
+    stopFallbackMusic();
   }
 
-  // Web Audio keeps running even once the app is backgrounded/minimized (unlike
-  // <video>/<audio> elements, the browser/WebView doesn't pause it for you) - without
-  // this, background music plays on indefinitely after the player leaves the app.
+  // <audio> elements (unlike a bare AudioContext) already pause themselves
+  // when backgrounded on most platforms, but the synth fallback's oscillators
+  // keep running via the shared AudioContext - suspend/resume that explicitly.
   let wasMusicPlaying = false;
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
@@ -152,5 +249,5 @@ const Sound = (() => {
     }
   });
 
-  return { playSlide, playBump, playWin, playFail, startMusic, stopMusic };
+  return { playSlide, playBump, playWin, playFail, startMusic, stopMusic, setLevelContext };
 })();

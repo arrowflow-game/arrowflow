@@ -3,7 +3,7 @@
   const TOTAL_LEVELS = 300; // kept in sync with TOTAL_LEVELS in js/ui.js
   const defaults = {
     currentLevel: 1, highestUnlocked: 1, levelData: {}, totalStars: 0, totalScore: 0, hints: 3,
-    theme: 'light', sound: true, music: true, vibration: true, tutorialSeen: false, lang: 'en',
+    theme: 'light', sound: true, music: true, vibration: true, tutorialSeen: false, dailyTipSeen: false, lang: 'en',
     dailyLastCompletedDate: null, dailyStreak: 0,
     remixHighest: 0, remixBestScoreByLevel: {},
     continueAdsUsedToday: 0, continueAdsDate: null,

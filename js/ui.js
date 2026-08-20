@@ -672,12 +672,25 @@ const UI = (() => {
     document.getElementById('btn-next').addEventListener('click', async () => {
       hideAllModals();
 
+      const mode = Game.getMode();
+
+      // One-time nudge toward Daily Challenge, right after level 3 - the
+      // natural "next" flow here would otherwise skip straight to level 4
+      // without ever passing through the menu screen where the Daily button
+      // lives. Deliberately skips the interstitial-ad check below this run
+      // (not even counted as "shown") so a brand new player isn't hit with
+      // an ad and this tip in the same tap.
+      if (mode === 'campaign' && Game.getLevelNum() === 3 && !Storage.get('dailyTipSeen')) {
+        Storage.set('dailyTipSeen', true);
+        document.getElementById('modal-daily-tip').classList.remove('hidden');
+        return;
+      }
+
       if (!Storage.isAdsRemoved() && Storage.shouldShowInterstitial()) {
         await new Promise(resolve => Ads.showInterstitial(resolve));
         Storage.recordInterstitialShown();
       }
 
-      const mode = Game.getMode();
       if (mode === 'remix') {
         Game.loadRemixLevel(Game.getRemixIndex() + 1);
       } else if (mode === 'daily') {
@@ -694,6 +707,17 @@ const UI = (() => {
     document.getElementById('btn-replay').addEventListener('click', () => {
       hideAllModals();
       Game.restart();
+    });
+
+    document.getElementById('btn-daily-tip-go').addEventListener('click', () => {
+      hideAllModals();
+      Game.loadDailyLevel();
+      showScreen('screen-game');
+    });
+
+    document.getElementById('btn-daily-tip-later').addEventListener('click', () => {
+      hideAllModals();
+      Game.loadLevel(4);
     });
 
     document.getElementById('btn-daily').addEventListener('click', () => {
