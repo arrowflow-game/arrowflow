@@ -72,10 +72,16 @@
   <!-- GAME HUD (transparent overlay while playing) -->
   <div id="screen-game" class="ovr-screen game-hud">
     <header class="hud-top">
-      <div class="hud-controls-group">
+      <div class="hud-controls-group hud-left-group">
         <button id="btn-pause" class="icon-btn">⏸</button>
-        <button id="btn-hud-theme" class="icon-btn" aria-label="Toggle theme"><span id="theme-icon-hud">🌙</span></button>
-        <button id="btn-hud-settings" class="icon-btn" aria-label="Settings">⚙️</button>
+        <div class="hud-left-subrow">
+          <button id="btn-hud-theme" class="icon-btn" aria-label="Toggle theme"><span id="theme-icon-hud">🌙</span></button>
+          <button id="btn-hud-settings" class="icon-btn" aria-label="Settings">⚙️</button>
+        </div>
+        <button id="btn-hud-remove-ads" class="hud-remove-ads-btn hidden" aria-label="Remove ads">
+          <span class="hud-remove-ads-icon">🚫📺</span>
+          <span id="hud-remove-ads-label" class="hud-remove-ads-label"></span>
+        </button>
       </div>
       <div class="hud-center-cluster">
         <div class="hud-level-tier-row">
@@ -100,10 +106,6 @@
         <button id="btn-hud-store" class="icon-btn hud-store-icon" aria-label="Store">🛒</button>
       </div>
     </header>
-    <button id="btn-hud-remove-ads" class="hud-remove-ads-btn hidden" aria-label="Remove ads">
-      <span class="hud-remove-ads-icon">🚫📺</span>
-      <span id="hud-remove-ads-label" class="hud-remove-ads-label"></span>
-    </button>
     <div class="hud-instruction" id="hud-instruction" data-i18n="hud.instruction">Drag to rotate • Tap a path to slide it off!</div>
     <footer class="hud-bottom">
       <div class="hud-stars-row">

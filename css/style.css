@@ -101,47 +101,53 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
 .hud-top, .hud-bottom { width: 100%; display: flex; justify-content: space-between; align-items: flex-start; padding: 16px 20px; }
 .hud-bottom { align-items: center; }
 .hud-controls-group { display: flex; gap: 10px; align-items: center; }
-.hud-center-cluster { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+/* Left group stacks vertically (pause on its own row, theme+settings below it,
+   remove-ads pill below that) instead of one dense horizontal row - real-device
+   testing on smaller phones showed the old single-row layout crowding the top
+   edge and pushing the store icon off-screen on the right. */
+.hud-left-group { flex-direction: column; align-items: flex-start; gap: 6px; }
+.hud-left-subrow { display: flex; gap: 6px; }
+.hud-center-cluster { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
 .hud-level-tier-row { display: flex; align-items: center; gap: 10px; }
-.hud-level-badge { background: var(--bg-card); padding: 5px 20px; border-radius: 20px; text-align: center; border: 2px solid var(--accent); }
-.hud-lvl-label { display: block; font-size: 0.6rem; font-weight: 800; letter-spacing: 2px; color: var(--text-secondary); }
-.hud-lvl-num { display: block; font-size: 1.2rem; font-family: var(--font-logo); font-weight: 900; color: var(--accent); line-height: 1; }
+.hud-level-badge { background: var(--bg-card); padding: 4px 16px; border-radius: 18px; text-align: center; border: 2px solid var(--accent); }
+.hud-lvl-label { display: block; font-size: 0.55rem; font-weight: 800; letter-spacing: 1.5px; color: var(--text-secondary); }
+.hud-lvl-num { display: block; font-size: 1.05rem; font-family: var(--font-logo); font-weight: 900; color: var(--accent); line-height: 1; }
 .hud-hint-btn { background: var(--bg-card); border: 2px solid var(--accent); color: var(--accent); padding: 8px 16px; border-radius: 99px; font-weight: 800; flex-shrink: 0; }
 .hud-right-group { gap: 6px; flex-shrink: 0; }
 .hud-store-icon { width: 34px; height: 34px; font-size: 0.95rem; flex-shrink: 0; }
 .hud-tier-label { font-size: 0.75rem; font-weight: 800; letter-spacing: 2px; color: var(--text-secondary); pointer-events: none; white-space: nowrap; }
 .hud-instruction { margin-top: auto; margin-bottom: 20px; background: rgba(0,0,0,0.5); color: #fff; padding: 8px 16px; border-radius: 99px; font-size: 0.85rem; font-weight: 700; transition: opacity 0.5s; pointer-events: none; }
 
-/* Floating "remove ads" CTA - sits outside .hud-top/.hud-bottom (the only two
-   children .game-hud restores pointer-events to), so it needs its own
-   pointer-events:auto to stay tappable. Filled/accent (vs. the outlined pills
-   used elsewhere in the HUD) is the deliberate "stand out" cue, per the
-   product decision to keep this prominent on the left edge during gameplay. */
+/* "Remove ads" CTA - lives inline in the top-left control stack (below
+   pause/theme/settings) rather than floating at the left-edge vertical
+   center, per real-device feedback that the floating version competed with
+   the puzzle view. Filled/accent (vs. the outlined pills used elsewhere in
+   the HUD) is the deliberate "stand out" cue, per the product decision to
+   keep this prominent even while small. */
 .hud-remove-ads-btn {
-  position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
-  pointer-events: auto; z-index: 5;
-  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  pointer-events: auto;
+  display: flex; flex-direction: row; align-items: center; gap: 3px;
   background: var(--accent); color: var(--text-on-btn); border: none;
-  border-radius: 16px; padding: 10px 8px; max-width: 64px;
-  font-weight: 800; font-size: 0.68rem; text-align: center; line-height: 1.2;
-  box-shadow: 0 4px 15px rgba(26,127,232,0.35);
+  border-radius: 12px; padding: 4px 8px; max-width: 84px;
+  font-weight: 800; font-size: 0.58rem; text-align: center; line-height: 1.15;
+  box-shadow: 0 2px 8px rgba(26,127,232,0.3);
 }
 .hud-remove-ads-btn.active { background: var(--bg-card); color: var(--accent); border: 2px solid var(--accent); box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
 .hud-remove-ads-btn.hidden { display: none; }
-.hud-remove-ads-icon { font-size: 1.3rem; }
+.hud-remove-ads-icon { font-size: 0.85rem; }
 
 .hud-star { font-size: 1.5rem; color: #ccc; transition: color 0.3s; }
 .hud-star.earned { color: var(--star-color); }
 .hud-undo-btn { padding: 8px 16px; font-size: 0.85rem; border: 2px solid var(--accent); background: var(--bg-card); border-radius: 99px; font-weight: 800; color: var(--accent); }
 .hud-undo-btn:disabled { opacity: 0.5; border-color: var(--text-secondary); color: var(--text-secondary); }
 
-.hud-stats-row { pointer-events: none; display: flex; justify-content: center; align-items: center; gap: 10px; }
-.hud-arrows-badge { display: flex; align-items: center; gap: 6px; background: var(--bg-card); padding: 6px 14px; border-radius: 99px; font-weight: 800; color: var(--accent); border: 2px solid var(--accent); }
-.hud-arrows-icon { font-size: 0.9rem; }
-.hud-lives-row { display: flex; gap: 4px; }
-.heart-icon { font-size: 1.3rem; color: #ff4d6d; transition: color 0.3s, transform 0.3s; }
+.hud-stats-row { pointer-events: none; display: flex; justify-content: center; align-items: center; gap: 6px; }
+.hud-arrows-badge { display: flex; align-items: center; gap: 4px; background: var(--bg-card); padding: 4px 10px; border-radius: 99px; font-weight: 800; font-size: 0.85rem; color: var(--accent); border: 2px solid var(--accent); }
+.hud-arrows-icon { font-size: 0.8rem; }
+.hud-lives-row { display: flex; gap: 3px; }
+.heart-icon { font-size: 1.05rem; color: #ff4d6d; transition: color 0.3s, transform 0.3s; }
 .heart-icon.lost { color: var(--text-secondary); opacity: 0.3; transform: scale(0.85); }
-.hud-difficulty-badge { background: var(--bg-card); padding: 6px 14px; border-radius: 99px; font-size: 0.75rem; font-weight: 800; color: var(--text-secondary); border: 2px solid transparent; }
+.hud-difficulty-badge { background: var(--bg-card); padding: 4px 10px; border-radius: 99px; font-size: 0.65rem; font-weight: 800; color: var(--text-secondary); border: 2px solid transparent; }
 
 /* Milestone levels (every 10th) — aggressive/intense tier treatment */
 .hud-tier-label.milestone {
@@ -306,18 +312,21 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
    at the end of the file so these overrides win the cascade against the earlier
    unconditional HUD rules of equal specificity. */
 @media (max-width: 420px) {
-  .hud-top { padding: 12px 10px; }
+  .hud-top { padding: 10px 8px; }
   .hud-controls-group { gap: 6px; }
-  .icon-btn { width: 38px; height: 38px; font-size: 1.05rem; }
-  .hud-store-icon { width: 30px; height: 30px; font-size: 0.85rem; }
-  .hud-hint-btn { padding: 6px 10px; font-size: 0.9rem; }
-  .hud-level-badge { padding: 4px 10px; }
-  .hud-lvl-num { font-size: 1.05rem; }
-  .hud-level-tier-row { gap: 5px; }
-  .hud-tier-label { letter-spacing: 0.5px; font-size: 0.65rem; }
-  .hud-stats-row { gap: 5px; }
-  .hud-arrows-badge { padding: 4px 8px; }
-  .hud-lives-row { gap: 3px; }
-  .heart-icon { font-size: 1.05rem; }
-  .hud-difficulty-badge { padding: 4px 8px; font-size: 0.65rem; }
+  .hud-left-group { gap: 4px; }
+  .hud-left-subrow { gap: 4px; }
+  .icon-btn { width: 34px; height: 34px; font-size: 0.95rem; }
+  .hud-store-icon { width: 28px; height: 28px; font-size: 0.8rem; }
+  .hud-remove-ads-btn { padding: 3px 6px; font-size: 0.52rem; max-width: 72px; }
+  .hud-hint-btn { padding: 5px 8px; font-size: 0.8rem; }
+  .hud-level-badge { padding: 3px 8px; }
+  .hud-lvl-num { font-size: 0.9rem; }
+  .hud-level-tier-row { gap: 4px; }
+  .hud-tier-label { letter-spacing: 0.5px; font-size: 0.58rem; }
+  .hud-stats-row { gap: 4px; }
+  .hud-arrows-badge { padding: 3px 7px; font-size: 0.75rem; }
+  .hud-lives-row { gap: 2px; }
+  .heart-icon { font-size: 0.9rem; }
+  .hud-difficulty-badge { padding: 3px 7px; font-size: 0.58rem; }
 }
