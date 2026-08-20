@@ -285,6 +285,15 @@ const UI = (() => {
 
   const CONFETTI_COLORS = ['#1a7fe8', '#4a9ff5', '#fbbf24', '#2ecc71', '#ff3b30'];
 
+  // Phase 2: win-screen confetti reuses the selected skin's own particleTheme
+  // name (see js/skins.js/scene.js's PARTICLE_THEMES) just for the physics
+  // direction (rise vs fall) - it does NOT share scene.js's shape-drawing
+  // code (this canvas is a simple DOM overlay, not the WebGL fx layer), so
+  // themes are approximated with the existing rect/circle particle here
+  // rather than duplicating leaf/spark/ring shapes. 'none' (default skin, or
+  // no skin selected) keeps today's exact rainbow confetti untouched.
+  const RISING_THEMES = ['embers', 'bubbles'];
+
   function burstConfetti(intensity) {
     const area = document.getElementById('confetti-area');
     if (!area) return;
@@ -304,21 +313,28 @@ const UI = (() => {
     const ctx = canvas.getContext('2d');
     ctx.scale(dpr, dpr);
 
+    const skin = Skins.getById(Storage.get('selectedSkin'));
+    const theme = skin && skin.particleTheme !== 'none' ? skin.particleTheme : null;
+    const dark = Storage.get('theme') === 'dark';
+    const themeColors = theme ? [skin.colors.path.light, skin.colors.path.dark, dark ? skin.colors.face.dark : skin.colors.face.light] : null;
+    const colors = themeColors || CONFETTI_COLORS;
+    const rising = theme && RISING_THEMES.includes(theme);
+
     const COUNT = Math.round(90 * (intensity || 1));
-    const GRAVITY = 0.28;
+    const GRAVITY = rising ? -0.22 : 0.28;
     const DRAG = 0.988;
     const DURATION = 2200;
 
     const particles = Array.from({ length: COUNT }, () => ({
       x: w / 2 + (Math.random() - 0.5) * 40,
-      y: h * 0.35,
+      y: rising ? h * 0.65 : h * 0.35,
       vx: (Math.random() - 0.5) * 9,
-      vy: -Math.random() * 7 - 4,
+      vy: rising ? Math.random() * 3 + 1 : -Math.random() * 7 - 4,
       size: 5 + Math.random() * 5,
-      color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+      color: colors[Math.floor(Math.random() * colors.length)],
       rot: Math.random() * Math.PI * 2,
       vrot: (Math.random() - 0.5) * 0.3,
-      shape: Math.random() < 0.5 ? 'rect' : 'circle'
+      shape: !theme ? (Math.random() < 0.5 ? 'rect' : 'circle') : (theme === 'sparks' ? 'rect' : 'circle')
     }));
 
     const start = performance.now();

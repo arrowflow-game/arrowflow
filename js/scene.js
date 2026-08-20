@@ -125,6 +125,248 @@ const Scene3D = (() => {
     return mixed;
   }
 
+  // --- Phase 2: cube face material patterns (Canvas 2D only, no lighting -
+  // deliberately kept on the existing unlit MeshBasicMaterial pipeline, see
+  // [[arrowflow_render_perf]] for why lighting was removed). Seeded per-face
+  // (via face.key, not Math.random()) so the pattern stays put across the
+  // frequent redraws updateFrame() already does (hint highlight, undo, etc) -
+  // an unseeded RNG would make the material visibly "boil" every redraw.
+  function mulberry32(seed) {
+    return function () {
+      seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function hashString(str) {
+    let h = 0;
+    for (let i = 0; i < str.length; i++) { h = (Math.imul(31, h) + str.charCodeAt(i)) | 0; }
+    return h;
+  }
+
+  function drawMaterialPattern(ctx, material, baseHex, seedKey, w, h) {
+    if (!material || material === 'flat') return;
+    const rand = mulberry32(hashString(seedKey));
+    const base = hexToRgb(baseHex);
+    ctx.save();
+    if (material === 'marble') {
+      // A handful of soft bezier "veins", alternating lighter/darker than
+      // the base fill, low opacity so the path/arrow art on top stays the
+      // clearest thing on the face.
+      for (let i = 0; i < 4; i++) {
+        const lighter = rand() < 0.5;
+        const shade = lighter ? rgbToHex(base.r + 40, base.g + 40, base.b + 40) : darkenHex(baseHex, 0.75);
+        ctx.strokeStyle = shade;
+        ctx.globalAlpha = 0.35;
+        ctx.lineWidth = 1.5 + rand() * 2;
+        ctx.beginPath();
+        const x0 = rand() * w, y0 = rand() * h;
+        ctx.moveTo(x0, y0);
+        ctx.bezierCurveTo(rand() * w, rand() * h, rand() * w, rand() * h, rand() * w, rand() * h);
+        ctx.stroke();
+      }
+    } else if (material === 'glass') {
+      // Diagonal soft highlight bands - a cheap "glossy" read without real
+      // reflections/lighting.
+      for (let i = 0; i < 2; i++) {
+        const bandX = rand() * w * 0.7;
+        const grad = ctx.createLinearGradient(bandX, 0, bandX + w * 0.25, h);
+        grad.addColorStop(0, 'rgba(255,255,255,0)');
+        grad.addColorStop(0.5, 'rgba(255,255,255,0.28)');
+        grad.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, w, h);
+      }
+    } else if (material === 'neon') {
+      // Faint glowing grid, tinted from the base color itself (brightened)
+      // rather than a separate accent input - keeps this self-contained.
+      const glow = rgbToHex(Math.min(255, base.r + 90), Math.min(255, base.g + 90), Math.min(255, base.b + 90));
+      ctx.strokeStyle = glow;
+      ctx.shadowColor = glow;
+      ctx.shadowBlur = 6;
+      ctx.globalAlpha = 0.5;
+      ctx.lineWidth = 1;
+      const step = w / 4;
+      for (let x = step; x < w; x += step) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+      for (let y = step; y < h; y += step) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+    } else if (material === 'metal') {
+      // Brushed horizontal streaks...
+      ctx.globalAlpha = 1;
+      for (let y = 0; y < h; y += 3) {
+        ctx.strokeStyle = rand() < 0.5 ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, y + rand());
+        ctx.lineTo(w, y + rand());
+        ctx.stroke();
+      }
+      // ...plus rust blotches, the "rusted metal" the user asked for.
+      const rustCount = 5 + Math.floor(rand() * 4);
+      for (let i = 0; i < rustCount; i++) {
+        const rx = rand() * w, ry = rand() * h, rr = 4 + rand() * 10;
+        ctx.fillStyle = 'rgba(140,70,20,0.18)';
+        ctx.beginPath();
+        ctx.ellipse(rx, ry, rr, rr * (0.6 + rand() * 0.5), rand() * Math.PI, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  // --- Phase 2: shared themed-particle engine. Used three ways: a low-key
+  // ambient loop while a skin with a particleTheme is active (see animate()),
+  // a burst at a path's exit point (see shootExitArrow()), and (via the same
+  // theme names) ui.js's win-screen confetti. Kept on the existing fxCanvas
+  // overlay (already used by the exit-shot flourish below) rather than a new
+  // canvas - one clear/draw pass per frame.
+  const PARTICLE_THEMES = {
+    leaves:  { gravity: 0.015,  drag: 0.995, spin: true,  shape: 'leaf' },
+    embers:  { gravity: -0.02,  drag: 0.99,  spin: false, shape: 'circle', glow: true },
+    sparks:  { gravity: 0.01,   drag: 0.96,  spin: false, shape: 'spark',  glow: true },
+    bubbles: { gravity: -0.012, drag: 0.995, spin: false, shape: 'ring' },
+    ash:     { gravity: 0.008,  drag: 0.997, spin: true,  shape: 'circle' }
+  };
+  const AMBIENT_BASE = 14;
+  // How much fiercer/busier the particle layer gets on a special-occasion
+  // level - same currentSkinVariant driving applyVariant()'s color escalation
+  // above, so "does the new skin also ramp up at milestone/epic/daily/remix"
+  // is answered with the SAME intensity axis, not a separate one. epic (every
+  // 100th level) reads noticeably busier than milestone (every 10th);
+  // daily/remix get a smaller festive bump, not the "fiercer" treatment.
+  const VARIANT_PARTICLE_INTENSITY = { milestone: 1.4, epic: 2.0, daily: 1.2, remix: 1.2 };
+  function particleIntensity() {
+    return VARIANT_PARTICLE_INTENSITY[currentSkinVariant] || 1.0;
+  }
+  let ambientParticles = [];
+  let burstParticles = [];
+
+  function prefersReducedMotion() {
+    return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  }
+
+  // Runs the SAME milestone/epic/daily/remix blend+darken as the face/path
+  // colors (applyVariant) so particle color escalates identically - answers
+  // "should the new skin dimensions also intensify at special levels" with
+  // one shared mechanism instead of a second one to keep in sync.
+  function currentParticleColor() {
+    const skin = activeSkin();
+    if (!skin) return null;
+    const dark = Storage.get('theme') === 'dark';
+    const base = dark ? skin.colors.path.dark : skin.colors.path.light;
+    return applyVariant(base, 'path');
+  }
+
+  function spawnAmbientParticle(theme) {
+    const w = window.innerWidth, h = window.innerHeight;
+    const rising = PARTICLE_THEMES[theme].gravity < 0;
+    return {
+      theme,
+      x: Math.random() * w,
+      y: rising ? h + 10 : -10,
+      vx: (Math.random() - 0.5) * 0.3,
+      vy: 0,
+      size: 2 + Math.random() * 3,
+      rot: Math.random() * Math.PI * 2,
+      vrot: (Math.random() - 0.5) * 0.02,
+      alpha: 0.35 + Math.random() * 0.25 // ambient stays subtle, never competes with gameplay
+    };
+  }
+
+  function spawnBurst(x, y, theme) {
+    if (!theme || theme === 'none' || !PARTICLE_THEMES[theme] || prefersReducedMotion()) return;
+    const intensity = particleIntensity();
+    const count = Math.round(10 * intensity);
+    for (let i = 0; i < count; i++) {
+      const ang = Math.random() * Math.PI * 2;
+      const speed = (2 + Math.random() * 3) * Math.min(1.5, intensity);
+      burstParticles.push({
+        theme, x, y,
+        vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed,
+        size: 2 + Math.random() * 3,
+        rot: Math.random() * Math.PI * 2,
+        vrot: (Math.random() - 0.5) * 0.3,
+        alpha: 1, life: 0, maxLife: 400 + Math.random() * 200
+      });
+    }
+  }
+
+  function stepParticle(p, recipe) {
+    p.x += p.vx; p.y += p.vy;
+    p.vy += recipe.gravity;
+    p.vx *= recipe.drag; p.vy *= recipe.drag;
+    if (recipe.spin) p.rot += p.vrot;
+  }
+
+  function drawParticleShape(ctx, p, recipe, color) {
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    if (recipe.spin) ctx.rotate(p.rot);
+    ctx.globalAlpha = p.alpha;
+    ctx.fillStyle = color;
+    ctx.strokeStyle = color;
+    if (recipe.glow) { ctx.shadowColor = color; ctx.shadowBlur = p.size * 2; }
+    if (recipe.shape === 'ring') {
+      ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(0, 0, p.size, 0, Math.PI * 2); ctx.stroke();
+    } else if (recipe.shape === 'leaf') {
+      ctx.beginPath();
+      ctx.ellipse(0, 0, p.size, p.size * 0.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (recipe.shape === 'spark') {
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(-p.size, 0); ctx.lineTo(p.size, 0); ctx.stroke();
+    } else {
+      ctx.beginPath(); ctx.arc(0, 0, p.size, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function renderFxOverlay() {
+    const haveShots = activeShots.length > 0;
+    const skin = activeSkin();
+    const ambientTheme = skin && skin.particleTheme !== 'none' && !prefersReducedMotion() ? skin.particleTheme : null;
+    const haveBurst = burstParticles.length > 0;
+    if (!haveShots && !ambientTheme && !haveBurst && ambientParticles.length === 0) return;
+
+    fxCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+
+    if (ambientTheme) {
+      const ambientMax = Math.round(AMBIENT_BASE * particleIntensity());
+      while (ambientParticles.length < ambientMax) ambientParticles.push(spawnAmbientParticle(ambientTheme));
+    }
+    const w = window.innerWidth, h = window.innerHeight;
+    const ambientColor = currentParticleColor();
+    ambientParticles = ambientParticles.filter(p => {
+      const recipe = PARTICLE_THEMES[p.theme];
+      if (!recipe) return false;
+      stepParticle(p, recipe);
+      const offscreen = p.y < -20 || p.y > h + 20 || p.x < -20 || p.x > w + 20;
+      if (offscreen) {
+        if (!ambientTheme) return false; // theme was turned off mid-flight - let it go
+        Object.assign(p, spawnAmbientParticle(ambientTheme));
+        return true;
+      }
+      if (ambientColor) drawParticleShape(fxCtx, p, recipe, ambientColor);
+      return true;
+    });
+
+    burstParticles = burstParticles.filter(p => {
+      const recipe = PARTICLE_THEMES[p.theme];
+      if (!recipe) return false;
+      p.life += 16;
+      stepParticle(p, recipe);
+      p.alpha = Math.max(0, 1 - p.life / p.maxLife);
+      if (p.life >= p.maxLife) return false;
+      const color = ambientColor || COLOR_MOVING;
+      drawParticleShape(fxCtx, p, recipe, color);
+      return true;
+    });
+
+    if (haveShots) drawExitShots();
+    fxCtx.globalAlpha = 1;
+  }
+
   function setSceneMood(tier, isMilestone) {
     const hex = tierMoodColor(tier);
     moodFrom = scene.background ? scene.background.clone() : new THREE.Color(hex);
@@ -423,13 +665,19 @@ const Scene3D = (() => {
 
     const edge = rayToViewportEdge(s0.x, s0.y, dx, dy);
     activeShots.push({ x0: s0.x, y0: s0.y, x1: edge.x, y1: edge.y, start: performance.now() });
+    // Phase 2: skin-themed particle burst layered alongside the green
+    // status-color flourish above - never replaces it (see PARTICLE_THEMES).
+    const skin = activeSkin();
+    if (skin) spawnBurst(s0.x, s0.y, skin.particleTheme);
   }
 
   function drawExitShots() {
+    // No fxCtx.clearRect() here anymore - renderFxOverlay() (Phase 2) now
+    // owns clearing the shared overlay canvas once per frame, since ambient
+    // particles also draw to it and would otherwise get wiped by this call.
     const now = performance.now();
     const fadeTail = 150;
     activeShots = activeShots.filter(s => now - s.start < EXIT_SHOT_DURATION_MS + fadeTail);
-    fxCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
     activeShots.forEach(shot => {
       const t = Math.min(1, (now - shot.start) / EXIT_SHOT_DURATION_MS);
       const grow = 1 - Math.pow(1 - t, 3); // ease-out
@@ -600,8 +848,14 @@ const Scene3D = (() => {
       const dark = Storage.get('theme') === 'dark';
       const skin = activeSkin();
       const baseFace = skin ? (dark ? skin.colors.face.dark : skin.colors.face.light) : (dark ? '#1a1a2e' : '#ffffff');
-      ctx.fillStyle = applyVariant(baseFace, 'face');
+      const variantFace = applyVariant(baseFace, 'face');
+      ctx.fillStyle = variantFace;
       ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+      // Material pattern is drawn from the POST-variant color (not the raw
+      // skin base) so it darkens/tints alongside the face at milestone/epic/
+      // daily/remix levels too, instead of looking static while everything
+      // else around it escalates.
+      if (skin) drawMaterialPattern(ctx, skin.material, variantFace, key, ctx.canvas.width, ctx.canvas.height);
 
       // Face-boundary seam: findBlocker() only ever checks the head's own
       // face (see [[arrowflow_open_issues]]) - a path can look like it
@@ -755,7 +1009,8 @@ const Scene3D = (() => {
           else if (sB.c > sA.c) dir = 'right';
         }
       }
-      drawPerfectArrowHead(ctx, headPt.x, headPt.y, dir, cellSize * 0.5, color);
+      const skin = activeSkin();
+      drawPerfectArrowHead(ctx, headPt.x, headPt.y, dir, cellSize * 0.5, color, skin ? skin.arrowShape : 'triangle');
     }
   }
 
@@ -900,8 +1155,12 @@ const Scene3D = (() => {
     }
   }
 
-  function drawPerfectArrowHead(ctx, x, y, dir, size, color) {
+  // `shape` (Phase 2, per-skin arrowShape) only changes the silhouette drawn
+  // in this already-rotated local frame - direction/position logic above is
+  // untouched, so every shape still points the same way 'triangle' always did.
+  function drawPerfectArrowHead(ctx, x, y, dir, size, color, shape) {
     ctx.fillStyle = color;
+    ctx.strokeStyle = color;
     ctx.beginPath();
 
     const hw = size * 0.7;
@@ -913,10 +1172,32 @@ const Scene3D = (() => {
     else if (dir === 'down') { ctx.rotate(Math.PI); ctx.translate(0, -size*0.1); }
     else if (dir === 'left') { ctx.rotate(-Math.PI / 2); ctx.translate(0, -size*0.1); }
 
-    ctx.moveTo(0, -hh);
-    ctx.lineTo(hw, hh);
-    ctx.lineTo(-hw, hh);
-    ctx.fill();
+    if (shape === 'diamond') {
+      ctx.moveTo(0, -hh); ctx.lineTo(hw * 0.75, 0); ctx.lineTo(0, hh); ctx.lineTo(-hw * 0.75, 0);
+      ctx.closePath();
+      ctx.fill();
+    } else if (shape === 'chevron') {
+      ctx.lineWidth = size * 0.3;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.moveTo(-hw, hh); ctx.lineTo(0, -hh * 0.2); ctx.lineTo(hw, hh);
+      ctx.stroke();
+    } else if (shape === 'star') {
+      const spikes = 4, outerR = hh, innerR = hh * 0.4;
+      for (let i = 0; i < spikes * 2; i++) {
+        const r = i % 2 === 0 ? outerR : innerR;
+        const a = (Math.PI / spikes) * i - Math.PI / 2;
+        const px = Math.cos(a) * r, py = Math.sin(a) * r;
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      ctx.moveTo(0, -hh);
+      ctx.lineTo(hw, hh);
+      ctx.lineTo(-hw, hh);
+      ctx.fill();
+    }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
 
@@ -949,7 +1230,7 @@ const Scene3D = (() => {
       if (shapeGroup.quaternion.angleTo(targetQuaternion) < 0.01) targetQuaternion = null;
     }
     renderer.render(scene, camera);
-    if (activeShots.length) drawExitShots();
+    renderFxOverlay();
   }
 
   function onWindowResize() {
