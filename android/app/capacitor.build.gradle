@@ -10,7 +10,11 @@ android {
 apply from: "../capacitor-cordova-android-plugins/cordova.variables.gradle"
 dependencies {
     implementation project(':capacitor-community-admob')
+    implementation project(':capacitor-community-in-app-review')
+    implementation project(':capacitor-app')
     implementation project(':capacitor-status-bar')
+    implementation project(':capawesome-capacitor-app-update')
+    implementation project(':capgo-native-purchases')
 
 }
 

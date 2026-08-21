@@ -1137,6 +1137,48 @@ const UI = (() => {
     if (confettiArea) confettiArea.innerHTML = ''; // stop any still-running burst
   }
 
+  // Android hardware/gesture back button - Capacitor's own default handling
+  // (no history to go back to in this single-page app) just exits the whole
+  // app immediately, from ANY screen or modal, which is jarring compared to
+  // an in-app back button. This mirrors what tapping the visible back/close
+  // control on the currently-open thing would do: any open modal closes via
+  // its own data-back-close target (declared per-modal in index.html, since
+  // "close" means something different per modal - e.g. pause resumes play,
+  // fail returns to menu, reset-confirm cancels rather than confirming);
+  // otherwise an overlay screen (Store/Skins/Ranking/Levels) returns to
+  // whatever its own back button targets; mid-level it opens the pause modal
+  // instead of exiting; only at the bare main menu does back actually exit.
+  function handleHardwareBack() {
+    const openModal = document.querySelector('.modal-overlay:not(.hidden)');
+    if (openModal) {
+      const closeBtnId = openModal.dataset.backClose;
+      if (closeBtnId) document.getElementById(closeBtnId).click();
+      return;
+    }
+
+    const activeScreen = document.querySelector('.ovr-screen.active');
+    if (!activeScreen) return;
+
+    const screenBackButtons = {
+      'screen-levels': 'btn-back-lvl',
+      'screen-skins': 'btn-back-skins',
+      'screen-ranking': 'btn-back-ranking',
+      'screen-store': 'btn-back-store'
+    };
+    if (screenBackButtons[activeScreen.id]) {
+      document.getElementById(screenBackButtons[activeScreen.id]).click();
+      return;
+    }
+    if (activeScreen.id === 'screen-game') {
+      document.getElementById('modal-pause').classList.remove('hidden');
+      return;
+    }
+    // Bare main menu, nothing open - let this one actually exit the app.
+    if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.App) {
+      Capacitor.Plugins.App.exitApp();
+    }
+  }
+
   function wireEvents() {
     const toggleTheme = () => {
       applyTheme(Storage.get('theme') === 'dark' ? 'light' : 'dark');
@@ -1501,6 +1543,10 @@ const UI = (() => {
     document.querySelectorAll('.bundle-btn').forEach(btn => {
       btn.addEventListener('click', (e) => handlePurchaseBundle(e.currentTarget, e.currentTarget.dataset.bundle));
     });
+
+    if (window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform() && Capacitor.Plugins && Capacitor.Plugins.App) {
+      Capacitor.Plugins.App.addListener('backButton', handleHardwareBack);
+    }
   }
 
   function runSplash() {

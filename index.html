@@ -253,7 +253,7 @@
   </div>
 
   <!-- PAUSE MODAL -->
-  <div id="modal-pause" class="modal-overlay hidden">
+  <div id="modal-pause" class="modal-overlay hidden" data-back-close="btn-resume">
     <div class="modal-box">
       <h2 class="modal-title" data-i18n="pause.title">⏸ PAUSED</h2>
       <p class="modal-sub"><span data-i18n="pause.level_label">Level</span> <span id="pause-lvl">1</span></p>
@@ -267,7 +267,7 @@
   </div>
 
   <!-- SETTINGS MODAL -->
-  <div id="modal-settings" class="modal-overlay hidden">
+  <div id="modal-settings" class="modal-overlay hidden" data-back-close="btn-settings-close">
     <div class="modal-box">
       <h2 class="modal-title" data-i18n="settings.title">⚙ SETTINGS</h2>
       <div class="settings-list">
@@ -311,7 +311,7 @@
   </div>
 
   <!-- RESET CONFIRM MODAL -->
-  <div id="modal-reset-confirm" class="modal-overlay hidden">
+  <div id="modal-reset-confirm" class="modal-overlay hidden" data-back-close="btn-reset-cancel">
     <div class="modal-box">
       <h2 class="modal-title" data-i18n="reset.title">⚠️ ล้างข้อมูล?</h2>
       <p class="modal-sub" data-i18n="reset.warning">การกระทำนี้จะลบความคืบหน้า ดาว คะแนน คำใบ้ และชื่อผู้เล่นทั้งหมดในเครื่องนี้ ไม่สามารถย้อนกลับได้ (คะแนนที่เคยขึ้นอันดับโลกแล้วจะยังคงอยู่ในตารางเหมือนเดิม)</p>
@@ -323,7 +323,7 @@
   </div>
 
   <!-- SKIN PREVIEW MODAL - opened by tapping any locked skin tile -->
-  <div id="modal-skin-preview" class="modal-overlay hidden">
+  <div id="modal-skin-preview" class="modal-overlay hidden" data-back-close="skin-preview-close">
     <div class="modal-box">
       <button id="skin-preview-close" class="icon-btn skin-preview-close-btn" aria-label="Close">✕</button>
       <canvas id="skin-preview-canvas" class="skin-preview-canvas"></canvas>
@@ -364,7 +364,7 @@
   </div>
 
   <!-- DAILY CHALLENGE TIP (shown once, right after level 3) -->
-  <div id="modal-daily-tip" class="modal-overlay hidden">
+  <div id="modal-daily-tip" class="modal-overlay hidden" data-back-close="btn-daily-tip-later">
     <div class="modal-box">
       <h2 class="modal-title" data-i18n="daily_tip.title">📅 รู้จักด่านรายวันหรือยัง?</h2>
       <!-- Text set programmatically (not data-i18n) - it needs the first streak
@@ -378,7 +378,7 @@
   </div>
 
   <!-- NICKNAME MODAL (first launch) -->
-  <div id="modal-nickname" class="modal-overlay hidden">
+  <div id="modal-nickname" class="modal-overlay hidden" data-back-close="btn-nickname-skip">
     <div class="modal-box">
       <h2 class="modal-title" data-i18n="nickname.title">👋 ตั้งชื่อผู้เล่น</h2>
       <p class="modal-sub" data-i18n="nickname.sub">ใช้แสดงในอันดับโลก (ไม่ต้องใช้อีเมล)</p>
@@ -391,7 +391,7 @@
   </div>
 
   <!-- LEADERBOARD MODAL -->
-  <div id="modal-leaderboard" class="modal-overlay hidden">
+  <div id="modal-leaderboard" class="modal-overlay hidden" data-back-close="btn-leaderboard-close">
     <div class="modal-box modal-box-wide">
       <h2 class="modal-title" data-i18n="leaderboard.title">🏆 อันดับโลก</h2>
       <div class="lb-my-row" id="lb-my-row"></div>
@@ -403,7 +403,7 @@
   </div>
 
   <!-- FAIL MODAL -->
-  <div id="modal-fail" class="modal-overlay hidden">
+  <div id="modal-fail" class="modal-overlay hidden" data-back-close="btn-fail-quit">
     <div class="modal-box">
       <h2 class="modal-title" data-i18n="fail.title">💔 หมดหัวใจ!</h2>
       <p class="modal-sub" data-i18n="fail.sub">ลองด่านนี้อีกครั้ง</p>
