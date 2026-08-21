@@ -1,0 +1,28 @@
+diff --git a/node_modules/@capgo/native-purchases/android/src/main/java/ee/forgr/nativepurchases/NativePurchasesPlugin.java b/node_modules/@capgo/native-purchases/android/src/main/java/ee/forgr/nativepurchases/NativePurchasesPlugin.java
+index dfb6cca..18b2673 100644
+--- a/node_modules/@capgo/native-purchases/android/src/main/java/ee/forgr/nativepurchases/NativePurchasesPlugin.java
++++ b/node_modules/@capgo/native-purchases/android/src/main/java/ee/forgr/nativepurchases/NativePurchasesPlugin.java
+@@ -344,11 +344,21 @@ public class NativePurchasesPlugin extends Plugin {
+                             //                          }
+                             handlePurchase(purchases.get(0), purchaseCall);
+                         } else {
+-                            // Handle any other error codes.
++                            // Handle any other error codes. Appends the real BillingResponseCode
++                            // (was previously collapsed into the same generic message for every
++                            // failure reason - user-cancelled, network error, AND
++                            // ITEM_ALREADY_OWNED all looked identical to JS callers, so an app
++                            // couldn't tell "this device/account already owns this non-consumable"
++                            // apart from an actual failure to silently re-grant it - see
++                            // arrowflow's fork of this patch).
+                             Log.d(TAG, "Purchase update failed or purchases is null");
+                             Log.i(NativePurchasesPlugin.TAG, "onPurchasesUpdated" + billingResult);
+                             if (purchaseCall != null) {
+-                                purchaseCall.reject("Purchase is not purchased");
++                                int code = billingResult.getResponseCode();
++                                String tag = code == BillingClient.BillingResponseCode.ITEM_ALREADY_OWNED
++                                    ? "ITEM_ALREADY_OWNED"
++                                    : ("CODE_" + code);
++                                purchaseCall.reject("Purchase is not purchased: " + tag);
+                             }
+                         }
+                         closeBillingClient();

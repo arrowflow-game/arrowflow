@@ -11,6 +11,13 @@
     adsRemovedUntil: 0, adsRemovedForever: false,
     levelsSinceInterstitial: 0, nextInterstitialThreshold: 0,
     selectedSkin: null, skinTutorialSeen: false,
+    // One-time educational alert shown right after the player's first-ever
+    // successful non-consumable real-money purchase (skin/bundle/remove-ads-
+    // forever) - explains that re-tapping the same buy button after a
+    // reinstall/new device re-unlocks it for free (Play Billing already
+    // knows the account owns it - see js/iap.js's isAlreadyOwnedError()).
+    // Never shown again once true, regardless of how many more purchases follow.
+    iapRestoreHintShown: false,
     // gems/hints = earned via play, reset on resetAll(). paidGems/paidHints = bought with
     // real money (gem packs / hint packs), always survive resetAll() - see resetAll()'s
     // keep-list below and spendGems()'s earned-first spend order.

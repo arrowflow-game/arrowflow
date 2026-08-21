@@ -164,6 +164,20 @@ const Iap = (() => {
     return (bundle && cachedPriceLabels[bundle.productId]) || null;
   }
 
+  // ITEM_ALREADY_OWNED fires when re-attempting a non-consumable (a skin,
+  // bundle, or the remove-ads-forever tier) this Google account already
+  // owns - the exact scenario a player hits after reinstalling the app or
+  // switching devices, since Play Billing itself remembers the purchase even
+  // though local Storage doesn't. Requires the patched
+  // patches/@capgo+native-purchases+*.patch (see postinstall script) - the
+  // plugin's unpatched Android code collapses every non-OK billing response
+  // code, including this one, into the same generic rejection, making a
+  // genuinely-already-owned item indistinguishable from an actual failure
+  // or a user-cancelled purchase sheet.
+  function isAlreadyOwnedError(err) {
+    return !!err && typeof err.message === 'string' && err.message.includes('ITEM_ALREADY_OWNED');
+  }
+
   async function purchaseProductFor(entry, isConsumable, onGranted, onFailed) {
     if (!entry || !isNative()) {
       if (onFailed) onFailed();
@@ -176,7 +190,14 @@ const Iap = (() => {
         isConsumable
       });
       onGranted(entry);
-    } catch {
+    } catch (err) {
+      if (!isConsumable && isAlreadyOwnedError(err)) {
+        // Already genuinely owned by this account - treat exactly like a
+        // fresh successful purchase (same grant path, no re-charge since
+        // Google itself didn't charge anything here either).
+        onGranted(entry);
+        return;
+      }
       // Covers both a real error and the user cancelling the purchase sheet -
       // either way nothing was charged, so just restore the button.
       if (onFailed) onFailed();

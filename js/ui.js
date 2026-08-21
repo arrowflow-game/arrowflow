@@ -393,6 +393,17 @@ const UI = (() => {
     }
   }
 
+  // One-time nudge, shown right after the player's first-ever successful
+  // non-consumable real-money purchase (permanent skin/bundle/remove-ads-
+  // forever) - teaches the free re-tap-to-restore flow (see js/iap.js's
+  // isAlreadyOwnedError()) before they'd ever need it, rather than leaving
+  // them to discover it cold after a reinstall. Fires at most once, ever.
+  function maybeShowIapRestoreHint() {
+    if (Storage.get('iapRestoreHintShown')) return;
+    Storage.set('iapRestoreHintShown', true);
+    alert(I18N.t('iap.restore_hint'));
+  }
+
   // Opens the Store screen scrolled to the remove-ads section - shared by the HUD
   // badge and the fail-modal nudge, both of which only make sense as a shortcut
   // once ads aren't already removed (buildStoreScreen/updateFailContinueAdUI hide
@@ -422,6 +433,9 @@ const UI = (() => {
         alert(tierKey === 'forever'
           ? I18N.t('iap.purchase_success_forever')
           : I18N.t('iap.purchase_success', { n: Storage.daysAdsRemovedLeft() }));
+        // Only the 'forever' tier is non-consumable (7/15/30-day tiers can
+        // always just be bought again if lost, no restore concept needed).
+        if (tierKey === 'forever') maybeShowIapRestoreHint();
       },
       () => {
         btn.disabled = false;
@@ -477,6 +491,7 @@ const UI = (() => {
         buildStoreScreen();
         buildSkinsScreen();
         alert(I18N.t('iap.bundle_success'));
+        maybeShowIapRestoreHint();
       },
       () => {
         btn.disabled = false;
@@ -971,6 +986,7 @@ const UI = (() => {
             Storage.grantIapSkin(skin.id);
             closeSkinPreview();
             buildSkinsScreen();
+            maybeShowIapRestoreHint();
           }, () => {
             // Was silent before (button just re-enabled with no feedback at
             // all) - reported as "bought it, nothing happened, looks like a
@@ -1019,6 +1035,7 @@ const UI = (() => {
             Storage.grantIapSkin(skin.id);
             closeSkinPreview();
             buildSkinsScreen();
+            maybeShowIapRestoreHint();
           }, () => {
             altBtn.disabled = false;
             alert(I18N.t('iap.purchase_failed'));

@@ -5,7 +5,8 @@
   "description": "ArrowFlow - 3D Brain Puzzle",
   "scripts": {
     "build": "node scripts/build-www.js",
-    "cap:sync": "npm run build && npx cap sync android"
+    "cap:sync": "npm run build && npx cap sync android",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@capacitor-community/admob": "^7.2.0",
@@ -19,6 +20,7 @@
     "@capgo/native-purchases": "7.19.3"
   },
   "devDependencies": {
-    "@capacitor/assets": "^3.0.5"
+    "@capacitor/assets": "^3.0.5",
+    "patch-package": "^8.0.1"
   }
 }
