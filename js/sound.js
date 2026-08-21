@@ -245,6 +245,28 @@ const Sound = (() => {
     stopFallbackMusic();
   }
 
+  // pauseMusic/resumeMusic: like stopMusic/startMusic but preserve playback
+  // position - for brief mid-level detours (Store/Skins opened from the
+  // in-game HUD) that aren't really "leaving the level", so the same track
+  // just continues where it left off instead of releasing the <audio>
+  // element and fading a brand new one in from 0:00 (reported directly as
+  // "music restarts every time" going into Store/Skins and back). Real
+  // level exits still go through stopMusic/startMusic via showScreen().
+  function pauseMusic() {
+    if (!musicPlaying) return;
+    musicPlaying = false;
+    clearFades();
+    if (currentAudioEl) currentAudioEl.pause();
+    if (usingFallbackSynth) stopFallbackMusic();
+  }
+
+  function resumeMusic() {
+    if (musicPlaying || !musicEnabled()) return;
+    musicPlaying = true;
+    if (currentAudioEl) currentAudioEl.play().catch(() => {});
+    else startMusic();
+  }
+
   // <audio> elements (unlike a bare AudioContext) already pause themselves
   // when backgrounded on most platforms, but the synth fallback's oscillators
   // keep running via the shared AudioContext - suspend/resume that explicitly.
@@ -260,5 +282,5 @@ const Sound = (() => {
     }
   });
 
-  return { playSlide, playBump, playWin, playFail, startMusic, stopMusic, setLevelContext };
+  return { playSlide, playBump, playWin, playFail, startMusic, stopMusic, pauseMusic, resumeMusic, setLevelContext };
 })();

@@ -52,8 +52,14 @@ const UI = (() => {
   function showScreen(id) {
     document.querySelectorAll('.ovr-screen').forEach(s => s.classList.remove('active'));
     document.getElementById(id).classList.add('active');
-    // Background music only plays while actually in a level.
-    if (id === 'screen-game') Sound.startMusic();
+    // Background music only plays while actually in a level. Store/Skins are
+    // reachable mid-level via the in-game HUD as a brief detour (not really
+    // "leaving" the level), so they pause/resume in place rather than
+    // stopping/restarting the track from 0:00 - every other screen (menu,
+    // level select, ranking) really does end the level, so those still stop
+    // it outright.
+    if (id === 'screen-game') Sound.resumeMusic();
+    else if (id === 'screen-store' || id === 'screen-skins') Sound.pauseMusic();
     else Sound.stopMusic();
   }
 
@@ -168,8 +174,14 @@ const UI = (() => {
       list.innerHTML = '<div class="stats-empty">' + escapeHtml(I18N.t('stats.empty')) + '</div>';
       return;
     }
-    // Most recently reached (highest level) first, matches how a player wants to check progress.
-    entries.slice().reverse().forEach(e => {
+    // Most recently reached (highest level) first, matches how a player wants to check
+    // progress - and only the most recent RECENT_HISTORY_CAP get built into the DOM at
+    // all (not just visually scroll-capped), since a player 300 levels in otherwise means
+    // building/laying out hundreds of rows every time this screen opens for history nobody
+    // scrolls back to - a hint line explains the rest still exists, just isn't rendered.
+    const RECENT_HISTORY_CAP = 30;
+    const recent = entries.slice().reverse().slice(0, RECENT_HISTORY_CAP);
+    recent.forEach(e => {
       const row = document.createElement('div');
       row.className = 'stats-row';
       row.innerHTML =
@@ -179,6 +191,12 @@ const UI = (() => {
         '<span class="stats-row-score">' + (e.score || 0) + '</span>';
       list.appendChild(row);
     });
+    if (entries.length > RECENT_HISTORY_CAP) {
+      const hint = document.createElement('div');
+      hint.className = 'stats-more-hint';
+      hint.textContent = I18N.t('stats.more_hidden', { n: entries.length - RECENT_HISTORY_CAP });
+      list.appendChild(hint);
+    }
   }
 
   function buildStoreScreen() {

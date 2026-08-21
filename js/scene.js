@@ -1666,17 +1666,24 @@ const Scene3D = (() => {
     }
     void rand; // seed reserved for future jitter, geometry-derived pattern is enough for now
   }
+  // Sharp point only at the front (-y, direction of travel), rounded/lobed
+  // leaf-base at the back (+y, where the rope trails in) - the old shape
+  // tapered to a point at BOTH ends (a symmetric vesica/eye), which read
+  // ambiguously as "which end is actually the tip" and got reported as being
+  // mistaken for the rope's tail rather than the arrowhead. A one-directional
+  // point matches how every other skin's arrowShape already reads.
   function drawVineLeafTip(ctx, size, color) {
     ctx.fillStyle = mixHex(color, '#2e7d32', 0.35);
     ctx.beginPath();
-    ctx.moveTo(0, -size * 0.7);
-    ctx.quadraticCurveTo(size * 0.55, -size * 0.1, 0, size * 0.55);
-    ctx.quadraticCurveTo(-size * 0.55, -size * 0.1, 0, -size * 0.7);
+    ctx.moveTo(0, -size * 0.85);
+    ctx.quadraticCurveTo(size * 0.5, -size * 0.05, size * 0.4, size * 0.45);
+    ctx.quadraticCurveTo(0, size * 0.28, -size * 0.4, size * 0.45);
+    ctx.quadraticCurveTo(-size * 0.5, -size * 0.05, 0, -size * 0.85);
     ctx.fill();
     ctx.strokeStyle = darkenHex(color, 0.6);
     ctx.lineWidth = Math.max(1, size * 0.06);
     ctx.beginPath();
-    ctx.moveTo(0, -size * 0.6); ctx.lineTo(0, size * 0.45);
+    ctx.moveTo(0, -size * 0.7); ctx.lineTo(0, size * 0.32);
     ctx.stroke();
   }
 

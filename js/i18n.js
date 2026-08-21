@@ -63,6 +63,7 @@ const I18N = (() => {
       'stats.empty': 'ยังไม่มีด่านที่ผ่าน',
       'stats.row_level': 'ด่าน',
       'stats.best_row': 'ด่าน {level} ({score} คะแนน)',
+      'stats.more_hidden': 'และอีก {n} ด่านก่อนหน้านี้ (แสดงเฉพาะด่านล่าสุด)',
 
       'pause.title': '⏸ หยุดชั่วคราว',
       'pause.level_label': 'ด่าน',
@@ -252,6 +253,7 @@ const I18N = (() => {
       'stats.empty': 'No levels cleared yet',
       'stats.row_level': 'Level',
       'stats.best_row': 'Level {level} ({score} pts)',
+      'stats.more_hidden': 'and {n} earlier level(s) not shown',
 
       'pause.title': '⏸ PAUSED',
       'pause.level_label': 'Level',
