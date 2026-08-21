@@ -118,7 +118,7 @@ const Game = (() => {
       isMilestone: isMilestoneLevel(state.levelNum),
       difficulty: state.levelData.difficulty,
       remaining: state.paths.length - state.clearedCount,
-      hints: Storage.get('hints'),
+      hints: Storage.getHintsTotal(),
       lives: state.lives,
       livesMax: LIVES_MAX,
       canUndo: state.canUndo
@@ -269,12 +269,12 @@ const Game = (() => {
 
   function useHint() {
     if (state.failed || state.won) return;
-    if (Storage.get('hints') <= 0) return;
+    if (Storage.getHintsTotal() <= 0) return;
 
     const target = findOpenPath();
     if (!target) return;
 
-    Storage.addHints(-1);
+    Storage.spendHint();
     state.hintsUsed++;
     Scene3D.highlightPath(target.id);
     UI.updateHUD(buildHudPayload());
@@ -319,7 +319,7 @@ const Game = (() => {
   // move count, and hints-used all stay intact (unlike restart()).
   function continueAfterFail() {
     if (!state.failed) return;
-    state.lives = LIVES_MAX;
+    state.lives = 1;
     state.failed = false;
     UI.updateHUD(buildHudPayload());
   }
@@ -421,16 +421,35 @@ const Game = (() => {
     const isCampaignFinale = state.mode === 'campaign' && state.levelNum === 300;
 
     let newlyUnlockedSkin = null;
+    let gemsEarned = 0;
+    let gemsBonusType = null; // null | 'daily' | 'milestone', drives the win screen's bonus badge
+    let hintsBonus = 0;
     if (state.mode === 'daily') {
+      const prevStreak = Storage.get('dailyStreak') || 0;
       const rewarded = Storage.completeDaily();
-      if (rewarded) Storage.addHints(2); // bonus hints, only on first completion of the day
+      if (rewarded) {
+        Storage.addHints(2); // bonus hints, only on first completion of the day
+        gemsEarned = Storage.awardDailyGems(stars);
+        if (gemsEarned > 0) gemsBonusType = 'daily';
+      }
+      const newStreak = Storage.get('dailyStreak') || 0;
+      newlyUnlockedSkin = Skins.ALL.find(s => s.unlock.type === 'streak' && s.unlock.value > prevStreak && s.unlock.value <= newStreak) || null;
+      // Permanently record every streak-skin threshold reached so far (not just the one
+      // picked for the win banner above) - grantStreakSkin is idempotent, and re-granting
+      // already-owned ones every daily win is harmless. This is what keeps a skin unlocked
+      // even after the streak itself later breaks - see storage.js's ownedStreakSkins.
+      Skins.ALL.filter(s => s.unlock.type === 'streak' && s.unlock.value <= newStreak)
+        .forEach(s => Storage.grantStreakSkin(s.id));
     } else if (state.mode === 'remix') {
       Storage.completeRemix(state.remixIndex, stars, score);
     } else {
       const prevUnlocked = Storage.get('highestUnlocked') || 1;
-      Storage.completeLevel(state.levelNum, stars, state.moves, score, elapsedSec);
+      const result = Storage.completeLevel(state.levelNum, stars, state.moves, score, elapsedSec);
+      gemsEarned = result.gemsEarned;
+      if (result.isMilestoneGems) gemsBonusType = 'milestone';
+      hintsBonus = result.hintsBonus;
       const newUnlocked = Storage.get('highestUnlocked') || 1;
-      newlyUnlockedSkin = Skins.ALL.find(s => s.unlockLevel > prevUnlocked && s.unlockLevel <= newUnlocked) || null;
+      newlyUnlockedSkin = Skins.ALL.find(s => s.unlock.type === 'level' && s.unlock.value > prevUnlocked && s.unlock.value <= newUnlocked) || null;
     }
     Storage.noteLevelCompletedForInterstitial();
     UI.updateHUD(buildHudPayload());
@@ -441,7 +460,7 @@ const Game = (() => {
       hints_used: state.hintsUsed, time_sec: Math.round(elapsedSec)
     });
     if (isCampaignFinale) Analytics.logEvent('campaign_complete', {});
-    UI.showWin(state.levelNum, state.hintsUsed, stars, score, elapsedSec, state.mode, isCampaignFinale, newlyUnlockedSkin);
+    UI.showWin(state.levelNum, state.hintsUsed, stars, score, elapsedSec, state.mode, isCampaignFinale, newlyUnlockedSkin, gemsEarned, gemsBonusType, hintsBonus);
   }
 
   function onFail() {

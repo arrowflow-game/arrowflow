@@ -88,6 +88,7 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
    English labels have room to spare either way. */
 .menu-btn-row .btn { flex: 1; padding: 12px 8px; font-size: 0.9rem; gap: 5px; white-space: nowrap; }
 #btn-daily.daily-done { opacity: 0.6; }
+.daily-streak-badge { text-align: center; font-size: 0.8rem; font-weight: 700; color: #e8641a; margin-top: -4px; }
 .menu-progress-info { display: flex; justify-content: space-between; font-weight: 800; font-size: 0.9rem; margin-bottom: 5px; }
 .progress-track { height: 10px; background: var(--bg-secondary); border-radius: 5px; overflow: hidden; }
 .progress-fill { height: 100%; background: var(--accent); width: 0%; transition: width 0.5s; }
@@ -206,6 +207,7 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
 .win-stats-row { display: flex; justify-content: space-around; margin-bottom: 25px; }
 .wstat-lbl { font-size: 0.7rem; font-weight: 800; color: var(--text-secondary); text-transform: uppercase; }
 .wstat-val { font-size: 1.8rem; font-family: var(--font-logo); font-weight: 900; color: var(--accent); }
+.wstat-bonus { font-size: 0.65rem; font-weight: 700; color: var(--star-color); margin-top: 2px; }
 
 .levels-ovr { background: var(--bg-primary); justify-content: flex-start; }
 .levels-panel { width: 100%; max-width: 500px; display: flex; flex-direction: column; height: 100%; }
@@ -219,14 +221,32 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
 .lvl-btn.locked { background: var(--bg-secondary); color: var(--text-secondary); opacity: 0.6; }
 .lvl-btn-stars { font-size: 0.5rem; letter-spacing: 1px; color: var(--star-color); margin-top: 2px; }
 
+.skins-view-tabs { display: flex; gap: 8px; padding: 0 20px 12px; }
+.skins-view-tab { flex: 1; padding: 8px 12px; border-radius: 99px; font-weight: 800; font-size: 0.85rem; background: var(--bg-secondary); color: var(--text-secondary); }
+.skins-view-tab.active { background: var(--accent); color: var(--text-on-btn); }
+.menu-bundle-promo-btn { border-color: #ffb020; color: #ffb020; }
 .skins-grid-wrap { grid-template-columns: repeat(2, 1fr); gap: 14px; }
-.skin-btn { aspect-ratio: 1.3; border-radius: 14px; font-weight: 800; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; background: var(--bg-card); border: 2px solid transparent; box-shadow: 0 2px 8px rgba(0,0,0,0.05); transition: transform 0.2s; padding: 10px; }
+.skin-group-header { grid-column: 1 / -1; font-size: 0.9rem; font-weight: 800; color: var(--text-secondary); margin: 10px 0 -4px; padding-top: 6px; border-top: 1px solid var(--bg-card); }
+.skin-group-header:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+.skin-btn { position: relative; aspect-ratio: 1.3; border-radius: 14px; font-weight: 800; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; background: var(--bg-card); border: 2px solid transparent; box-shadow: 0 2px 8px rgba(0,0,0,0.05); transition: transform 0.2s; padding: 10px; }
+.skin-btn-premium-badge { position: absolute; top: 6px; right: 8px; font-size: 0.95rem; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.25)); }
 .skin-swatch { width: 44px; height: 44px; border-radius: 50%; border: 3px solid var(--bg-primary); box-shadow: 0 0 0 2px currentColor; }
 .skin-btn-name { font-size: 0.85rem; color: var(--text-primary); }
 .skin-btn.selected { border-color: var(--accent); }
-.skin-btn.locked { opacity: 0.55; background: var(--bg-secondary); }
+.skin-btn.locked { opacity: 0.7; background: var(--bg-secondary); cursor: pointer; }
 .skin-btn-lock { font-size: 0.7rem; color: var(--text-secondary); font-weight: 600; }
 .win-new-skin-btn { width: 100%; margin: 0 0 14px; padding: 10px; border-radius: 10px; border: 2px dashed var(--accent); background: transparent; color: var(--accent); font-weight: 800; font-size: 0.85rem; }
+
+/* Gems currency display - menu card + in-game HUD */
+#menu-gems { color: var(--text-secondary); font-weight: 700; margin-left: 8px; }
+.hud-gems-badge { font-weight: 800; color: var(--text-primary); padding: 4px 10px; }
+
+/* Skin preview modal - opened by tapping a locked tile */
+#modal-skin-preview .modal-box { position: relative; }
+.skin-preview-close-btn { position: absolute; top: 14px; right: 14px; }
+.skin-preview-canvas { width: 100%; max-width: 260px; aspect-ratio: 1; margin: 10px auto 6px; display: block; border-radius: 14px; background: var(--bg-secondary); }
+#skin-preview-name { text-align: center; }
+#skin-preview-condition { text-align: center; }
 
 /* Stats screen */
 .stats-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 0 20px 15px; }

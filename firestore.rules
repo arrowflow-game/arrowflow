@@ -25,12 +25,20 @@ service cloud.firestore {
         && request.resource.data.nickname is string
         && request.resource.data.nickname.size() > 0
         && request.resource.data.nickname.size() <= 20
-        && request.resource.data.totalScore is int
-        && request.resource.data.totalScore >= 0
-        && request.resource.data.totalScore <= 10000000
         && request.resource.data.highestLevel is int
         && request.resource.data.highestLevel >= 1
-        && request.resource.data.highestLevel <= 300;
+        && request.resource.data.highestLevel <= 300
+        && request.resource.data.totalScore is int
+        && request.resource.data.totalScore >= 0
+        // Bound proportionally to highestLevel instead of a flat constant - a
+        // player who has only reached level 10 can't legitimately have a score
+        // implying all 300 levels cleared. 25650 = the real worst-case single-level
+        // score computed from js/game.js's computeScore() (500 base + maxed time/
+        // hearts/star bonuses) against the densest real level in js/levels.js
+        // (485 paths, level 262/ASCENSION) - still just a coarse sanity bound, not
+        // real anti-cheat (see file header), but far tighter for anyone short of
+        // the endgame than the old flat 10,000,000 was.
+        && request.resource.data.totalScore <= request.resource.data.highestLevel * 25650;
     }
 
     // One doc per campaign level (1-300), holding the single highest score

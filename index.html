@@ -54,18 +54,21 @@
           <button id="btn-levels" class="btn btn-outline" data-i18n="menu.levels">☰ Levels</button>
           <button id="btn-daily" class="btn btn-outline" data-i18n="menu.daily">📅 Daily</button>
         </div>
+        <div id="daily-streak-badge" class="daily-streak-badge hidden"></div>
         <div class="menu-btn-row">
           <button id="btn-ranking" class="btn btn-outline" data-i18n="menu.ranking">🏆 อันดับ</button>
           <button id="btn-store" class="btn btn-outline" data-i18n="menu.store">🛒 ร้านค้า</button>
         </div>
         <div class="menu-btn-row">
           <button id="btn-skins" class="btn btn-outline" data-i18n="menu.skins">🎨 สกิน</button>
+          <button id="btn-bundle-promo" class="btn btn-outline menu-bundle-promo-btn hidden" data-i18n="menu.bundle_promo">🎁 ชุดสกินสุดคุ้ม</button>
         </div>
       </div>
       <div class="menu-progress-wrap">
         <div class="menu-progress-info">
           <span><span data-i18n="menu.level_label">Level</span> <strong id="menu-cur-lvl">1</strong> / 300</span>
           <span id="menu-total-stars">★ 0</span>
+          <span id="menu-gems">💎 0</span>
         </div>
         <div class="progress-track"><div class="progress-fill" id="menu-prog"></div></div>
       </div>
@@ -106,6 +109,7 @@
       </div>
       <div class="hud-controls-group hud-right-group">
         <button id="btn-hint" class="hud-hint-btn">💡 <span id="hud-hints">3</span></button>
+        <span id="hud-gems" class="hud-gems-badge">💎 <span id="hud-gems-count">0</span></span>
         <button id="btn-hud-store" class="icon-btn hud-store-icon" aria-label="Store">🛒</button>
       </div>
     </header>
@@ -139,6 +143,10 @@
       <div class="levels-hdr">
         <button id="btn-back-skins" class="icon-btn">←</button>
         <h2 data-i18n="skins.title">SKINS</h2>
+      </div>
+      <div class="skins-view-tabs">
+        <button id="btn-skins-view-unlock" class="skins-view-tab active" data-i18n="skins.view_by_unlock">By Unlock</button>
+        <button id="btn-skins-view-style" class="skins-view-tab" data-i18n="skins.view_by_style">By Style</button>
       </div>
       <div class="levels-grid-wrap skins-grid-wrap" id="skins-grid"></div>
     </div>
@@ -202,6 +210,15 @@
           <button class="btn btn-primary remove-ads-tier-btn" id="btn-remove-ads-forever" data-tier="forever"></button>
         </div>
       </div>
+      <div class="store-section" id="store-gems-section">
+        <div class="store-section-hdr"><span data-i18n="store.gem_packs">💎 ซื้อเพชร</span></div>
+        <div class="store-packs">
+          <button class="btn btn-outline gem-pack-btn" id="btn-gems-100" data-gems="100"></button>
+          <button class="btn btn-outline gem-pack-btn" id="btn-gems-300" data-gems="300"></button>
+          <button class="btn btn-outline gem-pack-btn" id="btn-gems-800" data-gems="800"></button>
+          <button class="btn btn-primary gem-pack-btn" id="btn-gems-2000" data-gems="2000"></button>
+        </div>
+      </div>
       <div class="store-section">
         <div class="store-section-hdr">
           <span data-i18n="store.hints_section">💡 คำใบ้</span>
@@ -216,6 +233,15 @@
           <button class="btn btn-outline store-pack-btn" data-hints="10" data-i18n="store.pack_10">10 คำใบ้ - ฿29</button>
           <button class="btn btn-outline store-pack-btn" data-hints="30" data-i18n="store.pack_30">30 คำใบ้ - ฿69</button>
           <button class="btn btn-outline store-pack-btn" data-hints="100" data-i18n="store.pack_100">100 คำใบ้ - ฿149</button>
+        </div>
+      </div>
+      <div class="store-section" id="store-bundles-section">
+        <div class="store-section-hdr"><span data-i18n="store.skin_bundles">🎁 แพ็คเกจสกิน</span></div>
+        <div id="store-bundle-status" class="fail-ad-remaining"></div>
+        <div class="store-packs">
+          <button class="btn btn-outline bundle-btn" id="btn-bundle-streak" data-bundle="streak"></button>
+          <button class="btn btn-outline bundle-btn" id="btn-bundle-royale" data-bundle="royale"></button>
+          <button class="btn btn-primary bundle-btn" id="btn-bundle-all" data-bundle="all"></button>
         </div>
       </div>
     </div>
@@ -265,6 +291,10 @@
           <button id="btn-replay-tutorial" class="btn btn-outline btn-sm" data-i18n="settings.tutorial_btn">ดูอีกครั้ง</button>
         </div>
         <div class="settings-row">
+          <span class="settings-label" data-i18n="settings.skins">🎨 สกิน</span>
+          <button id="btn-settings-skins" class="btn btn-outline btn-sm" data-i18n="settings.skins_btn">เปลี่ยนสกิน</button>
+        </div>
+        <div class="settings-row">
           <span class="settings-label" data-i18n="settings.reset">🗑️ ล้างข้อมูล</span>
           <button id="btn-open-reset" class="btn btn-outline btn-sm" data-i18n="settings.reset_btn">ล้างข้อมูล</button>
         </div>
@@ -287,6 +317,17 @@
     </div>
   </div>
 
+  <!-- SKIN PREVIEW MODAL - opened by tapping any locked skin tile -->
+  <div id="modal-skin-preview" class="modal-overlay hidden">
+    <div class="modal-box">
+      <button id="skin-preview-close" class="icon-btn skin-preview-close-btn" aria-label="Close">✕</button>
+      <canvas id="skin-preview-canvas" class="skin-preview-canvas"></canvas>
+      <h2 id="skin-preview-name" class="modal-title"></h2>
+      <p id="skin-preview-condition" class="modal-sub"></p>
+      <div id="skin-preview-action" class="modal-btns"></div>
+    </div>
+  </div>
+
   <!-- WIN MODAL -->
   <div id="modal-win" class="modal-overlay hidden">
     <div id="confetti-area" class="confetti-area"></div>
@@ -300,7 +341,8 @@
       <div class="win-stats-row">
         <div class="wstat"><div class="wstat-lbl" data-i18n="win.score">คะแนน</div><div class="wstat-val" id="ws-score">0</div></div>
         <div class="wstat"><div class="wstat-lbl" data-i18n="win.time">เวลา</div><div class="wstat-val" id="ws-time">0:00</div></div>
-        <div class="wstat"><div class="wstat-lbl" data-i18n="win.hints">Hints</div><div class="wstat-val" id="ws-hints">0</div></div>
+        <div class="wstat"><div class="wstat-lbl" data-i18n="win.hints">Hints</div><div class="wstat-val" id="ws-hints">0</div><div class="wstat-bonus hidden" id="ws-hints-bonus"></div></div>
+        <div class="wstat hidden" id="ws-gems-row"><div class="wstat-lbl" data-i18n="win.gems">💎</div><div class="wstat-val" id="ws-gems">0</div><div class="wstat-bonus hidden" id="ws-gems-bonus"></div></div>
       </div>
       <div class="win-level-best-row" id="win-level-best-row">
         <span><span data-i18n="win.personal_best">สถิติของคุณด่านนี้:</span> <b id="ws-personal-best">…</b></span>
@@ -320,7 +362,9 @@
   <div id="modal-daily-tip" class="modal-overlay hidden">
     <div class="modal-box">
       <h2 class="modal-title" data-i18n="daily_tip.title">📅 รู้จักด่านรายวันหรือยัง?</h2>
-      <p class="modal-sub" data-i18n="daily_tip.text">ด่านปริศนาใหม่ทุกวัน เล่นจบครั้งแรกของวันรับ hint ฟรีทันที 2 อัน แถมเล่นต่อเนื่องทุกวันจะได้สถิติ streak สะสมด้วย!</p>
+      <!-- Text set programmatically (not data-i18n) - it needs the first streak
+           skin's own localized name substituted in, see ui.js's dailyTipText(). -->
+      <p class="modal-sub" id="daily-tip-text"></p>
       <div class="modal-btns">
         <button id="btn-daily-tip-go" class="btn btn-primary" data-i18n="daily_tip.go">ไปเล่นเลย</button>
         <button id="btn-daily-tip-later" class="btn btn-outline" data-i18n="daily_tip.later">เล่นทีหลัง</button>

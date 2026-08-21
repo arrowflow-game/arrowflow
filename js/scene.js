@@ -12,12 +12,73 @@ const Scene3D = (() => {
   let frontMaterials = [];
   let backMaterials = [];
 
+  // Shared clock for the 'holo' material's rainbow animation - see updateFrame()'s
+  // use of it and the animate() loop's periodic tick below for why this can't just
+  // be a fresh performance.now() read at each face's own redraw time.
+  let holoSyncMs = 0;
+  let lastHoloSyncTickMs = 0;
+  const HOLO_SYNC_INTERVAL_MS = 10000;
+
   // Per-cell texture resolution - every exposed face in the polycube system
   // (see [[arrowflow_level_roadmap]] v7) is a uniform unitGrid x unitGrid
   // square, so each face's canvas is simply unitGrid*PX_PER_CELL on a side.
   // 32 keeps the densest tier's unitGrid (6) well inside a crisp 384px face.
   const PX_PER_CELL = 32;
   const EDGES = ['top', 'bottom', 'left', 'right'];
+
+  // Premium "mascot" skins (js/skins.js's mascotIcon field, e.g. streakbunny/
+  // gemcat/royalebear) - real transparent-PNG artwork (icons/mascots/*.png,
+  // cleaned up from AI-generated source images via
+  // scripts/mascot-bg-remove.js), not a code-drawn vector silhouette. Kicked
+  // off once at module load, not lazily per-skin-selection, so the first
+  // frame that needs one doesn't have to wait on network - drawMascotIcon()
+  // below just no-ops until an image's .complete flips true.
+  const MASCOT_ICON_NAMES = ['bunny', 'panda', 'cat', 'dolphin', 'bear', 'dog'];
+  const mascotImages = {};
+  MASCOT_ICON_NAMES.forEach(name => {
+    const img = new Image();
+    img.src = 'icons/mascots/' + name + '.png';
+    mascotImages[name] = img;
+  });
+  // Scratch canvas reused across calls (composited fresh each time, cheap -
+  // no persistent state carried between skins/faces) so the glossy sheen
+  // below can be masked to just the icon's own opaque pixels via
+  // source-atop, rather than smearing across the whole face texture.
+  let mascotIconOffscreen = null;
+  function drawMascotIcon(ctx, icon, w, h) {
+    const img = mascotImages[icon];
+    if (!img || !img.complete || !img.naturalWidth) return;
+    const size = Math.min(w, h) * 0.82;
+
+    if (!mascotIconOffscreen) mascotIconOffscreen = document.createElement('canvas');
+    const off = mascotIconOffscreen;
+    off.width = size; off.height = size;
+    const octx = off.getContext('2d');
+    octx.clearRect(0, 0, size, size);
+    // Soft drop shadow under the icon itself - lifts it off the flat face
+    // background for a bit of depth, reported directly as wanted alongside
+    // the sheen below ("ทำให้รูปของสัตว์ดูมีมิติขึ้นหรือวาววับขึ้น").
+    octx.shadowColor = 'rgba(0,0,0,0.55)';
+    octx.shadowBlur = size * 0.1;
+    octx.shadowOffsetY = size * 0.045;
+    octx.drawImage(img, 0, 0, size, size);
+    octx.shadowColor = 'transparent';
+    octx.shadowBlur = 0;
+    octx.shadowOffsetY = 0;
+    // Diagonal glossy sheen, masked to the icon's own opaque pixels only
+    // (source-atop) so it never bleeds onto the transparent margin around it.
+    octx.globalCompositeOperation = 'source-atop';
+    const sheen = octx.createLinearGradient(0, 0, size * 0.6, size);
+    sheen.addColorStop(0, 'rgba(255,255,255,0)');
+    sheen.addColorStop(0.42, 'rgba(255,255,255,0.65)');
+    sheen.addColorStop(0.55, 'rgba(255,255,255,0.1)');
+    sheen.addColorStop(1, 'rgba(255,255,255,0)');
+    octx.fillStyle = sheen;
+    octx.fillRect(0, 0, size, size);
+    octx.globalCompositeOperation = 'source-over';
+
+    ctx.drawImage(off, (w - size) / 2, (h - size) / 2, size, size);
+  }
   // World-space length of the whole polycube's LONGEST bounding-box axis -
   // kept constant across every level (same role the old fixed CUBE_SIZE=2
   // played) so the camera never needs to re-frame per level; only the
@@ -67,9 +128,20 @@ const Scene3D = (() => {
   let moodFrom = null, moodTo = null, moodStart = 0;
   let milestoneMoodActive = false;
 
+  // Background now leans toward the active skin's own face color (a light
+  // tint, not a replacement) so picking a skin recolors the whole scene, not
+  // just the cube - same "never clash by construction" trick as the
+  // milestone/epic variant blend below, just blending toward the skin's hue
+  // instead of the tier's. 'default'/no skin selected stays pixel-identical
+  // to the original tier-only background, per the skin system's phase-1 rule.
   function tierMoodColor(tier) {
     const pair = TIER_COLORS[tier] || TIER_COLORS.AWAKENING;
-    return pair[Storage.get('theme') === 'dark' ? 'dark' : 'light'];
+    const base = pair[Storage.get('theme') === 'dark' ? 'dark' : 'light'];
+    const skin = activeSkin();
+    if (!skin || skin.id === 'default') return base;
+    const dark = Storage.get('theme') === 'dark';
+    const tint = dark ? skin.colors.face.dark : skin.colors.face.light;
+    return mixHex(base, tint, 0.18);
   }
 
   // --- Small hex color helpers for the skin "variant" effect below - pure
@@ -109,10 +181,10 @@ const Scene3D = (() => {
   // screenshot). Toning down the blend and adding a small darken keeps the
   // festive tint recognizable without the glare.
   const VARIANT_RECIPES = {
-    milestone: { faceBlend: 0.35, faceDarken: 0.85, pathBlend: 0.20 },
-    epic:      { faceBlend: 0.55, faceDarken: 0.72, pathBlend: 0.32 },
-    daily:     { faceBlend: 0.14, faceDarken: 0.93, pathBlend: 0.10 },
-    remix:     { faceBlend: 0.14, faceDarken: 0.93, pathBlend: 0.10 }
+    milestone: { faceBlend: 0.35, faceDarken: 0.93, pathBlend: 0.20 },
+    epic:      { faceBlend: 0.55, faceDarken: 0.85, pathBlend: 0.32 },
+    daily:     { faceBlend: 0.14, faceDarken: 0.96, pathBlend: 0.10 },
+    remix:     { faceBlend: 0.14, faceDarken: 0.96, pathBlend: 0.10 }
   };
   let currentSkinVariant = 'normal';
 
@@ -145,12 +217,144 @@ const Scene3D = (() => {
     return h;
   }
 
-  function drawMaterialPattern(ctx, material, baseHex, seedKey, w, h) {
+  // hue2rgb/hslToHex - only needed for the 'holo' material's animated rainbow
+  // sweep below; every other material stays on the seeded-RNG hex helpers above.
+  function hslToHex(h, s, l) {
+    h = ((h % 360) + 360) % 360;
+    const c = (1 - Math.abs(2 * l - 1)) * s;
+    const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+    const m = l - c / 2;
+    let r, g, b;
+    if (h < 60) { r = c; g = x; b = 0; }
+    else if (h < 120) { r = x; g = c; b = 0; }
+    else if (h < 180) { r = 0; g = c; b = x; }
+    else if (h < 240) { r = 0; g = x; b = c; }
+    else if (h < 300) { r = x; g = 0; b = c; }
+    else { r = c; g = 0; b = x; }
+    return rgbToHex((r + m) * 255, (g + m) * 255, (b + m) * 255);
+  }
+
+  // Classic 4-pointed "diamond glint" sparkle: a long thin diamond crossed
+  // with a shorter perpendicular one, plus a bright core - the same shape
+  // photo-editing "star" glints use, not a filled star polygon (which reads
+  // as a badge/rating icon instead of a light glint). alpha (0-1) drives the
+  // twinkle brightness from the caller.
+  function drawSparkleGlint(ctx, x, y, size, alpha) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+    ctx.fillStyle = '#fffbe6';
+    const drawSpike = (len, width) => {
+      ctx.beginPath();
+      ctx.moveTo(0, -len);
+      ctx.lineTo(width, 0);
+      ctx.lineTo(0, len);
+      ctx.lineTo(-width, 0);
+      ctx.closePath();
+      ctx.fill();
+    };
+    drawSpike(size, size * 0.14);
+    ctx.save();
+    ctx.rotate(Math.PI / 2);
+    drawSpike(size * 0.62, size * 0.1);
+    ctx.restore();
+    ctx.beginPath();
+    ctx.arc(0, 0, size * 0.13, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawMaterialPattern(ctx, material, baseHex, seedKey, w, h, tMs) {
     if (!material || material === 'flat') return;
     const rand = mulberry32(hashString(seedKey));
     const base = hexToRgb(baseHex);
     ctx.save();
-    if (material === 'marble') {
+    if (material === 'badge') {
+      // Reserved for the 6 mascot-icon skins (streakbunny/gemcat/royalebear
+      // etc). These deliberately do NOT use 'holo' (reported directly as
+      // "too similar to the 15 rainbow skins already out there, doesn't feel
+      // like its own thing") - just a soft radial glow for depth. The
+      // "premium" cue lives on the cube's actual physical edges instead (see
+      // the face-boundary seam stroke below, drawn gold for this material) -
+      // a per-face inset gold frame was tried first and reported as "looks
+      // weird" (doubled up oddly with that seam stroke); tracing the real
+      // edges reads as one cohesive gold-trimmed object instead.
+      const cx = w / 2, cy = h / 2;
+      const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(w, h) * 0.55);
+      glow.addColorStop(0, 'rgba(255,255,255,0.32)');
+      glow.addColorStop(0.6, 'rgba(255,255,255,0.06)');
+      glow.addColorStop(1, 'rgba(0,0,0,0.16)');
+      ctx.fillStyle = glow;
+      ctx.fillRect(0, 0, w, h);
+      // One thin faint inset line for a touch more dimension - deliberately
+      // NOT the earlier thick double gold frame (that read as cluttered
+      // stacked on top of the cube's own gold edge trim); this is a single
+      // subtle accent, closer to a card/medallion's inner engraving line.
+      const inset = Math.min(w, h) * 0.06;
+      ctx.strokeStyle = 'rgba(212,175,55,0.55)';
+      ctx.lineWidth = Math.max(2, Math.min(w, h) * 0.014);
+      ctx.strokeRect(inset, inset, w - inset * 2, h - inset * 2);
+      // Diamond-sparkle glints near the 4 corners - the follow-up polish idea
+      // floated after the badge material first landed ("small static 4-point
+      // diamond-sparkle glints"), now actually built. Position is seeded per
+      // face (rand(), same PRNG as the rest of this function) so it doesn't
+      // boil across redraws, but each glint's brightness gently twinkles off
+      // tMs with a per-corner phase offset so all 4 don't flash in lockstep -
+      // reads as "catching the light," not a blinking icon.
+      const corners = [
+        { ax: 0.18, ay: 0.18 }, { ax: 0.82, ay: 0.18 },
+        { ax: 0.18, ay: 0.82 }, { ax: 0.82, ay: 0.82 },
+      ];
+      corners.forEach((c, i) => {
+        const jitterX = (rand() - 0.5) * Math.min(w, h) * 0.05;
+        const jitterY = (rand() - 0.5) * Math.min(w, h) * 0.05;
+        const sx = w * c.ax + jitterX;
+        const sy = h * c.ay + jitterY;
+        const phase = rand() * Math.PI * 2;
+        const twinkle = 0.55 + 0.45 * Math.sin((tMs || 0) / 900 + phase + i * 1.7);
+        drawSparkleGlint(ctx, sx, sy, Math.min(w, h) * 0.09, twinkle);
+      });
+    } else if (material === 'holo') {
+      // Reserved exclusively for the top-tier prestige skins (streakcrown/
+      // gemdragon/royaleemperor) - a genuinely animated diagonal rainbow
+      // sweep, unlike every other material here which is seeded-static (see
+      // [[arrowflow_render_perf]] on why: an unseeded/time-based pattern
+      // "boils" on the frequent redraws updateFrame() already does). This is
+      // a deliberate exception for a premium showcase - driven by the
+      // caller's tMs (the shared animate() loop's clock, same timer as the
+      // mood pulse), not recomputed from scratch on every redraw trigger.
+      // Bumped from an earlier, much subtler pastel-wash version - reported
+      // directly as "not different enough to make you want it" against
+      // screenshots of the actual in-game cube. Now: a darkened base wash
+      // first (so the rainbow bands have real contrast to pop against
+      // instead of blending into an already-pale face), fewer/wider/opaque
+      // bands, and a faint shimmer sweep line to read as "alive" even in a
+      // single still frame, not just mid-animation. Saturation (0.95->0.55,
+      // 2026-08-21) was toned down once the sync fix above still occasionally
+      // let a mismatched band through - lower saturation makes any residual
+      // seam far less eye-catching without losing the animated feel.
+      ctx.fillStyle = 'rgba(0,0,0,0.18)';
+      ctx.fillRect(0, 0, w, h);
+      const t = (tMs || 0) / 20;
+      const bands = 4;
+      for (let i = 0; i < bands; i++) {
+        const hue = t + i * (360 / bands);
+        const bandX = ((i / bands) * w * 1.6) - w * 0.3 + (t % (w * 0.4)) * 0.02;
+        const grad = ctx.createLinearGradient(bandX, 0, bandX + w * 0.35, h);
+        grad.addColorStop(0, 'rgba(255,255,255,0)');
+        grad.addColorStop(0.5, hslToHex(hue, 0.55, 0.55) + 'e6');
+        grad.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, w, h);
+      }
+      const shimmerX = (t * 3) % (w * 2) - w * 0.5;
+      const shimmer = ctx.createLinearGradient(shimmerX, 0, shimmerX + w * 0.12, h);
+      shimmer.addColorStop(0, 'rgba(255,255,255,0)');
+      shimmer.addColorStop(0.5, 'rgba(255,255,255,0.55)');
+      shimmer.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = shimmer;
+      ctx.fillRect(0, 0, w, h);
+    } else if (material === 'marble') {
       // A handful of soft bezier "veins", alternating lighter/darker than
       // the base fill, low opacity so the path/arrow art on top stays the
       // clearest thing on the face.
@@ -225,7 +429,11 @@ const Scene3D = (() => {
     embers:  { gravity: -0.02,  drag: 0.99,  spin: false, shape: 'circle', glow: true },
     sparks:  { gravity: 0.01,   drag: 0.96,  spin: false, shape: 'spark',  glow: true },
     bubbles: { gravity: -0.012, drag: 0.995, spin: false, shape: 'ring' },
-    ash:     { gravity: 0.008,  drag: 0.997, spin: true,  shape: 'circle' }
+    ash:     { gravity: 0.008,  drag: 0.997, spin: true,  shape: 'circle' },
+    // Reserved for the top-tier prestige skins alongside 'holo' above - a
+    // slower, longer-drifting, glowier cousin of 'sparks' so it reads as
+    // more luxurious rather than just another recolor of an existing theme.
+    stardust:{ gravity: -0.004, drag: 0.998, spin: false, shape: 'spark',  glow: true }
   };
   const AMBIENT_BASE = 14;
   // How much fiercer/busier the particle layer gets on a special-occasion
@@ -358,7 +566,7 @@ const Scene3D = (() => {
       stepParticle(p, recipe);
       p.alpha = Math.max(0, 1 - p.life / p.maxLife);
       if (p.life >= p.maxLife) return false;
-      const color = ambientColor || COLOR_MOVING;
+      const color = ambientColor || movingColor();
       drawParticleShape(fxCtx, p, recipe, color);
       return true;
     });
@@ -388,16 +596,31 @@ const Scene3D = (() => {
     scene.background = new THREE.Color(hex);
   }
 
-  // Skin selection recolors only the face fill + idle path/arrow color -
-  // moving (green)/blocked (red) stay fixed status colors regardless of
-  // skin, and null (unset/invalid id) falls back to today's hardcoded look.
+  // Skin selection recolors the face fill, idle path/arrow color, background
+  // tint, and the moving/exit-shot color - blocked (red) stays a fixed status
+  // color regardless of skin (still needs to read as "wrong" unambiguously).
+  // null (unset/invalid id) or the 'default' skin fall back to today's
+  // hardcoded look pixel-for-pixel.
   function activeSkin() {
     return Skins.getById(Storage.get('selectedSkin'));
   }
 
+  // The "arrow is moving/exiting" color used to be a fixed green for every
+  // skin. Now it's the active skin's own path color, brightened toward white
+  // so it still reads as clearly distinct from that same skin's idle path
+  // color - falls back to the original green when no skin (or 'default') is
+  // selected, per the skin system's phase-1 pixel-identical rule.
+  function movingColor() {
+    const skin = activeSkin();
+    if (!skin || skin.id === 'default') return COLOR_MOVING;
+    const dark = Storage.get('theme') === 'dark';
+    const base = dark ? skin.colors.path.dark : skin.colors.path.light;
+    return mixHex(base, '#ffffff', 0.35);
+  }
+
   function getPathColor(path) {
     if (path.status === 'bumped' || path.status === 'bumped_return' || path.wasBlocked) return COLOR_BLOCKED;
-    if (path.status === 'moving' || path.status === 'done') return COLOR_MOVING;
+    if (path.status === 'moving' || path.status === 'done') return movingColor();
     const dark = Storage.get('theme') === 'dark';
     const skin = activeSkin();
     const base = skin ? (dark ? skin.colors.path.dark : skin.colors.path.light) : (dark ? COLOR_IDLE_DARK : COLOR_IDLE_LIGHT);
@@ -450,10 +673,6 @@ const Scene3D = (() => {
   // when a path successfully exits, distinct from the small in-shape slide.
   let fxCanvas = null, fxCtx = null;
   let activeShots = [];
-  // Matches COLOR_MOVING so the in-shape slide and the screen-space exit
-  // flourish read as one continuous line/color, not two (was orange vs.
-  // green - reported as visually confusing, single color requested).
-  const EXIT_SHOT_COLOR = COLOR_MOVING;
   const EXIT_SHOT_DURATION_MS = 260;
   let faceIndexByKey = {};       // faceKey -> index into faceCanvases/materials/geometry groups
 
@@ -671,6 +890,53 @@ const Scene3D = (() => {
     if (skin) spawnBurst(s0.x, s0.y, skin.particleTheme);
   }
 
+  // Evenly-spaced points along a straight line - lets the lineStyle
+  // renderers (which decorate based on neighboring-point tangents, e.g. the
+  // water wobble or rope twist) work on the exit-shot trail the same way
+  // they work on a face's own densely-sampled path polyline, even though
+  // the trail itself is geometrically just two endpoints.
+  function sampleLine(x0, y0, x1, y1, n) {
+    const pts = [];
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      pts.push({ x: x0 + (x1 - x0) * t, y: y0 + (y1 - y0) * t });
+    }
+    return pts;
+  }
+
+  // Draws a skin-themed trail (used by the exit-shot flourish below) onto a
+  // reusable scratch canvas at full opacity first, then composites that
+  // scratch onto fxCtx with the shot's own fade alpha - needed because the
+  // lineStyle renderers set their own internal globalAlpha values (glow
+  // layers, highlight streaks) which would otherwise stomp on the fade
+  // instead of combining with it.
+  let trailScratch = null, trailScratchCtx = null;
+  function drawStyledTrailToFx(fxCtx, x0, y0, x1, y1, color, style, tMs, alpha) {
+    const pad = 40;
+    const minX = Math.min(x0, x1) - pad, minY = Math.min(y0, y1) - pad;
+    const w = Math.abs(x1 - x0) + pad * 2, h = Math.abs(y1 - y0) + pad * 2;
+    if (!trailScratch) trailScratch = document.createElement('canvas');
+    trailScratch.width = Math.ceil(w);
+    trailScratch.height = Math.ceil(h);
+    trailScratchCtx = trailScratch.getContext('2d');
+    trailScratchCtx.setTransform(1, 0, 0, 1, 0, 0);
+    trailScratchCtx.clearRect(0, 0, trailScratch.width, trailScratch.height);
+    trailScratchCtx.translate(-minX, -minY);
+
+    const dist = Math.hypot(x1 - x0, y1 - y0);
+    const n = Math.max(6, Math.round(dist / 6));
+    const points = sampleLine(x0, y0, x1, y1, n);
+    drawStyledPath(trailScratchCtx, [points], 22, color, style, 'exitshot', tMs);
+    const angle = Math.atan2(y1 - y0, x1 - x0);
+    drawStyledArrowHeadAtAngle(trailScratchCtx, x1, y1, angle, 16, color, style, tMs);
+    trailScratchCtx.setTransform(1, 0, 0, 1, 0, 0);
+
+    fxCtx.save();
+    fxCtx.globalAlpha = alpha;
+    fxCtx.drawImage(trailScratch, minX, minY);
+    fxCtx.restore();
+  }
+
   function drawExitShots() {
     // No fxCtx.clearRect() here anymore - renderFxOverlay() (Phase 2) now
     // owns clearing the shared overlay canvas once per frame, since ambient
@@ -678,6 +944,9 @@ const Scene3D = (() => {
     const now = performance.now();
     const fadeTail = 150;
     activeShots = activeShots.filter(s => now - s.start < EXIT_SHOT_DURATION_MS + fadeTail);
+    const shotColor = movingColor();
+    const skin = activeSkin();
+    const lineStyle = skin && skin.lineStyle;
     activeShots.forEach(shot => {
       const t = Math.min(1, (now - shot.start) / EXIT_SHOT_DURATION_MS);
       const grow = 1 - Math.pow(1 - t, 3); // ease-out
@@ -686,8 +955,13 @@ const Scene3D = (() => {
       const fadeStart = 0.7;
       const alpha = t > fadeStart ? Math.max(0, 1 - (t - fadeStart) / (1 - fadeStart)) : 1;
 
+      if (lineStyle) {
+        drawStyledTrailToFx(fxCtx, shot.x0, shot.y0, cx, cy, shotColor, lineStyle, now, alpha);
+        return;
+      }
+
       fxCtx.globalAlpha = alpha;
-      fxCtx.strokeStyle = EXIT_SHOT_COLOR;
+      fxCtx.strokeStyle = shotColor;
       fxCtx.lineWidth = 6;
       fxCtx.lineCap = 'round';
       fxCtx.beginPath();
@@ -702,7 +976,7 @@ const Scene3D = (() => {
       fxCtx.lineTo(cx - headLen * Math.cos(ang - Math.PI / 7), cy - headLen * Math.sin(ang - Math.PI / 7));
       fxCtx.lineTo(cx - headLen * Math.cos(ang + Math.PI / 7), cy - headLen * Math.sin(ang + Math.PI / 7));
       fxCtx.closePath();
-      fxCtx.fillStyle = EXIT_SHOT_COLOR;
+      fxCtx.fillStyle = shotColor;
       fxCtx.fill();
     });
     fxCtx.globalAlpha = 1;
@@ -855,7 +1129,29 @@ const Scene3D = (() => {
       // skin base) so it darkens/tints alongside the face at milestone/epic/
       // daily/remix levels too, instead of looking static while everything
       // else around it escalates.
-      if (skin) drawMaterialPattern(ctx, skin.material, variantFace, key, ctx.canvas.width, ctx.canvas.height);
+      // tMs uses performance.now() for every material except 'holo'. 'holo' instead
+      // uses holoSyncMs, a value shared module-wide that only advances on its own
+      // periodic timer (see the animate() loop's holo-sync tick) - NOT a fresh
+      // performance.now() read here. A face that redraws often (e.g. a path bouncing
+      // off a blocked tap, redrawn every animation-frame tick for ~1-2 real seconds)
+      // would otherwise race through the rainbow cycle on its own while every
+      // untouched face around it sits frozen at a much older phase - reported
+      // directly as one face flashing a wildly different color mid-bump while its
+      // neighbors stayed static. Reading a shared, slow-moving clock instead means
+      // ANY redraw of ANY face, however frequent, always paints the level's current
+      // shared phase - never its own private one.
+      const tMs = skin && skin.material === 'holo' ? holoSyncMs : performance.now();
+      if (skin) drawMaterialPattern(ctx, skin.material, variantFace, key, ctx.canvas.width, ctx.canvas.height, tMs);
+      // Mascot art (premium skins only, e.g. royalebear/gemcat) - drawn after
+      // the material pattern but still well before path lines/arrows below,
+      // at reduced alpha so it reads as decoration, not something competing
+      // with the actual gameplay signal.
+      if (skin && skin.mascotIcon) {
+        ctx.save();
+        ctx.globalAlpha = 0.5;
+        drawMascotIcon(ctx, skin.mascotIcon, ctx.canvas.width, ctx.canvas.height);
+        ctx.restore();
+      }
 
       // Face-boundary seam: findBlocker() only ever checks the head's own
       // face (see [[arrowflow_open_issues]]) - a path can look like it
@@ -871,7 +1167,11 @@ const Scene3D = (() => {
       // sheet, not a grid of squares. Reported directly with a screenshot
       // circling exactly those flush, same-plane seams as ones that
       // shouldn't be there.
-      ctx.strokeStyle = dark ? 'rgba(255,255,255,0.35)' : 'rgba(20,30,50,0.28)';
+      // Gold seam for 'badge' skins (the 6 animal-mascot skins) - the cube's
+      // actual physical edges become the "premium trim" cue instead of a
+      // per-face inset frame (see drawMaterialPattern's 'badge' branch for
+      // why the per-face frame was dropped).
+      ctx.strokeStyle = (skin && skin.material === 'badge') ? '#d4af37' : (dark ? 'rgba(255,255,255,0.35)' : 'rgba(20,30,50,0.28)');
       const bw = PX_PER_CELL * 0.12;
       const W = ctx.canvas.width, H = ctx.canvas.height;
       ctx.lineWidth = bw;
@@ -976,7 +1276,9 @@ const Scene3D = (() => {
       // readable even at the trough - a full 0-to-1 pulse was reported as
       // hard to notice, especially on a face seen through the see-through
       // back-mesh at reduced opacity (see also the per-face opacity boost
-      // in highlightPath()/clearHighlightBoost() below).
+      // in highlightPath()/clearHighlightBoost() below). This overlay stays
+      // a plain pulse regardless of skin lineStyle - it's a status cue, not
+      // a cosmetic decoration.
       const pulse = 0.65 + 0.35 * Math.sin(performance.now() / 130);
       ctx.shadowColor = '#FF2DF5';
       ctx.shadowBlur = cellSize * 0.6;
@@ -989,12 +1291,21 @@ const Scene3D = (() => {
     }
 
     const color = getPathColor(path);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = cellSize * 0.28;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
+    const skin = activeSkin();
+    const lineStyle = (skin && skin.lineStyle) || 'plain';
+    const { polylines, headPt } = collectPathPoints(path, faceKey, cellSize, startD, endD, L);
 
-    const headPt = strokePath(ctx, path, faceKey, cellSize, startD, endD, L);
+    if (lineStyle === 'plain') {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = cellSize * 0.28;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      polylines.forEach(poly => poly.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+      ctx.stroke();
+    } else {
+      drawStyledPath(ctx, polylines, cellSize, color, lineStyle, path.id + ':' + faceKey, performance.now());
+    }
 
     if (headPt) {
       let dir = path.exitDir;
@@ -1009,9 +1320,44 @@ const Scene3D = (() => {
           else if (sB.c > sA.c) dir = 'right';
         }
       }
-      const skin = activeSkin();
-      drawPerfectArrowHead(ctx, headPt.x, headPt.y, dir, cellSize * 0.5, color, skin ? skin.arrowShape : 'triangle');
+      if (lineStyle === 'plain') {
+        drawPerfectArrowHead(ctx, headPt.x, headPt.y, dir, cellSize * 0.5, color, skin ? skin.arrowShape : 'triangle');
+      } else {
+        drawStyledArrowHead(ctx, headPt.x, headPt.y, dir, cellSize * 0.5, color, lineStyle, performance.now());
+      }
     }
+  }
+
+  // Same distance-walking logic as strokePath() below but collects raw
+  // {x,y} points per contiguous on-this-face run instead of stroking them
+  // directly - needed so the themed lineStyle renderers (rope/neon/water/
+  // etc, see drawStyledPath) can post-process the geometry (offsets, wobble,
+  // decorations) instead of just drawing a single flat stroke.
+  function collectPathPoints(path, faceKey, cellSize, startD, endD, L) {
+    const result = { polylines: [], headPt: null };
+    const steps = Math.ceil(endD - startD) * 10;
+    if (steps <= 0) return result;
+    const stepSize = (endD - startD) / steps;
+    let current = null;
+
+    for (let i = 0; i <= steps; i++) {
+      let d = startD + i * stepSize;
+      let actualD = d;
+      if (i === steps && endD >= L) actualD -= 0.25;
+
+      let pt = getPointAtDist(path, actualD, cellSize, L);
+      let realHeadPt = getPointAtDist(path, d, cellSize, L);
+
+      if (pt.faceKey === faceKey) {
+        if (!current) { current = []; result.polylines.push(current); }
+        current.push({ x: pt.x, y: pt.y });
+      } else {
+        current = null;
+      }
+
+      if (i === steps && realHeadPt.faceKey === faceKey) result.headPt = realHeadPt;
+    }
+    return result;
   }
 
   function strokePath(ctx, path, faceKey, cellSize, startD, endD, L) {
@@ -1201,8 +1547,544 @@ const Scene3D = (() => {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
 
+  // --- Per-skin lineStyle: full path-line + arrowhead theming (rope/vine,
+  // neon tube, water stream, chain link, paw-print trail, ribbon, laser
+  // beam), layered on top of the material/arrowShape/particleTheme system
+  // above. Unlike `arrowShape` (a silhouette swap only), a lineStyle also
+  // replaces how the connecting line itself is drawn - see drawStyledPath
+  // vs. the single ctx.stroke() the 'plain' skins still use in
+  // drawPathOnFace. All 10 requested themes are wired up: emerald/rope,
+  // cyber/neon, mint+gemdolphin/water, obsidian/chain, the 5 land-mammal
+  // mascots/pawprint, rose/ribbon, royaleneon/laser, streakcandy/candy,
+  // gemorigami/origami, royalecircuit/circuit (see js/skins.js).
+  function drawStyledPath(ctx, polylines, cellSize, color, style, seedKey, tMs) {
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    polylines.forEach((points, polyIdx) => {
+      if (points.length < 2) return;
+      const rand = mulberry32(hashString(seedKey + ':' + polyIdx));
+      if (style === 'rope') drawRopeSegment(ctx, points, cellSize, color, rand);
+      else if (style === 'neon') drawNeonSegment(ctx, points, cellSize, color, tMs);
+      else if (style === 'water') drawWaterSegment(ctx, points, cellSize, color, tMs);
+      else if (style === 'chain') drawChainSegment(ctx, points, cellSize, color);
+      else if (style === 'pawprint') drawPawprintSegment(ctx, points, cellSize, color);
+      else if (style === 'ribbon') drawRibbonSegment(ctx, points, cellSize, color);
+      else if (style === 'laser') drawLaserSegment(ctx, points, cellSize, color, tMs);
+      else if (style === 'candy') drawCandySegment(ctx, points, cellSize, color);
+      else if (style === 'origami') drawOrigamiSegment(ctx, points, cellSize, color);
+      else if (style === 'circuit') drawCircuitSegment(ctx, points, cellSize, color);
+      else {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = cellSize * 0.28;
+        ctx.beginPath();
+        points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+        ctx.stroke();
+      }
+    });
+    ctx.restore();
+  }
+
+  // Assumes the context is already translated to the tip position and
+  // rotated so "forward" is -y (matches drawPerfectArrowHead's own
+  // convention) - the two callers below just differ in how they get there:
+  // one from a face-local 4-way dir, the other from a free screen-space angle.
+  function drawStyledArrowHeadShape(ctx, size, color, style, tMs) {
+    if (style === 'rope') drawVineLeafTip(ctx, size, color);
+    else if (style === 'neon') drawNeonBulbTip(ctx, size, color, tMs);
+    else if (style === 'water') drawSplashTip(ctx, size, color);
+    else if (style === 'chain') drawHookTip(ctx, size, color);
+    else if (style === 'pawprint') drawPawMark(ctx, 0, 0, 0, size * 1.3, color);
+    else if (style === 'ribbon') drawBowTip(ctx, size, color);
+    else if (style === 'laser') drawEnergyBurstTip(ctx, size, color, tMs);
+    else if (style === 'candy') drawCandyTip(ctx, size, color);
+    else if (style === 'origami') drawOrigamiTip(ctx, size, color);
+    else if (style === 'circuit') drawSolderTip(ctx, size, color);
+    else {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(0, -size * 0.6); ctx.lineTo(size * 0.7, size * 0.6); ctx.lineTo(-size * 0.7, size * 0.6);
+      ctx.fill();
+    }
+  }
+
+  function drawStyledArrowHead(ctx, x, y, dir, size, color, style, tMs) {
+    ctx.save();
+    ctx.translate(x, y);
+    if (dir === 'up') ctx.rotate(0);
+    else if (dir === 'right') ctx.rotate(Math.PI / 2);
+    else if (dir === 'down') ctx.rotate(Math.PI);
+    else if (dir === 'left') ctx.rotate(-Math.PI / 2);
+    ctx.translate(0, -size * 0.1);
+    drawStyledArrowHeadShape(ctx, size, color, style, tMs);
+    ctx.restore();
+  }
+
+  // Free-angle variant (screen-space effects like the exit-shot trail below,
+  // which travel at whatever on-screen angle the shape's current rotation
+  // happens to put the exit direction at, not one of the 4 face-local dirs).
+  // rotate(angle + PI/2) maps this function's local "forward" (-y) onto the
+  // world direction (cos(angle), sin(angle)) - same derivation as the
+  // pawprint trail's per-mark rotation below.
+  function drawStyledArrowHeadAtAngle(ctx, x, y, angle, size, color, style, tMs) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle + Math.PI / 2);
+    drawStyledArrowHeadShape(ctx, size, color, style, tMs);
+    ctx.restore();
+  }
+
+  // 1. Rope/Vine - a thick darkened base cord with lighter perpendicular
+  // "twist" ticks alternating sides every few samples, suggesting braided
+  // fiber without needing a real 3D twist. Stride widened (was 5, reported
+  // as too busy once several paths share a face - see the general density
+  // note above drawPawprintSegment) so it reads as texture, not clutter.
+  function drawRopeSegment(ctx, points, cellSize, color, rand) {
+    const w = cellSize * 0.3;
+    ctx.strokeStyle = darkenHex(color, 0.65);
+    ctx.lineWidth = w;
+    ctx.beginPath();
+    points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+    ctx.stroke();
+    ctx.strokeStyle = mixHex(color, '#ffffff', 0.35);
+    ctx.lineWidth = Math.max(1, w * 0.16);
+    const stride = 10;
+    for (let i = stride; i < points.length - 1; i += stride) {
+      const a = points[i - 1], b = points[Math.min(i + 1, points.length - 1)];
+      const angle = Math.atan2(b.y - a.y, b.x - a.x);
+      const nx = -Math.sin(angle), ny = Math.cos(angle);
+      const len = w * 0.5;
+      const dir = (Math.floor(i / stride) % 2 === 0) ? 1 : -1;
+      ctx.beginPath();
+      ctx.moveTo(points[i].x - nx * len * dir, points[i].y - ny * len * dir);
+      ctx.lineTo(points[i].x + nx * len * dir, points[i].y + ny * len * dir);
+      ctx.stroke();
+    }
+    void rand; // seed reserved for future jitter, geometry-derived pattern is enough for now
+  }
+  function drawVineLeafTip(ctx, size, color) {
+    ctx.fillStyle = mixHex(color, '#2e7d32', 0.35);
+    ctx.beginPath();
+    ctx.moveTo(0, -size * 0.7);
+    ctx.quadraticCurveTo(size * 0.55, -size * 0.1, 0, size * 0.55);
+    ctx.quadraticCurveTo(-size * 0.55, -size * 0.1, 0, -size * 0.7);
+    ctx.fill();
+    ctx.strokeStyle = darkenHex(color, 0.6);
+    ctx.lineWidth = Math.max(1, size * 0.06);
+    ctx.beginPath();
+    ctx.moveTo(0, -size * 0.6); ctx.lineTo(0, size * 0.45);
+    ctx.stroke();
+  }
+
+  // 2. Neon Tube - REDESIGNED (2026-08-20): the traveling pulse dot was
+  // computed fresh per polyline fragment (this function runs once per
+  // on-this-face contiguous run, see drawStyledPath's forEach), and since
+  // this game's paths cross faces constantly, that meant a dot near the
+  // start of nearly every fragment - i.e. a dot at nearly every corner,
+  // same corner-clustering bug reported on chain/circuit above and now
+  // confirmed still visible here too. Removed entirely - just the glow
+  // underlayer + bright core line now, with the single "current" dot
+  // reserved for the arrowhead's neon-bulb tip only.
+  function drawNeonSegment(ctx, points, cellSize, color) {
+    const w = cellSize * 0.3;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = w * 1.4;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = w;
+    ctx.globalAlpha = 0.55;
+    ctx.beginPath();
+    points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = mixHex(color, '#ffffff', 0.6);
+    ctx.lineWidth = w * 0.4;
+    ctx.beginPath();
+    points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+    ctx.stroke();
+  }
+  function drawNeonBulbTip(ctx, size, color, tMs) {
+    const pulse = 0.7 + 0.3 * Math.sin((tMs || 0) / 250);
+    ctx.shadowColor = color;
+    ctx.shadowBlur = size * 1.2 * pulse;
+    ctx.fillStyle = mixHex(color, '#ffffff', 0.5);
+    ctx.globalAlpha = pulse;
+    ctx.beginPath();
+    ctx.arc(0, 0, size * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(0, -size * 0.05, size * 0.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // 3. Water Stream - the line itself wobbles perpendicular to its own
+  // tangent via a traveling sine wave (driven by tMs, same "redraws on
+  // change only" caveat as the neon pulse above), plus a thin translucent
+  // highlight stroke on top for a wet/glossy read.
+  function drawWaterSegment(ctx, points, cellSize, color, tMs) {
+    const w = cellSize * 0.28;
+    const t = (tMs || 0) / 300;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = w;
+    ctx.globalAlpha = 0.85;
+    ctx.beginPath();
+    points.forEach((p, i) => {
+      let x = p.x, y = p.y;
+      if (i > 0 && i < points.length - 1) {
+        const a = points[i - 1], b = points[i + 1];
+        const angle = Math.atan2(b.y - a.y, b.x - a.x);
+        const nx = -Math.sin(angle), ny = Math.cos(angle);
+        const wob = Math.sin(i * 0.9 + t) * w * 0.22;
+        x += nx * wob; y += ny * wob;
+      }
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+    ctx.lineWidth = w * 0.25;
+    ctx.beginPath();
+    points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+    ctx.stroke();
+  }
+  function drawSplashTip(ctx, size, color) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(0, size * 0.05, size * 0.4, 0, Math.PI * 2);
+    ctx.fill();
+    [[-0.5, -0.3], [0.5, -0.3], [0, -0.65]].forEach(([dx, dy]) => {
+      ctx.beginPath();
+      ctx.arc(dx * size, dy * size, size * 0.14, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  // 4. Chain Link - REDESIGNED (2026-08-20, same corner-clustering bug as
+  // circuit's via dots below): the per-stride link loop restarted at i=0 for
+  // EVERY polyline fragment (a face-crossing corner starts a new fragment,
+  // see collectPathPoints), and this game's paths cross faces constantly -
+  // so a link/dot landed at nearly every corner regardless of the intended
+  // stride spacing, reported directly as "confusing, can't find the real
+  // head." Now just a two-tone rail (thin dark outline + lighter core) with
+  // no discrete stamped shapes at all - the chain identity lives entirely
+  // in the hook-shaped arrowhead below, the one dot that's actually meant
+  // to mark something.
+  function drawChainSegment(ctx, points, cellSize, color) {
+    const w = cellSize * 0.3;
+    ctx.strokeStyle = darkenHex(color, 0.55);
+    ctx.lineWidth = w * 0.34;
+    ctx.beginPath();
+    points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+    ctx.stroke();
+    ctx.strokeStyle = mixHex(color, '#ffffff', 0.2);
+    ctx.lineWidth = w * 0.16;
+    ctx.beginPath();
+    points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+    ctx.stroke();
+  }
+  function drawHookTip(ctx, size, color) {
+    ctx.strokeStyle = mixHex(color, '#ffffff', 0.2);
+    ctx.lineWidth = size * 0.22;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(0, -size * 0.05, size * 0.4, Math.PI * 0.15, Math.PI * 1.65, false);
+    ctx.stroke();
+  }
+
+  // 5. Dotted Trail with Paw/Footprint - REDESIGNED (2026-08-20, reported as
+  // "very hard to read" on real gameplay screenshots): the original version
+  // had NO connecting line at all, just alternating-side paw marks - fine
+  // for a single isolated path, but this game routinely has many paths
+  // sharing one face (a maze, not one line), and without a real line to
+  // trace, dense corridors of overlapping paw blobs stopped reading as
+  // paths entirely. Now draws the same thin base line every other style
+  // gets (so the maze stays legible regardless of skin, matching 'plain'),
+  // with paw marks centered ON the line (no more alternating perpendicular
+  // offset, which doubled the visual footprint into a solid "belt") as a
+  // light, sparse accent - much wider stride, smaller, slightly
+  // translucent, closer in spirit to the sparkle-glint accent than to a
+  // texture that has to carry the whole line by itself.
+  function drawPawMark(ctx, x, y, forwardAngle, size, color) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(forwardAngle);
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.ellipse(0, size * 0.15, size * 0.42, size * 0.32, 0, 0, Math.PI * 2);
+    ctx.fill();
+    [[-0.32, -0.35], [0, -0.48], [0.32, -0.35]].forEach(([tx, ty]) => {
+      ctx.beginPath();
+      ctx.ellipse(tx * size, ty * size, size * 0.16, size * 0.18, 0, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.restore();
+  }
+  function drawPawprintSegment(ctx, points, cellSize, color) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = cellSize * 0.22;
+    ctx.beginPath();
+    points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+    ctx.stroke();
+
+    const w = cellSize * 0.4;
+    const stride = 16;
+    ctx.globalAlpha = 0.9;
+    for (let i = 0; i < points.length; i += stride) {
+      const p = points[i];
+      const a = points[Math.max(0, i - 1)], b = points[Math.min(points.length - 1, i + 1)];
+      const angle = Math.atan2(b.y - a.y, b.x - a.x);
+      drawPawMark(ctx, p.x, p.y, angle + Math.PI / 2, w, color);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // 6. Ribbon - a darker shadow-side edge behind a narrower main body plus a
+  // glossy offset highlight streak, faking a folded satin cross-section
+  // without real lighting.
+  function drawRibbonSegment(ctx, points, cellSize, color) {
+    const w = cellSize * 0.32;
+    ctx.strokeStyle = darkenHex(color, 0.75);
+    ctx.lineWidth = w;
+    ctx.beginPath();
+    points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+    ctx.stroke();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = w * 0.8;
+    ctx.beginPath();
+    points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.lineWidth = w * 0.22;
+    ctx.beginPath();
+    points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y - w * 0.15) : ctx.lineTo(p.x, p.y - w * 0.15));
+    ctx.stroke();
+  }
+  function drawBowTip(ctx, size, color) {
+    ctx.fillStyle = color;
+    [-1, 1].forEach(side => {
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.quadraticCurveTo(side * size * 0.7, -size * 0.5, side * size * 0.55, size * 0.15);
+      ctx.quadraticCurveTo(side * size * 0.2, size * 0.1, 0, 0);
+      ctx.fill();
+    });
+    ctx.fillStyle = darkenHex(color, 0.7);
+    ctx.beginPath();
+    ctx.arc(0, 0, size * 0.16, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // 7. Laser/Energy Beam - REDESIGNED (2026-08-20): same corner-clustering
+  // bug as neon's pulse dot above - the traveling radial-gradient pulse was
+  // computed fresh per polyline fragment, so it landed near nearly every
+  // face-crossing corner instead of sliding smoothly along one path. Removed
+  // - just the glow underlayer + bright core now, with the pulse look kept
+  // exclusively for the energy-burst arrowhead tip.
+  function drawLaserSegment(ctx, points, cellSize, color) {
+    const w = cellSize * 0.28;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = w * 1.6;
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.5;
+    ctx.lineWidth = w * 0.6;
+    ctx.beginPath();
+    points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = w * 0.18;
+    ctx.beginPath();
+    points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+    ctx.stroke();
+  }
+  function drawEnergyBurstTip(ctx, size, color, tMs) {
+    const t = (tMs || 0) / 300;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(0, 0, size * 0.25, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = size * 0.08;
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + t;
+      const r1 = size * 0.3, r2 = size * 0.65;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * r1, Math.sin(a) * r1);
+      ctx.lineTo(Math.cos(a) * r2, Math.sin(a) * r2);
+      ctx.stroke();
+    }
+  }
+
+  // 8. Candy Trail - REDESIGNED (2026-08-20, reported as unreadable: on a
+  // real gameplay screenshot the base "cane" was drawn in a near-white
+  // '#fffaf0', which is nearly invisible against this skin's own pale
+  // cream/pink face color - only the diagonal red stripe ticks stayed
+  // visible, so the trail read as disconnected dashes with no line
+  // connecting them at all, and the old fully-circular swirl arrowhead had
+  // no directional cue, reading as an ambiguous blob rather than an arrow.
+  // Base is now a light TINT OF THE SKIN'S OWN COLOR (always has contrast
+  // against any face, unlike a fixed cream) and the tip is a clipped
+  // "candy drop" silhouette (clear forward point) filled with the same
+  // diagonal stripe pattern instead of a full spiral.
+  function drawCandySegment(ctx, points, cellSize, color) {
+    const w = cellSize * 0.32;
+    ctx.strokeStyle = mixHex(color, '#ffffff', 0.7);
+    ctx.lineWidth = w;
+    ctx.beginPath();
+    points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+    ctx.stroke();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = w * 0.34;
+    const stride = 7;
+    for (let i = 0; i < points.length - 1; i += stride) {
+      const a = points[i], b = points[Math.min(i + stride, points.length - 1)];
+      const angle = Math.atan2(b.y - a.y, b.x - a.x);
+      const nx = -Math.sin(angle), ny = Math.cos(angle);
+      const half = w * 0.55;
+      ctx.beginPath();
+      ctx.moveTo(a.x - nx * half, a.y - ny * half);
+      ctx.lineTo(a.x + nx * half, a.y + ny * half);
+      ctx.stroke();
+    }
+  }
+  function drawCandyTip(ctx, size, color) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(0, -size * 0.65);
+    ctx.quadraticCurveTo(size * 0.6, size * 0.05, 0, size * 0.6);
+    ctx.quadraticCurveTo(-size * 0.6, size * 0.05, 0, -size * 0.65);
+    ctx.closePath();
+    ctx.clip();
+    ctx.fillStyle = color;
+    ctx.fillRect(-size, -size, size * 2, size * 2);
+    ctx.strokeStyle = mixHex(color, '#ffffff', 0.7);
+    ctx.lineWidth = size * 0.24;
+    for (let i = -2; i <= 2; i++) {
+      ctx.beginPath();
+      ctx.moveTo(-size + i * size * 0.5, size);
+      ctx.lineTo(size + i * size * 0.5, -size);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // 9. Origami Fold Line - alternating light/shadow flat facets (hard edges,
+  // no round cap/join - the opposite look from every rounded-tube style
+  // above) with a crease line at each facet boundary, faking a folded paper
+  // strip without any real lighting.
+  function drawOrigamiSegment(ctx, points, cellSize, color) {
+    const w = cellSize * 0.3;
+    const half = w * 0.5;
+    const lightShade = mixHex(color, '#ffffff', 0.35);
+    const darkShade = darkenHex(color, 0.6);
+    const stride = 7;
+    for (let i = 0; i < points.length - 1; i += stride) {
+      const a = points[i], b = points[Math.min(i + stride, points.length - 1)];
+      if (a === b) continue;
+      const angle = Math.atan2(b.y - a.y, b.x - a.x);
+      const nx = -Math.sin(angle), ny = Math.cos(angle);
+      const shade = (Math.floor(i / stride) % 2 === 0) ? lightShade : darkShade;
+      ctx.fillStyle = shade;
+      ctx.beginPath();
+      ctx.moveTo(a.x - nx * half, a.y - ny * half);
+      ctx.lineTo(a.x + nx * half, a.y + ny * half);
+      ctx.lineTo(b.x + nx * half, b.y + ny * half);
+      ctx.lineTo(b.x - nx * half, b.y - ny * half);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = darkenHex(shade, 0.7);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(a.x - nx * half, a.y - ny * half);
+      ctx.lineTo(a.x + nx * half, a.y + ny * half);
+      ctx.stroke();
+    }
+  }
+  function drawOrigamiTip(ctx, size, color) {
+    const light = mixHex(color, '#ffffff', 0.35);
+    const dark = darkenHex(color, 0.6);
+    ctx.fillStyle = light;
+    ctx.beginPath();
+    ctx.moveTo(0, -size * 0.65); ctx.lineTo(size * 0.55, size * 0.5); ctx.lineTo(0, size * 0.15);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = dark;
+    ctx.beginPath();
+    ctx.moveTo(0, -size * 0.65); ctx.lineTo(-size * 0.55, size * 0.5); ctx.lineTo(0, size * 0.15);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = darkenHex(color, 0.5);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, -size * 0.65); ctx.lineTo(0, size * 0.15);
+    ctx.stroke();
+  }
+
+  // 10. Circuit Trace - REDESIGNED (2026-08-20): the via-dot loop had the
+  // same corner-clustering bug as chain's link loop above - it restarted at
+  // i=0 for every polyline fragment, and this game's paths cross faces
+  // (start a new fragment) constantly, so a white via dot landed at nearly
+  // every corner. Reported directly from a real gameplay screenshot: it
+  // looked like a dot at every turn, made the actual head (the one dot that
+  // matters) impossible to pick out. Now just the copper trace itself
+  // (square caps/miter joins - the underlying points are already
+  // axis-aligned, since game paths only ever move one grid step at a time,
+  // so this alone reads as real right-angle PCB routing) with the solder
+  // dot reserved for the arrowhead only, below.
+  function drawCircuitSegment(ctx, points, cellSize, color) {
+    const w = cellSize * 0.18;
+    ctx.lineCap = 'square';
+    ctx.lineJoin = 'miter';
+    ctx.strokeStyle = darkenHex(color, 0.5);
+    ctx.lineWidth = w * 1.6;
+    ctx.beginPath();
+    points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+    ctx.stroke();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = w;
+    ctx.beginPath();
+    points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+    ctx.stroke();
+  }
+  function drawSolderTip(ctx, size, color) {
+    ctx.fillStyle = darkenHex(color, 0.5);
+    ctx.beginPath();
+    ctx.arc(0, 0, size * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = mixHex(color, '#ffffff', 0.6);
+    ctx.beginPath();
+    ctx.arc(0, 0, size * 0.32, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowColor = color;
+    ctx.shadowBlur = size * 0.6;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(0, 0, size * 0.14, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
   function animate() {
     requestAnimationFrame(animate);
+    // Periodic holo-sync tick - advances the shared holoSyncMs clock (see its
+    // declaration and updateFrame()'s use of it) at most once every
+    // HOLO_SYNC_INTERVAL_MS, and only actually redraws faces when a 'holo' skin is
+    // active. This is the ONLY place holoSyncMs changes, decoupling the rainbow's
+    // animation speed from however often gameplay happens to redraw individual
+    // faces - a single cheap full redraw every 1.5s here keeps every face on
+    // screen always agreeing on the current phase, instead of active/bumped paths
+    // racing ahead of idle ones.
+    const nowMs = performance.now();
+    if (nowMs - lastHoloSyncTickMs >= HOLO_SYNC_INTERVAL_MS) {
+      lastHoloSyncTickMs = nowMs;
+      holoSyncMs = nowMs;
+      const skin = activeSkin();
+      if (skin && skin.material === 'holo' && currentGraph) updateFrame(currentPaths, true);
+    }
     if (moodTo && scene.background) {
       const t = Math.min(1, (performance.now() - moodStart) / MOOD_TRANSITION_MS);
       scene.background.copy(moodFrom).lerp(moodTo, t);
@@ -1337,5 +2219,66 @@ const Scene3D = (() => {
   function setOnArrowTap(cb) { onArrowTapCallback = cb; }
   function setOnGesture(cb) { onGestureCallback = cb; }
 
-  return { init, setLevelData, updateFrame, setOnArrowTap, setOnGesture, highlightPath, shootExitArrow, refreshMoodForTheme };
+  // Skins-screen "preview before you buy" modal (js/ui.js's openSkinPreview)
+  // draws into its own small canvas via this, reusing the SAME material/
+  // arrow/particle drawing functions the real game uses instead of
+  // duplicating look-and-feel logic in ui.js - keeps scene.js the one place
+  // that knows how to render a skin. `state` is an opaque object the caller
+  // owns and passes back in every call (holds this preview's own tiny
+  // particle array, entirely separate from the main game's ambient/burst
+  // arrays above) - callers should start with `{ particles: [] }` and drive
+  // this once per animation frame via their own requestAnimationFrame loop.
+  function renderSkinPreviewFrame(ctx, skin, w, h, tMs, state) {
+    const dark = Storage.get('theme') === 'dark';
+    const faceColor = dark ? skin.colors.face.dark : skin.colors.face.light;
+    const pathColor = dark ? skin.colors.path.dark : skin.colors.path.light;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = faceColor;
+    ctx.fillRect(0, 0, w, h);
+    drawMaterialPattern(ctx, skin.material, faceColor, 'skin-preview:' + skin.id, w, h, tMs);
+    if (skin.mascotIcon) {
+      ctx.save();
+      ctx.globalAlpha = 0.5;
+      drawMascotIcon(ctx, skin.mascotIcon, w, h);
+      ctx.restore();
+    }
+
+    const size = Math.min(w, h) * 0.22;
+    const arrows = [
+      { x: w * 0.28, y: h * 0.5, dir: 'right' },
+      { x: w * 0.5, y: h * 0.28, dir: 'down' },
+      { x: w * 0.72, y: h * 0.5, dir: 'left' }
+    ];
+    if (skin.lineStyle) {
+      // Connects the same 3 preview points with the skin's real trail
+      // renderer so the lineStyle (not just the arrowhead) is visible before
+      // a player unlocks it - the 3 points make a gentle zigzag, giving the
+      // wobble/twist-based styles (water/rope) enough length to read.
+      drawStyledPath(ctx, [arrows.map(a => ({ x: a.x, y: a.y }))], size * 1.3, pathColor, skin.lineStyle, 'skin-preview:' + skin.id, tMs);
+      arrows.forEach(a => drawStyledArrowHead(ctx, a.x, a.y, a.dir, size, pathColor, skin.lineStyle, tMs));
+    } else {
+      arrows.forEach(a => drawPerfectArrowHead(ctx, a.x, a.y, a.dir, size, pathColor, skin.arrowShape));
+    }
+
+    const recipe = PARTICLE_THEMES[skin.particleTheme];
+    if (recipe && !prefersReducedMotion()) {
+      while (state.particles.length < 10) {
+        state.particles.push({
+          x: Math.random() * w, y: Math.random() * h,
+          vx: (Math.random() - 0.5) * 0.3, vy: 0,
+          size: 2 + Math.random() * 3, rot: Math.random() * Math.PI * 2,
+          vrot: (Math.random() - 0.5) * 0.02, alpha: 0.6 + Math.random() * 0.3
+        });
+      }
+      state.particles.forEach(p => {
+        stepParticle(p, recipe);
+        if (p.x < -10 || p.x > w + 10 || p.y < -10 || p.y > h + 10) {
+          p.x = Math.random() * w; p.y = Math.random() * h; p.vx = (Math.random() - 0.5) * 0.3; p.vy = 0;
+        }
+        drawParticleShape(ctx, p, recipe, pathColor);
+      });
+    }
+  }
+
+  return { init, setLevelData, updateFrame, setOnArrowTap, setOnGesture, highlightPath, shootExitArrow, refreshMoodForTheme, renderSkinPreviewFrame };
 })();

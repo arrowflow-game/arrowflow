@@ -47,6 +47,24 @@ document.addEventListener('DOMContentLoaded', () => {
   // played level 1 once, without having to manually clear browser storage.
   if (new URLSearchParams(location.search).get('tutorial') === '1') Storage.set('tutorialSeen', false);
 
+  // Debug convenience: ?debugall=1 unlocks every level and every skin (level/streak/gems/iap
+  // tracks all satisfied) and clears today's Daily Challenge claim so it can be replayed
+  // repeatedly for testing, without manually grinding progress or clearing storage by hand.
+  if (new URLSearchParams(location.search).get('debugall') === '1') {
+    Storage.set('highestUnlocked', 300);
+    Storage.set('currentLevel', 300);
+    Storage.set('dailyStreak', 999);
+    Storage.set('gems', 999999);
+    // Covers both primary-iap-only skins (the "royale" prestige tier, unlock.type
+    // === 'iap') and the streak-track skins whose altUnlock is an iap bypass -
+    // previously only the latter was included, leaving the royale tier locked.
+    Storage.set('ownedIapSkins', Skins.ALL.filter(s => s.unlock.type === 'iap' || (s.altUnlock && s.altUnlock.type === 'iap')).map(s => s.id));
+    // Gems-track skins need to actually be "owned" (not just affordable) to show
+    // unlocked - the debug gems balance above doesn't do that by itself.
+    Storage.set('ownedGemSkins', Skins.ALL.filter(s => s.unlock.type === 'gems').map(s => s.id));
+    Storage.set('dailyLastCompletedDate', null);
+  }
+
   // Expose current level on Game object for UI
   Game.getCurrentLevel = () => {
     // hacky way if state is hidden, but let's just use Storage

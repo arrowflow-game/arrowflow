@@ -127,7 +127,7 @@ const Tutorial = (() => {
     if (Storage.get('tutorialSeen')) return;
     if (active) return;
     active = true;
-    hintsAtStart = Storage.get('hints');
+    hintsAtStart = Storage.getHintsTotal();
     buildDOM();
     // Small delay so the HUD/scene has finished its own load-in before the first
     // spotlight measures element positions.
@@ -282,7 +282,7 @@ const Tutorial = (() => {
     // hints. Refund whatever was actually spent during the tutorial (only ever 0 or
     // 1 in practice) so a first-time player doesn't start the real game down a hint
     // just for having followed the tutorial.
-    const spent = hintsAtStart - Storage.get('hints');
+    const spent = hintsAtStart - Storage.getHintsTotal();
     if (spent > 0) Storage.addHints(spent);
     Storage.set('tutorialSeen', true);
     if (els.overlay) els.overlay.remove();

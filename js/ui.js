@@ -7,6 +7,9 @@ const UI = (() => {
   // Which screen the Store's back button returns to - the menu button and the in-game
   // HUD shortcut both open the same screen-store, but need to land back in different places.
   let storeReturnScreen = 'screen-menu';
+  // Same idea for Skins - the menu button and the Settings shortcut (reachable from
+  // pause mid-game) both open screen-skins, but need to land back in different places.
+  let skinsReturnScreen = 'screen-menu';
 
   function applySound(enabled) {
     Storage.set('sound', enabled);
@@ -64,6 +67,57 @@ const UI = (() => {
     if (iconHud) iconHud.textContent = iconText;
   }
 
+  // Shared by the main menu card and the in-game HUD - both show the same
+  // live gems balance, so a single refresh point keeps them in sync whenever
+  // gems change (level completion, gems-skin purchase).
+  function refreshGemsDisplay() {
+    const g = Storage.getGemsTotal();
+    const menuEl = document.getElementById('menu-gems');
+    if (menuEl) menuEl.textContent = '💎 ' + g;
+    const hudEl = document.getElementById('hud-gems-count');
+    if (hudEl) hudEl.textContent = g;
+  }
+
+  // Every streak-track skin (js/skins.js), sorted by day-threshold ascending -
+  // used both for the daily-tip nudge (always points at the very first one)
+  // and the menu streak badge (points at whichever is next to unlock).
+  function streakSkinsSorted() {
+    return Skins.ALL.filter(s => s.unlock.type === 'streak').slice().sort((a, b) => a.unlock.value - b.unlock.value);
+  }
+
+  // Localized daily_tip.text with the first streak skin's own name substituted
+  // in, so the one-time nudge tells the player a concrete reward instead of
+  // just "you'll get a streak stat" (that vague version was the reason this
+  // whole nudge got questioned in the first place).
+  function dailyTipText() {
+    const first = streakSkinsSorted()[0];
+    const skinName = first ? (first.name[I18N.currentLang()] || first.name.en) : '';
+    return I18N.t('daily_tip.text', { skin: skinName });
+  }
+
+  // Menu streak badge (#daily-streak-badge) - proactive "N more days for skin
+  // X" callout under the Daily button, so the reward is visible without ever
+  // opening the Skins screen. Uses the SAME permanent ownedStreakSkins set as
+  // Skins.isUnlockedFor() (see [[arrowflow_holo_sync_fix]]-era memory system
+  // note on streak skins never re-locking) - "next" is the lowest-threshold
+  // skin not yet owned, not just whatever's above the live streak count.
+  function updateDailyStreakBadge() {
+    const badge = document.getElementById('daily-streak-badge');
+    if (!badge) return;
+    const streakSkins = streakSkinsSorted();
+    if (streakSkins.length === 0) { badge.classList.add('hidden'); return; }
+    const owned = new Set(Storage.get('ownedStreakSkins') || []);
+    const streak = Storage.get('dailyStreak') || 0;
+    const next = streakSkins.find(s => !owned.has(s.id));
+    badge.classList.remove('hidden');
+    if (!next) {
+      badge.textContent = I18N.t('daily_streak.badge_maxed', { cur: streak });
+    } else {
+      const skinName = next.name[I18N.currentLang()] || next.name.en;
+      badge.textContent = I18N.t('daily_streak.badge_progress', { cur: Math.min(streak, next.unlock.value), n: next.unlock.value, skin: skinName });
+    }
+  }
+
   function updateMenu() {
     // currentLevel becomes levelNum+1 on completeLevel() even for the last
     // level (see storage.js), so it can read 301 once the whole campaign is
@@ -73,12 +127,24 @@ const UI = (() => {
     document.getElementById('menu-cur-lvl').textContent = cl;
     document.getElementById('menu-total-stars').textContent = '★ ' + ts;
     document.getElementById('menu-prog').style.width = ((cl / TOTAL_LEVELS) * 100) + '%';
+    refreshGemsDisplay();
 
     const dailyBtn = document.getElementById('btn-daily');
     if (dailyBtn) {
       const done = Storage.isDailyCompletedToday();
       dailyBtn.classList.toggle('daily-done', done);
       dailyBtn.textContent = I18N.t(done ? 'menu.daily_done' : 'menu.daily');
+    }
+    updateDailyStreakBadge();
+
+    // Bundle promo button (2026-08-20) - hidden on web (nothing purchasable
+    // there, same rule every other real-money surface follows) and once
+    // every skin in the game is already owned (nothing left to advertise).
+    const promoBtn = document.getElementById('btn-bundle-promo');
+    if (promoBtn) {
+      const ownedIapSkins = new Set(Storage.get('ownedIapSkins') || []);
+      const allOwned = bundleSkinIds('all').every(id => ownedIapSkins.has(id));
+      promoBtn.classList.toggle('hidden', !Iap.isNative() || allOwned);
     }
   }
 
@@ -116,7 +182,7 @@ const UI = (() => {
   }
 
   function buildStoreScreen() {
-    document.getElementById('store-hint-count').textContent = Storage.get('hints');
+    document.getElementById('store-hint-count').textContent = Storage.getHintsTotal();
     const btn = document.getElementById('btn-store-hint-ad');
     const remainingEl = document.getElementById('store-hint-ad-remaining');
     const adsRemoved = Storage.isAdsRemoved();
@@ -171,6 +237,43 @@ const UI = (() => {
       const livePrice = Iap.isNative() ? Iap.hintPackPriceLabel(key) : null;
       if (livePrice) btn.textContent = I18N.t('iap.hint_pack_label', { n: key, price: livePrice });
     });
+
+    // Gem packs (2026-08-20) - hidden outright on web like remove-ads/skin
+    // sections above, since there's nothing a web player could do with them.
+    const gemsSection = document.getElementById('store-gems-section');
+    if (!Iap.isNative()) {
+      gemsSection.classList.add('hidden');
+    } else {
+      gemsSection.classList.remove('hidden');
+      GEM_PACK_KEYS.forEach(key => {
+        const gbtn = document.getElementById('btn-gems-' + key);
+        gbtn.disabled = false;
+        gbtn.textContent = I18N.t('store.gem_pack_label', { n: key, price: gemPackPriceLabel(key) });
+      });
+    }
+
+    // Skin bundles (2026-08-20) - price + "how many of this bundle's skins
+    // are still locked" computed live so a bundle never gets advertised as
+    // if it's selling skins the player already owns.
+    const bundlesSection = document.getElementById('store-bundles-section');
+    if (!Iap.isNative()) {
+      bundlesSection.classList.add('hidden');
+    } else {
+      bundlesSection.classList.remove('hidden');
+      const ownedIapSkins = new Set(Storage.get('ownedIapSkins') || []);
+      const statusEl = document.getElementById('store-bundle-status');
+      const allOwned = bundleSkinIds('all').every(id => ownedIapSkins.has(id));
+      statusEl.textContent = allOwned ? I18N.t('store.bundle_owned_all') : '';
+      BUNDLE_KEYS.forEach(key => {
+        const bbtn = document.getElementById('btn-bundle-' + key);
+        const remaining = bundleSkinIds(key).filter(id => !ownedIapSkins.has(id)).length;
+        if (remaining === 0) { bbtn.classList.add('hidden'); return; }
+        bbtn.classList.remove('hidden');
+        bbtn.disabled = false;
+        const i18nKey = key === 'streak' ? 'store.bundle_streak' : key === 'royale' ? 'store.bundle_royale' : 'store.bundle_all';
+        bbtn.textContent = I18N.t(i18nKey, { n: remaining, price: bundlePriceLabel(key) });
+      });
+    }
   }
 
   function updateHUD(payload) {
@@ -184,6 +287,7 @@ const UI = (() => {
     tierEl.textContent = tier === 'DAILY' ? I18N.t('hud.tier.daily') : tier === 'REMIX' ? I18N.t('hud.tier.remix') : tier;
     tierEl.classList.toggle('milestone', !!isMilestone);
     document.getElementById('hud-hints').textContent = hints;
+    refreshGemsDisplay();
 
     const arrowsEl = document.getElementById('hud-arrows-remaining');
     if (arrowsEl) arrowsEl.textContent = remaining;
@@ -218,6 +322,31 @@ const UI = (() => {
 
   function removeAdsPriceLabel(tierKey) {
     return Iap.priceLabel(tierKey) || REMOVE_ADS_FALLBACK_PRICES[tierKey];
+  }
+
+  // Gem packs + skin bundles (2026-08-20) - same "hidden outright on web,
+  // real Play Billing price once native has fetched it, else a fallback"
+  // pattern as remove-ads above.
+  const GEM_PACK_KEYS = ['100', '300', '800', '2000'];
+  const GEM_PACK_FALLBACK_PRICES = { '100': '$0.99', '300': '$2.49', '800': '$5.99', '2000': '$12.99' };
+  function gemPackPriceLabel(packKey) {
+    return Iap.gemPackPriceLabel(packKey) || GEM_PACK_FALLBACK_PRICES[packKey];
+  }
+
+  const BUNDLE_KEYS = ['streak', 'royale', 'all'];
+  const BUNDLE_FALLBACK_PRICES = { streak: '$4.99', royale: '$4.99', all: '$14.99' };
+  function bundlePriceLabel(bundleKey) {
+    return Iap.bundlePriceLabel(bundleKey) || BUNDLE_FALLBACK_PRICES[bundleKey];
+  }
+
+  // Which skin ids belong to each bundle - the single place this membership
+  // is defined, since js/iap.js can't reference Skins.ALL at its own parse
+  // time (script load order, see its SKIN_BUNDLES comment).
+  function bundleSkinIds(bundleKey) {
+    if (bundleKey === 'streak') return Skins.ALL.filter(s => s.unlock.type === 'streak').map(s => s.id);
+    if (bundleKey === 'royale') return Skins.ALL.filter(s => s.unlock.type === 'iap').map(s => s.id);
+    if (bundleKey === 'all') return Skins.ALL.filter(s => s.id !== 'default').map(s => s.id);
+    return [];
   }
 
   // HUD badge: a single status/CTA pill. Not-yet-removed -> tappable shortcut into
@@ -275,6 +404,61 @@ const UI = (() => {
         alert(tierKey === 'forever'
           ? I18N.t('iap.purchase_success_forever')
           : I18N.t('iap.purchase_success', { n: Storage.daysAdsRemovedLeft() }));
+      },
+      () => {
+        btn.disabled = false;
+        alert(I18N.t('iap.purchase_failed'));
+      }
+    );
+  }
+
+  // Opens the Store screen scrolled to the skin-bundles section - the menu's
+  // promo button (index.html's #btn-bundle-promo) is the only caller today,
+  // mirrors openStoreForRemoveAds above exactly.
+  function openStoreForBundles(returnScreen) {
+    storeReturnScreen = returnScreen;
+    buildStoreScreen();
+    showScreen('screen-store');
+    const section = document.getElementById('store-bundles-section');
+    if (section && section.scrollIntoView) section.scrollIntoView({ block: 'nearest' });
+  }
+
+  // Real-money gem pack purchase (2026-08-20) - mirrors
+  // handlePurchaseRemoveAdsTier above; onGranted(gems) calls
+  // Storage.grantGems() (the ONE mutator for real-money gems, same "guard
+  // the mutation in one place" pattern as spendGems).
+  function handlePurchaseGemPack(btn, packKey) {
+    if (!Iap.isNative()) return;
+    btn.disabled = true;
+    Iap.purchaseGemPack(packKey,
+      (gems) => {
+        Storage.grantGems(gems);
+        Analytics.logEvent('gems_purchased', { pack: packKey, gems });
+        refreshGemsDisplay();
+        buildStoreScreen();
+        alert(I18N.t('iap.gem_pack_success', { n: gems }));
+      },
+      () => {
+        btn.disabled = false;
+        alert(I18N.t('iap.purchase_failed'));
+      }
+    );
+  }
+
+  // Skin bundle purchase (2026-08-20) - grants every not-yet-owned skin id
+  // in the bundle via Storage.grantIapSkin() (same mutator individual skin
+  // purchases already use), so Skins.isUnlockedFor() picks them up
+  // immediately with no separate "bundle owned" bookkeeping needed.
+  function handlePurchaseBundle(btn, bundleKey) {
+    if (!Iap.isNative()) return;
+    btn.disabled = true;
+    Iap.purchaseBundle(bundleKey,
+      () => {
+        bundleSkinIds(bundleKey).forEach(id => Storage.grantIapSkin(id));
+        Analytics.logEvent('skin_bundle_purchased', { bundle: bundleKey });
+        buildStoreScreen();
+        buildSkinsScreen();
+        alert(I18N.t('iap.bundle_success'));
       },
       () => {
         btn.disabled = false;
@@ -371,7 +555,7 @@ const UI = (() => {
     return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
   }
 
-  function showWin(levelNum, hints, stars, score, elapsedSec, mode, isCampaignFinale, newlyUnlockedSkin) {
+  function showWin(levelNum, hints, stars, score, elapsedSec, mode, isCampaignFinale, newlyUnlockedSkin, gemsEarned, gemsBonusType, hintsBonus) {
     const winModal = document.getElementById('modal-win');
     const skinBtn = document.getElementById('win-new-skin');
     if (skinBtn) {
@@ -399,6 +583,30 @@ const UI = (() => {
       subEl.textContent = isCampaignFinale ? I18N.t('win.finale_sub') : '';
     }
     document.getElementById('ws-hints').textContent = hints;
+    const hintsBonusEl = document.getElementById('ws-hints-bonus');
+    if (hintsBonusEl) {
+      if (hintsBonus > 0) {
+        hintsBonusEl.textContent = I18N.t('win.hints_bonus', { n: hintsBonus });
+        hintsBonusEl.classList.remove('hidden');
+      } else {
+        hintsBonusEl.classList.add('hidden');
+      }
+    }
+    const gemsRowEl = document.getElementById('ws-gems-row');
+    const gemsValEl = document.getElementById('ws-gems');
+    const gemsBonusEl = document.getElementById('ws-gems-bonus');
+    if (gemsRowEl && gemsValEl && gemsBonusEl) {
+      gemsRowEl.classList.toggle('hidden', !gemsEarned);
+      if (gemsEarned) {
+        gemsValEl.textContent = '+' + gemsEarned;
+        if (gemsBonusType === 'daily' || gemsBonusType === 'milestone') {
+          gemsBonusEl.textContent = I18N.t('win.gems_bonus_' + gemsBonusType);
+          gemsBonusEl.classList.remove('hidden');
+        } else {
+          gemsBonusEl.classList.add('hidden');
+        }
+      }
+    }
     const scoreEl = document.getElementById('ws-score');
     if (scoreEl) scoreEl.textContent = score;
     const timeEl = document.getElementById('ws-time');
@@ -520,17 +728,101 @@ const UI = (() => {
   // Rebuilds the whole grid on every open (cheap - only 13 skins, unlike the
   // level grid's buffered-render trick) so a just-crossed unlock threshold or
   // a freshly-selected skin always reflects current Storage state.
+  // Which grouping mode the Skins screen grid is currently rendered in -
+  // toggled by the 2 tabs above the grid (index.html's .skins-view-tabs).
+  // Not persisted to Storage - resets to 'unlock' every time the screen is
+  // freshly entered, which is fine since it's a view preference, not progress.
+  let skinsViewMode = 'unlock'; // 'unlock' | 'style'
+
+  // Style category derived from the existing `material` field (2026-08-20) -
+  // no new per-skin data needed, since material already cleanly implies a
+  // visual family: 'badge' is the 6 real-art mascot skins, 'holo' is every
+  // animated-rainbow skin (the majority of the streak/gems/iap tracks), and
+  // everything else (flat/marble/glass/neon/metal) reads as one "special
+  // themed" bucket - added per direct request to make the by-price grouping
+  // optional rather than the only way to scan the (now 37-skin) roster.
+  function skinStyleCategory(skin) {
+    if (skin.material === 'badge') return 'animal';
+    if (skin.material === 'holo') return 'rainbow';
+    return 'special';
+  }
+
   function buildSkinsScreen() {
     const wrap = document.getElementById('skins-grid');
     wrap.innerHTML = '';
-    const unlocked = Storage.get('highestUnlocked') || 1;
+    const tabUnlock = document.getElementById('btn-skins-view-unlock');
+    const tabStyle = document.getElementById('btn-skins-view-style');
+    if (tabUnlock && tabStyle) {
+      tabUnlock.classList.toggle('active', skinsViewMode === 'unlock');
+      tabStyle.classList.toggle('active', skinsViewMode === 'style');
+    }
+    // Debug convenience (?unlockskins=1): treat every skin as unlocked for this
+    // screen only, without touching real Storage.highestUnlocked progress, so
+    // skins beyond level 1 can be tried without grinding the campaign first.
+    const debugUnlockAll = new URLSearchParams(location.search).get('unlockskins') === '1';
+    // Debug convenience (?debugstreak=N): view-only override for dailyStreak fed
+    // into the unlock check below, so a streak-gated skin's tile states can be
+    // tried without actually playing N consecutive Daily Challenge days - never
+    // touches real Storage, same spirit as ?unlockskins=1 above.
+    const debugStreakParam = parseInt(new URLSearchParams(location.search).get('debugstreak'));
+    const unlocked = debugUnlockAll ? 300 : (Storage.get('highestUnlocked') || 1);
+    const liveDailyStreak = debugStreakParam >= 0 ? debugStreakParam : (Storage.get('dailyStreak') || 0);
+    // Real permanent ownership (see storage.js's ownedStreakSkins) plus, under
+    // ?debugstreak=N, a view-only simulation of what N would unlock - never touches
+    // real Storage, same spirit as ?unlockskins=1's debugUnlockAll.
+    const streakOwnedSkins = new Set(Storage.get('ownedStreakSkins') || []);
+    if (debugStreakParam >= 0) {
+      Skins.ALL.filter(s => s.unlock.type === 'streak' && s.unlock.value <= debugStreakParam)
+        .forEach(s => streakOwnedSkins.add(s.id));
+    }
+    const ctx = {
+      debugUnlockAll,
+      highestUnlocked: unlocked,
+      dailyStreak: liveDailyStreak,
+      streakOwnedSkins,
+      gemsOwnedSkins: new Set(Storage.get('ownedGemSkins') || []),
+      iapOwnedSkins: new Set(Storage.get('ownedIapSkins') || [])
+    };
     const selected = Storage.get('selectedSkin');
     const dark = Storage.get('theme') === 'dark';
-    Skins.ALL.forEach(skin => {
-      const isUnlocked = unlocked >= skin.unlockLevel;
+    // Grouped by unlock track (level/streak/gems/iap) in 'unlock' mode - the
+    // grid reads as 4 clearly separated sections instead of one long flat
+    // list - requested directly once the roster grew past ~30 skins across
+    // the 4 tracks. Skins.ALL is already contiguous per track in file
+    // order, so a simple "insert a header when the key changes" pass over
+    // it preserves that order rather than needing a real sort. 'style' mode
+    // groups by skinStyleCategory() instead - Skins.ALL is NOT already
+    // contiguous by material, so that mode builds an explicitly reordered
+    // list first (animal/rainbow/special, in that order) before the same
+    // header-on-key-change pass runs over it.
+    const orderedSkins = skinsViewMode === 'style'
+      ? ['animal', 'rainbow', 'special'].flatMap(cat => Skins.ALL.filter(s => skinStyleCategory(s) === cat))
+      : Skins.ALL;
+    const groupKeyFor = skin => skinsViewMode === 'style' ? skinStyleCategory(skin) : skin.unlock.type;
+
+    let lastGroupKey = null;
+    orderedSkins.forEach(skin => {
+      const groupKey = groupKeyFor(skin);
+      if (groupKey !== lastGroupKey) {
+        lastGroupKey = groupKey;
+        const header = document.createElement('div');
+        header.className = 'skin-group-header';
+        header.textContent = I18N.t('skins.group.' + groupKey);
+        wrap.appendChild(header);
+      }
+      const isUnlocked = Skins.isUnlockedFor(skin, ctx);
       const btn = document.createElement('button');
       btn.className = 'skin-btn' + (isUnlocked ? '' : ' locked') + (isUnlocked && selected === skin.id ? ' selected' : '');
       btn.dataset.skinId = skin.id;
+      // Visible in the grid regardless of lock state, so a premium skin
+      // stands out from the level track at a glance, before the player even
+      // opens the preview modal.
+      if (skin.unlock.type !== 'level') {
+        const badge = document.createElement('span');
+        badge.className = 'skin-btn-premium-badge';
+        badge.textContent = '✨';
+        btn.appendChild(badge);
+      }
       const pathColor = dark ? skin.colors.path.dark : skin.colors.path.light;
       const faceColor = dark ? skin.colors.face.dark : skin.colors.face.light;
       const swatch = document.createElement('span');
@@ -545,8 +837,14 @@ const UI = (() => {
       if (!isUnlocked) {
         const lockEl = document.createElement('span');
         lockEl.className = 'skin-btn-lock';
-        lockEl.textContent = '🔒 ' + I18N.t('skins.locked', { n: skin.unlockLevel });
+        lockEl.textContent = skinLockLabel(skin, ctx);
         btn.appendChild(lockEl);
+        // Locked tiles of every type open the preview modal on tap (used to be
+        // inert - no handler at all) - the modal is where the actual buy/
+        // unlock-condition detail lives; the grid tile itself just shows the
+        // condensed label above so scanning the grid still tells you at a
+        // glance what each skin needs, per the user's request.
+        btn.addEventListener('click', () => openSkinPreview(skin, ctx));
       } else {
         btn.addEventListener('click', () => {
           Storage.set('selectedSkin', skin.id);
@@ -566,13 +864,156 @@ const UI = (() => {
     // the player at nothing new). Runs after appendChild above so
     // getBoundingClientRect() sees real, laid-out elements.
     if (!Storage.get('skinTutorialSeen')) {
-      const unlockedNonDefault = Skins.ALL.filter(s => s.id !== 'default' && unlocked >= s.unlockLevel);
+      // Scoped to type:'level' skins only - that's the only unlock method with
+      // an inherent "newest" ordering by campaign progress. Streak/gems/iap
+      // unlocks get their own immediate feedback (win-banner for streak,
+      // purchase-success state in the preview modal for gems/iap) instead of
+      // being retrofit into this same "spotlight the newest" mechanism.
+      const unlockedNonDefault = Skins.ALL.filter(s => s.id !== 'default' && s.unlock.type === 'level' && unlocked >= s.unlock.value);
       const newest = unlockedNonDefault[unlockedNonDefault.length - 1];
       if (newest && newest.id !== selected) {
         const target = wrap.querySelector('[data-skin-id="' + newest.id + '"]');
         if (target) setTimeout(() => showSkinTutorial(target), 50);
       }
     }
+  }
+
+  // Condensed unlock-condition text shown directly on a locked grid tile -
+  // always visible without opening the preview modal, so scanning the grid
+  // tells you at a glance what each skin needs.
+  function skinLockLabel(skin, ctx) {
+    switch (skin.unlock.type) {
+      case 'level':
+        return '🔒 ' + I18N.t('skins.locked', { n: skin.unlock.value });
+      case 'streak':
+        return '🔥 ' + I18N.t('skins.locked_streak', { cur: Math.min(ctx.dailyStreak, skin.unlock.value), n: skin.unlock.value });
+      case 'gems':
+        return I18N.t('skins.buy_gems', { price: skin.unlock.value });
+      case 'iap': {
+        const price = Iap.isNative() ? Iap.skinPriceLabel(skin.id) : null;
+        return I18N.t('skins.buy_iap', { price: price || '···' });
+      }
+      default:
+        return '';
+    }
+  }
+
+  // Preview modal - opened by tapping any locked skin tile (see buildSkinsScreen
+  // above). Draws a live animated preview via Scene3D.renderSkinPreviewFrame()
+  // (reusing the exact same material/arrow/particle drawing the real game
+  // uses, see [[arrowflow_render_perf]]-era note in scene.js) and hosts the
+  // actual buy/unlock-condition action for gems/iap skins - the grid tile
+  // itself is now purely informational (skinLockLabel above), all purchase
+  // interaction happens here.
+  let skinPreviewRAF = null;
+  function closeSkinPreview() {
+    if (skinPreviewRAF) cancelAnimationFrame(skinPreviewRAF);
+    skinPreviewRAF = null;
+    document.getElementById('modal-skin-preview').classList.add('hidden');
+  }
+
+  function openSkinPreview(skin, ctx) {
+    const modal = document.getElementById('modal-skin-preview');
+    document.getElementById('skin-preview-name').textContent = skin.name[I18N.currentLang()] || skin.name.en;
+
+    const conditionEl = document.getElementById('skin-preview-condition');
+    const actionWrap = document.getElementById('skin-preview-action');
+    actionWrap.innerHTML = '';
+
+    if (skin.unlock.type === 'level') {
+      conditionEl.textContent = '🔒 ' + I18N.t('skins.locked', { n: skin.unlock.value });
+    } else if (skin.unlock.type === 'streak') {
+      conditionEl.textContent = '🔥 ' + I18N.t('skins.locked_streak', { cur: Math.min(ctx.dailyStreak, skin.unlock.value), n: skin.unlock.value });
+    } else if (skin.unlock.type === 'gems') {
+      conditionEl.textContent = I18N.t('skins.buy_gems', { price: skin.unlock.value });
+      const buyBtn = document.createElement('button');
+      buyBtn.className = 'btn btn-primary';
+      buyBtn.textContent = I18N.t('skins.buy_gems', { price: skin.unlock.value });
+      buyBtn.disabled = Storage.getGemsTotal() < skin.unlock.value;
+      buyBtn.addEventListener('click', () => {
+        if (Storage.spendGems(skin.unlock.value, skin.id)) {
+          closeSkinPreview();
+          buildSkinsScreen();
+          refreshGemsDisplay();
+        }
+      });
+      actionWrap.appendChild(buyBtn);
+    } else if (skin.unlock.type === 'iap') {
+      if (!Iap.isNative()) {
+        conditionEl.textContent = I18N.t('skins.iap_web_unavailable');
+      } else {
+        const priceLabel = Iap.skinPriceLabel(skin.id);
+        conditionEl.textContent = priceLabel ? I18N.t('skins.buy_iap', { price: priceLabel }) : '···';
+        const buyBtn = document.createElement('button');
+        buyBtn.className = 'btn btn-primary';
+        buyBtn.textContent = priceLabel ? I18N.t('skins.buy_iap', { price: priceLabel }) : '···';
+        buyBtn.addEventListener('click', () => {
+          buyBtn.disabled = true;
+          Iap.purchaseSkin(skin.id, () => {
+            Storage.grantIapSkin(skin.id);
+            closeSkinPreview();
+            buildSkinsScreen();
+          }, () => { buyBtn.disabled = false; });
+        });
+        actionWrap.appendChild(buyBtn);
+      }
+    }
+
+    // altUnlock (2026-08-20): a secondary bypass button, shown alongside
+    // whichever primary condition/button rendered above - never replaces it.
+    // Only level-track (gems bypass) and streak-track (money-only bypass)
+    // skins carry this field, see js/skins.js.
+    if (skin.altUnlock) {
+      if (skin.altUnlock.type === 'gems') {
+        const price = skin.altUnlock.value;
+        const altBtn = document.createElement('button');
+        altBtn.className = 'btn btn-outline';
+        altBtn.textContent = I18N.t('skins.buy_alt_gems', { price });
+        altBtn.disabled = Storage.getGemsTotal() < price;
+        altBtn.addEventListener('click', () => {
+          if (Storage.spendGems(price, skin.id)) {
+            closeSkinPreview();
+            buildSkinsScreen();
+            refreshGemsDisplay();
+          }
+        });
+        actionWrap.appendChild(altBtn);
+      } else if (skin.altUnlock.type === 'iap' && Iap.isNative()) {
+        // On web (no native purchase) this bypass is silently omitted rather
+        // than showing a second "unavailable" line - the primary condition
+        // above (streak progress) already explains the only route there.
+        const priceLabel = Iap.skinPriceLabel(skin.id);
+        const altBtn = document.createElement('button');
+        altBtn.className = 'btn btn-outline';
+        altBtn.textContent = priceLabel ? I18N.t('skins.buy_alt_iap', { price: priceLabel }) : '···';
+        altBtn.addEventListener('click', () => {
+          altBtn.disabled = true;
+          Iap.purchaseSkin(skin.id, () => {
+            Storage.grantIapSkin(skin.id);
+            closeSkinPreview();
+            buildSkinsScreen();
+          }, () => { altBtn.disabled = false; });
+        });
+        actionWrap.appendChild(altBtn);
+      }
+    }
+
+    modal.classList.remove('hidden');
+
+    const canvas = document.getElementById('skin-preview-canvas');
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    canvas.width = w * dpr; canvas.height = h * dpr;
+    const pctx = canvas.getContext('2d');
+    pctx.scale(dpr, dpr);
+    const state = { particles: [] };
+    const start = performance.now();
+    if (skinPreviewRAF) cancelAnimationFrame(skinPreviewRAF);
+    function frame() {
+      Scene3D.renderSkinPreviewFrame(pctx, skin, w, h, performance.now() - start, state);
+      skinPreviewRAF = requestAnimationFrame(frame);
+    }
+    frame();
   }
 
   let skinTutorialEls = null;
@@ -743,12 +1184,42 @@ const UI = (() => {
     document.getElementById('btn-back-ranking').addEventListener('click', () => showScreen('screen-menu'));
 
     document.getElementById('btn-skins').addEventListener('click', () => {
+      skinsReturnScreen = 'screen-menu';
+      buildSkinsScreen();
+      showScreen('screen-skins');
+    });
+    document.getElementById('btn-settings-skins').addEventListener('click', () => {
+      // Reachable both from the main menu's settings and from in-game pause ->
+      // settings, so remember which screen was underneath to return to it
+      // (rather than always bouncing back to the main menu mid-game).
+      skinsReturnScreen = document.getElementById('screen-game').classList.contains('active') ? 'screen-game' : 'screen-menu';
+      document.getElementById('modal-settings').classList.add('hidden');
+      document.getElementById('modal-pause').classList.add('hidden');
       buildSkinsScreen();
       showScreen('screen-skins');
     });
     document.getElementById('btn-back-skins').addEventListener('click', () => {
       dismissSkinTutorial();
-      showScreen('screen-menu');
+      showScreen(skinsReturnScreen);
+    });
+    document.getElementById('skin-preview-close').addEventListener('click', closeSkinPreview);
+
+    // Skins-screen grouping tabs (2026-08-20) - just flips skinsViewMode and
+    // rebuilds; buildSkinsScreen() itself syncs the tabs' .active class.
+    document.getElementById('btn-skins-view-unlock').addEventListener('click', () => {
+      skinsViewMode = 'unlock';
+      buildSkinsScreen();
+    });
+    document.getElementById('btn-skins-view-style').addEventListener('click', () => {
+      skinsViewMode = 'style';
+      buildSkinsScreen();
+    });
+
+    // Menu promo button -> Store's bundles section (2026-08-20). Hidden
+    // outright when there's nothing to sell (web, or every skin already
+    // owned) - see updateMenu()'s refreshBundlePromoButton() call.
+    document.getElementById('btn-bundle-promo').addEventListener('click', () => {
+      openStoreForBundles('screen-menu');
     });
 
     document.getElementById('btn-pause').addEventListener('click', () => {
@@ -821,6 +1292,7 @@ const UI = (() => {
       // an ad and this tip in the same tap.
       if (mode === 'campaign' && Game.getLevelNum() === 3 && !Storage.get('dailyTipSeen')) {
         Storage.set('dailyTipSeen', true);
+        document.getElementById('daily-tip-text').textContent = dailyTipText();
         document.getElementById('modal-daily-tip').classList.remove('hidden');
         return;
       }
@@ -961,7 +1433,7 @@ const UI = (() => {
       // in the HUD matches what the store just showed.
       if (storeReturnScreen === 'screen-game') {
         const hudHints = document.getElementById('hud-hints');
-        if (hudHints) hudHints.textContent = Storage.get('hints');
+        if (hudHints) hudHints.textContent = Storage.getHintsTotal();
       }
       showScreen(storeReturnScreen);
     });
@@ -990,7 +1462,7 @@ const UI = (() => {
         e.currentTarget.disabled = true;
         Iap.purchaseHintPack(packKey,
           (hints) => {
-            Storage.addHints(hints);
+            Storage.grantPaidHints(hints);
             Analytics.logEvent('hint_pack_purchased', { hints });
             e.currentTarget.disabled = false;
             buildStoreScreen();
@@ -1002,6 +1474,17 @@ const UI = (() => {
           }
         );
       });
+    });
+
+    // Gem packs + skin bundles (2026-08-20) - both native-only, same pattern
+    // as remove-ads-tier-btn/store-pack-btn above (handlers live in
+    // handlePurchaseGemPack/handlePurchaseBundle since the win/fail logic is
+    // identical across every key, mirrors handlePurchaseRemoveAdsTier).
+    document.querySelectorAll('.gem-pack-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => handlePurchaseGemPack(e.currentTarget, e.currentTarget.dataset.gems));
+    });
+    document.querySelectorAll('.bundle-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => handlePurchaseBundle(e.currentTarget, e.currentTarget.dataset.bundle));
     });
   }
 
