@@ -25,6 +25,12 @@ const Sound = (() => {
     return Storage.get('music') !== false;
   }
 
+  // Bumps every SFX tone's gain relative to the (now loudness-normalized)
+  // music tracks - user asked to try SFX "2 levels" louder than music as a
+  // first pass; a single multiplier here keeps every SFX call's relative
+  // balance intact while making it trivial to try a different level later.
+  const SFX_GAIN_BOOST = 1.3;
+
   // One oscillator with a short exponential decay envelope, optionally sliding
   // its frequency from startFreq to endFreq over the note's lifetime.
   function tone(startFreq, endFreq, duration, type, startTime, gain) {
@@ -34,7 +40,7 @@ const Sound = (() => {
     osc.type = type;
     osc.frequency.setValueAtTime(startFreq, startTime);
     if (endFreq !== startFreq) osc.frequency.exponentialRampToValueAtTime(endFreq, startTime + duration);
-    amp.gain.setValueAtTime(gain, startTime);
+    amp.gain.setValueAtTime(gain * SFX_GAIN_BOOST, startTime);
     amp.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
     osc.connect(amp);
     amp.connect(c.destination);
