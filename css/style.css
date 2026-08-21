@@ -51,7 +51,8 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font-main); colo
 }
 
 .ovr-screen {
-  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10; opacity: 0; pointer-events: none; transition: opacity 0.4s;
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: safe center; z-index: 10; opacity: 0; pointer-events: none; transition: opacity 0.4s;
+  overflow-y: auto;
 }
 .ovr-screen.active:not(.game-hud) { opacity: 1; pointer-events: all; } .ovr-screen.active.game-hud { opacity: 1; pointer-events: none; }
 
@@ -259,7 +260,7 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
 /* Lives inside .ranking-scroll now (screen-ranking merges this with the world
    leaderboard section above it) - that ancestor owns the scrolling, so this
    only needs its own horizontal padding, not another nested flex/overflow. */
-.stats-list-wrap { padding: 0 20px 20px; }
+.stats-list-wrap { padding: 0 20px 20px; max-height: 320px; overflow-y: auto; }
 
 /* Ranking screen (world leaderboard + personal stats merged) */
 .ranking-scroll { flex: 1; overflow-y: auto; }

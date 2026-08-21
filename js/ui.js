@@ -682,7 +682,7 @@ const UI = (() => {
     const nickname = Leaderboard.getNickname();
     const myScore = Storage.get('totalScore') || 0;
     const [top, myRank] = await Promise.all([
-      Leaderboard.fetchTop(10),
+      Leaderboard.fetchTop(5),
       nickname ? Leaderboard.fetchMyRank(myScore) : Promise.resolve(null)
     ]);
 
