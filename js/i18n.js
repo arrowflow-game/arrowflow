@@ -123,6 +123,8 @@ const I18N = (() => {
       'daily_streak.badge_progress': '🔥 {cur}/{n} วันติด → ปลดล็อก {skin}',
       'daily_streak.badge_maxed': '🔥 สตรีค {cur} วัน — ปลดสกินสายสตรีคครบแล้ว!',
 
+      'update.ready': '🔄 อัปเดตพร้อมแล้ว แตะเพื่อรีสตาร์ท',
+
       'leaderboard.title': '🏆 อันดับโลก',
       'leaderboard.close': 'ปิด',
       'leaderboard.loading': 'กำลังโหลด…',
@@ -309,6 +311,8 @@ const I18N = (() => {
 
       'daily_streak.badge_progress': '🔥 {cur}/{n}-day streak → unlocks {skin}',
       'daily_streak.badge_maxed': '🔥 {cur}-day streak — all streak skins unlocked!',
+
+      'update.ready': '🔄 Update ready - tap to restart',
 
       'leaderboard.title': '🏆 World Leaderboard',
       'leaderboard.close': 'Close',

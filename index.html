@@ -45,6 +45,9 @@
       <button id="btn-theme" class="icon-btn" aria-label="Toggle theme"><span id="theme-icon">🌙</span></button>
       <button id="btn-settings" class="icon-btn" aria-label="Settings">⚙️</button>
     </div>
+    <!-- js/appUpdate.js: shown once a flexible in-app update has finished downloading
+         in the background. Hidden by default (also stays hidden entirely on web). -->
+    <button id="update-ready-banner" class="update-ready-banner hidden" data-i18n="update.ready">🔄 อัปเดตพร้อมแล้ว แตะเพื่อรีสตาร์ท</button>
     <div class="menu-card">
       <h1 class="menu-logo">ArrowFlow</h1>
       <p class="menu-tagline" data-i18n="menu.tagline">Slide all arrows off the cube!</p>
@@ -426,6 +429,8 @@
   <script src="js/analytics.js"></script>
   <script src="js/ads.js"></script>
   <script src="js/iap.js"></script>
+  <script src="js/rating.js"></script>
+  <script src="js/appUpdate.js"></script>
   <script src="js/leaderboard.js"></script>
   <script src="js/sound.js"></script>
   <script src="js/haptics.js"></script>

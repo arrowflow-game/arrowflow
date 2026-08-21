@@ -22,8 +22,16 @@
     // permanently the first time a threshold is crossed; isUnlockedFor() in skins.js checks
     // this set, never the live dailyStreak value. Earned (not paid), so wiped on resetAll()
     // like ownedGemSkins.
-    ownedStreakSkins: []
+    ownedStreakSkins: [],
+    // In-app rating prompt (js/rating.js) - sessionCount increments once per app
+    // launch (see markSessionOpened()); ratingPromptShown is a one-time gate so
+    // this app only ever calls the native review dialog once per player, ever.
+    // See shouldPromptRating() below for the actual trigger conditions.
+    sessionCount: 0, ratingPromptShown: false
   };
+
+  const RATING_SESSION_THRESHOLD = 5;
+  const RATING_LEVELS_THRESHOLD = 5;
 
   const GEMS_PER_STAR = 5;
   const GEMS_PER_STAR_MILESTONE = 6;
@@ -148,6 +156,20 @@
       save(_state);
     },
 
+    // In-app rating prompt (js/rating.js). Call once per app launch (main.js).
+    markSessionOpened() { _state.sessionCount = (_state.sessionCount || 0) + 1; save(_state); },
+    // True at most once ever per player (gated on ratingPromptShown) - fires on
+    // whichever "positive moment" condition is reached first: RATING_SESSION_THRESHOLD
+    // app opens, or RATING_LEVELS_THRESHOLD campaign levels completed. Both are cheap
+    // proxies for "this player is actually engaged," not a real quality signal -
+    // Google's own native dialog still decides on its own whether to show anything.
+    shouldPromptRating() {
+      if (_state.ratingPromptShown) return false;
+      const levelsCompleted = Object.keys(_state.levelData).length;
+      return _state.sessionCount >= RATING_SESSION_THRESHOLD || levelsCompleted >= RATING_LEVELS_THRESHOLD;
+    },
+    markRatingPrompted() { _state.ratingPromptShown = true; save(_state); },
+
     // Daily Challenge - deliberately separate from campaign progress above.
     isDailyCompletedToday: () => _state.dailyLastCompletedDate === localDateStr(),
     // Daily has no persistent per-level best to diff against - each calendar day's
@@ -192,7 +214,10 @@
     // nickname+play starts a genuinely new leaderboard identity, leaving the old
     // one's entry frozen in place rather than overwritten.
     resetAll() {
-      const keep = { theme: _state.theme, sound: _state.sound, music: _state.music, vibration: _state.vibration, lang: _state.lang, adsRemovedUntil: _state.adsRemovedUntil, adsRemovedForever: _state.adsRemovedForever, ownedIapSkins: _state.ownedIapSkins, paidGems: _state.paidGems, paidHints: _state.paidHints };
+      // sessionCount/ratingPromptShown ride along too - "reset progress" clears campaign
+      // state, not this device's usage history, and re-asking for a rating right after a
+      // reset would be an annoying non-sequitur for a player who already answered once.
+      const keep = { theme: _state.theme, sound: _state.sound, music: _state.music, vibration: _state.vibration, lang: _state.lang, adsRemovedUntil: _state.adsRemovedUntil, adsRemovedForever: _state.adsRemovedForever, ownedIapSkins: _state.ownedIapSkins, paidGems: _state.paidGems, paidHints: _state.paidHints, sessionCount: _state.sessionCount, ratingPromptShown: _state.ratingPromptShown };
       _state = { ...defaults, ...keep };
       save(_state);
     },

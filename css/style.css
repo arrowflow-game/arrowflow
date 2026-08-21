@@ -225,6 +225,7 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
 .skins-view-tab { flex: 1; padding: 8px 12px; border-radius: 99px; font-weight: 800; font-size: 0.85rem; background: var(--bg-secondary); color: var(--text-secondary); }
 .skins-view-tab.active { background: var(--accent); color: var(--text-on-btn); }
 .menu-bundle-promo-btn { border-color: #ffb020; color: #ffb020; }
+.update-ready-banner { width: 100%; margin-top: 8px; padding: 10px; border: none; border-radius: 10px; background: var(--accent); color: var(--text-on-btn); font-weight: 800; font-size: 0.9rem; text-align: center; }
 .skins-grid-wrap { grid-template-columns: repeat(2, 1fr); gap: 14px; }
 .skin-group-header { grid-column: 1 / -1; font-size: 0.9rem; font-weight: 800; color: var(--text-secondary); margin: 10px 0 -4px; padding-top: 6px; border-top: 1px solid var(--bg-card); }
 .skin-group-header:first-child { margin-top: 0; padding-top: 0; border-top: none; }

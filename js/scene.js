@@ -638,6 +638,10 @@ const Scene3D = (() => {
   let cameraDistance = 0;
   let pinchStartDist = 0;
   let pinchStartCameraDistance = 0;
+  // Set the moment a second finger lands (pinch-zoom begins) and only cleared once
+  // every finger is off the screen - see onPointerUp()'s dragDist guard below for why
+  // this exists on top of it.
+  let wasPinching = false;
 
   function setCameraDistance(dist) {
     cameraDistance = Math.max(MIN_CAMERA_DISTANCE, Math.min(MAX_CAMERA_DISTANCE, dist));
@@ -2152,6 +2156,7 @@ const Scene3D = (() => {
     if (e.target.id !== 'three-canvas') return;
     if (e.touches && e.touches.length === 2) {
       isDragging = false; // a second finger landing mid-drag hands off to pinch, not rotate
+      wasPinching = true;
       velX = 0; velY = 0;
       pinchStartDist = touchDistance(e.touches);
       pinchStartCameraDistance = cameraDistance;
@@ -2194,7 +2199,19 @@ const Scene3D = (() => {
   function onPointerUp(e) {
     pinchStartDist = 0;
     isDragging = false;
-    if (dragDist < 10 && e.target.id === 'three-canvas') {
+    // Bug fix: dragDist alone doesn't catch this - during a 2-finger pinch,
+    // onPointerMove's 2-touch branch returns early and never touches dragDist, so
+    // it can still read <10 (e.g. 0, if the pinch started right after touchdown)
+    // purely because pinching never counted as "drag" in the first place. Lifting
+    // a finger off a pinch then fired touchend -> handleTap() at whatever position
+    // the still-down finger happened to be, landing on an arrow and blocking it
+    // for real - reported directly as "zooming loses me a heart." wasPinching is
+    // a separate flag set for the whole gesture (see onPointerDown), so any lift
+    // during/after a pinch is never treated as a tap, regardless of dragDist.
+    const touchesRemaining = e.touches ? e.touches.length : 0;
+    const pinched = wasPinching;
+    if (touchesRemaining === 0) wasPinching = false;
+    if (!pinched && dragDist < 10 && e.target.id === 'three-canvas') {
       velX = 0; velY = 0;
       handleTap(getEventPos(e));
     }

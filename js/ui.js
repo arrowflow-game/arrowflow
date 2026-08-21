@@ -1222,17 +1222,32 @@ const UI = (() => {
       openStoreForBundles('screen-menu');
     });
 
+    // js/appUpdate.js: a flexible in-app update finished downloading in the
+    // background - completeFlexibleUpdate() restarts the app into it.
+    document.getElementById('update-ready-banner').addEventListener('click', () => {
+      AppUpdate.completeUpdate();
+    });
+
     document.getElementById('btn-pause').addEventListener('click', () => {
       document.getElementById('pause-lvl').textContent = Storage.get('currentLevel');
       document.getElementById('modal-pause').classList.remove('hidden');
+      // Freezes the score/best-time clock for as long as this modal is up (see
+      // game.js's pause()/resume()) - previously the timer kept running while
+      // paused, quietly costing the player their time bonus for however long
+      // they left the modal open.
+      Game.pause();
     });
-    document.getElementById('btn-resume').addEventListener('click', () => document.getElementById('modal-pause').classList.add('hidden'));
+    document.getElementById('btn-resume').addEventListener('click', () => {
+      document.getElementById('modal-pause').classList.add('hidden');
+      Game.resume();
+    });
     document.getElementById('btn-restart').addEventListener('click', () => {
       document.getElementById('modal-pause').classList.add('hidden');
       Game.restart();
     });
     document.getElementById('btn-quit').addEventListener('click', () => {
       document.getElementById('modal-pause').classList.add('hidden');
+      Game.resume();
       updateMenu();
       showScreen('screen-menu');
     });
@@ -1499,6 +1514,13 @@ const UI = (() => {
         setTimeout(() => {
           updateMenu();
           showScreen('screen-menu');
+          // In-app rating prompt (js/rating.js) - session-count trigger. Skipped
+          // when the nickname modal is about to show on top of it (brand new
+          // player, see promptNicknameIfNeeded() called right after this in
+          // main.js) so the two never stack; it'll just be checked again next
+          // launch since ratingPromptShown isn't set unless this actually fires.
+          if (!Leaderboard.getNickname()) return;
+          Rating.maybePrompt();
         }, 300);
       }
     }, 100);

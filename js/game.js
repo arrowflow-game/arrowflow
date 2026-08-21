@@ -19,7 +19,9 @@ const Game = (() => {
     won: false,
     lastMovePathId: null,
     canUndo: false,
-    startTime: 0
+    startTime: 0,
+    pausedMs: 0,
+    pauseStartedAt: null
   };
 
   let animationFrameId = null;
@@ -70,7 +72,9 @@ const Game = (() => {
       won: false,
       lastMovePathId: null,
       canUndo: false,
-      startTime: Date.now()
+      startTime: Date.now(),
+      pausedMs: 0,
+      pauseStartedAt: null
     };
 
     const skinVariant = extra.skinVariant || 'normal';
@@ -397,6 +401,23 @@ const Game = (() => {
     animationFrameId = requestAnimationFrame(animateLogic);
   }
 
+  // Pause/resume (js/ui.js's modal-pause) - time spent paused must not count against
+  // the player's score/best-time. pausedMs accumulates each closed pause span;
+  // pauseStartedAt (if still set) covers an in-progress one, so totalPausedMs() is
+  // correct even if called while still paused, not just after resume().
+  function pause() {
+    if (state.pauseStartedAt == null) state.pauseStartedAt = Date.now();
+  }
+  function resume() {
+    if (state.pauseStartedAt != null) {
+      state.pausedMs += Date.now() - state.pauseStartedAt;
+      state.pauseStartedAt = null;
+    }
+  }
+  function totalPausedMs() {
+    return state.pausedMs + (state.pauseStartedAt != null ? Date.now() - state.pauseStartedAt : 0);
+  }
+
   // Time-based scoring: no per-level data needed, "par" time scales with how many
   // paths the level has. Faster-than-par clears earn a bonus, hearts kept and stars
   // earned each add a flat bonus, so a full-hearts fast 3-star clear scores highest.
@@ -416,7 +437,7 @@ const Game = (() => {
     else if (state.moves <= state.levelData.maxMoves) stars = 2;
     state.stars = stars;
 
-    const elapsedSec = (Date.now() - state.startTime) / 1000;
+    const elapsedSec = (Date.now() - state.startTime - totalPausedMs()) / 1000;
     const score = computeScore(elapsedSec);
     const isCampaignFinale = state.mode === 'campaign' && state.levelNum === 300;
 
@@ -461,6 +482,11 @@ const Game = (() => {
     });
     if (isCampaignFinale) Analytics.logEvent('campaign_complete', {});
     UI.showWin(state.levelNum, state.hintsUsed, stars, score, elapsedSec, state.mode, isCampaignFinale, newlyUnlockedSkin, gemsEarned, gemsBonusType, hintsBonus);
+    // In-app rating prompt (js/rating.js) - levels-completed trigger. Only from a
+    // real campaign win (not daily/remix, which don't count toward it either -
+    // see storage.js's shouldPromptRating()). Delayed so it never fights the win
+    // screen's own entrance animation/confetti for attention.
+    if (state.mode === 'campaign') setTimeout(() => Rating.maybePrompt(), 1500);
   }
 
   function onFail() {
@@ -477,7 +503,7 @@ const Game = (() => {
   }
 
   return {
-    loadLevel, loadDailyLevel, loadRemixLevel, onArrowTap, useHint, undo, restart, continueAfterFail, redrawTheme, setOnEvent,
+    loadLevel, loadDailyLevel, loadRemixLevel, onArrowTap, useHint, undo, restart, continueAfterFail, redrawTheme, setOnEvent, pause, resume,
     getLevelNum: () => state.levelNum,
     getMode: () => state.mode,
     getRemixIndex: () => state.remixIndex,

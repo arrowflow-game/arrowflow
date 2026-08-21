@@ -16,6 +16,14 @@ document.addEventListener('DOMContentLoaded', () => {
   // handler below is listening before anything else can throw.
   Analytics.init();
 
+  // In-app rating prompt bookkeeping (js/rating.js) - counts this as one more app
+  // launch toward Storage.shouldPromptRating()'s session-count trigger.
+  Storage.markSessionOpened();
+
+  // Check Play Store for a newer version and start downloading it in the
+  // background if one exists (native only, no-op on web) - see js/appUpdate.js.
+  AppUpdate.init();
+
   // Pre-load the first rewarded ad now (native only, no-op on web) so it's
   // ready by the time the player first taps a "watch ad" button instead of
   // loading at that moment.
