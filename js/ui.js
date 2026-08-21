@@ -1205,6 +1205,13 @@ const UI = (() => {
 
     const activeScreen = document.querySelector('.ovr-screen.active');
     if (!activeScreen) return;
+    // Splash is '.ovr-screen active' from initial page load, before any
+    // screen-switch logic has run - not in screenBackButtons and not
+    // 'screen-game' below, so without this it fell all the way through to
+    // the exitApp() branch, closing the app within the first second of
+    // opening it (confirmed via test19.mp4). Just a no-op here; the splash
+    // finishes on its own in well under a second regardless.
+    if (activeScreen.id === 'screen-splash') return;
 
     const screenBackButtons = {
       'screen-levels': 'btn-back-lvl',
