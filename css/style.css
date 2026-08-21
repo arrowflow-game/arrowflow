@@ -176,6 +176,7 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
 .fail-ad-remaining { font-size: 0.75rem; font-weight: 700; color: var(--text-secondary); text-align: center; margin-top: -4px; }
 
 /* Store */
+.store-scroll { flex: 1; overflow-y: auto; }
 .store-section { padding: 16px 20px; border-bottom: 1px solid var(--bg-secondary); }
 .store-section-hdr { display: flex; justify-content: space-between; font-weight: 800; margin-bottom: 12px; }
 .store-ad-btn { width: 100%; }

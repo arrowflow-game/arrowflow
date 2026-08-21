@@ -203,48 +203,50 @@
         <h2 data-i18n="store.title">🛒 ร้านค้า</h2>
         <span></span>
       </div>
-      <div class="store-section" id="store-remove-ads-section">
-        <div class="store-section-hdr"><span data-i18n="iap.store_section">🚫📺 ปิดโฆษณา</span></div>
-        <div id="store-remove-ads-status" class="fail-ad-remaining"></div>
-        <div class="store-packs">
-          <button class="btn btn-outline remove-ads-tier-btn" id="btn-remove-ads-7" data-tier="7"></button>
-          <button class="btn btn-outline remove-ads-tier-btn" id="btn-remove-ads-15" data-tier="15"></button>
-          <button class="btn btn-outline remove-ads-tier-btn" id="btn-remove-ads-30" data-tier="30"></button>
-          <button class="btn btn-primary remove-ads-tier-btn" id="btn-remove-ads-forever" data-tier="forever"></button>
+      <div class="store-scroll">
+        <div class="store-section" id="store-remove-ads-section">
+          <div class="store-section-hdr"><span data-i18n="iap.store_section">🚫📺 ปิดโฆษณา</span></div>
+          <div id="store-remove-ads-status" class="fail-ad-remaining"></div>
+          <div class="store-packs">
+            <button class="btn btn-outline remove-ads-tier-btn" id="btn-remove-ads-7" data-tier="7"></button>
+            <button class="btn btn-outline remove-ads-tier-btn" id="btn-remove-ads-15" data-tier="15"></button>
+            <button class="btn btn-outline remove-ads-tier-btn" id="btn-remove-ads-30" data-tier="30"></button>
+            <button class="btn btn-primary remove-ads-tier-btn" id="btn-remove-ads-forever" data-tier="forever"></button>
+          </div>
         </div>
-      </div>
-      <div class="store-section" id="store-gems-section">
-        <div class="store-section-hdr"><span data-i18n="store.gem_packs">💎 ซื้อเพชร</span></div>
-        <div class="store-packs">
-          <button class="btn btn-outline gem-pack-btn" id="btn-gems-100" data-gems="100"></button>
-          <button class="btn btn-outline gem-pack-btn" id="btn-gems-300" data-gems="300"></button>
-          <button class="btn btn-outline gem-pack-btn" id="btn-gems-800" data-gems="800"></button>
-          <button class="btn btn-primary gem-pack-btn" id="btn-gems-2000" data-gems="2000"></button>
+        <div class="store-section" id="store-gems-section">
+          <div class="store-section-hdr"><span data-i18n="store.gem_packs">💎 ซื้อเพชร</span></div>
+          <div class="store-packs">
+            <button class="btn btn-outline gem-pack-btn" id="btn-gems-100" data-gems="100"></button>
+            <button class="btn btn-outline gem-pack-btn" id="btn-gems-300" data-gems="300"></button>
+            <button class="btn btn-outline gem-pack-btn" id="btn-gems-800" data-gems="800"></button>
+            <button class="btn btn-primary gem-pack-btn" id="btn-gems-2000" data-gems="2000"></button>
+          </div>
         </div>
-      </div>
-      <div class="store-section">
-        <div class="store-section-hdr">
-          <span data-i18n="store.hints_section">💡 คำใบ้</span>
-          <span id="store-hint-count">0</span>
+        <div class="store-section">
+          <div class="store-section-hdr">
+            <span data-i18n="store.hints_section">💡 คำใบ้</span>
+            <span id="store-hint-count">0</span>
+          </div>
+          <button id="btn-store-hint-ad" class="btn btn-secondary store-ad-btn" data-i18n="store.watch_ad_hint">📺 ดูโฆษณาเพื่อรับคำใบ้ฟรี (+1)</button>
+          <div id="store-hint-ad-remaining" class="fail-ad-remaining"></div>
         </div>
-        <button id="btn-store-hint-ad" class="btn btn-secondary store-ad-btn" data-i18n="store.watch_ad_hint">📺 ดูโฆษณาเพื่อรับคำใบ้ฟรี (+1)</button>
-        <div id="store-hint-ad-remaining" class="fail-ad-remaining"></div>
-      </div>
-      <div class="store-section">
-        <div class="store-section-hdr"><span data-i18n="store.hint_packs">📦 แพ็กคำใบ้</span></div>
-        <div class="store-packs">
-          <button class="btn btn-outline store-pack-btn" data-hints="10" data-i18n="store.pack_10">10 คำใบ้ - ฿29</button>
-          <button class="btn btn-outline store-pack-btn" data-hints="30" data-i18n="store.pack_30">30 คำใบ้ - ฿69</button>
-          <button class="btn btn-outline store-pack-btn" data-hints="100" data-i18n="store.pack_100">100 คำใบ้ - ฿149</button>
+        <div class="store-section">
+          <div class="store-section-hdr"><span data-i18n="store.hint_packs">📦 แพ็กคำใบ้</span></div>
+          <div class="store-packs">
+            <button class="btn btn-outline store-pack-btn" data-hints="10" data-i18n="store.pack_10">10 คำใบ้ - ฿29</button>
+            <button class="btn btn-outline store-pack-btn" data-hints="30" data-i18n="store.pack_30">30 คำใบ้ - ฿69</button>
+            <button class="btn btn-outline store-pack-btn" data-hints="100" data-i18n="store.pack_100">100 คำใบ้ - ฿149</button>
+          </div>
         </div>
-      </div>
-      <div class="store-section" id="store-bundles-section">
-        <div class="store-section-hdr"><span data-i18n="store.skin_bundles">🎁 แพ็คเกจสกิน</span></div>
-        <div id="store-bundle-status" class="fail-ad-remaining"></div>
-        <div class="store-packs">
-          <button class="btn btn-outline bundle-btn" id="btn-bundle-streak" data-bundle="streak"></button>
-          <button class="btn btn-outline bundle-btn" id="btn-bundle-royale" data-bundle="royale"></button>
-          <button class="btn btn-primary bundle-btn" id="btn-bundle-all" data-bundle="all"></button>
+        <div class="store-section" id="store-bundles-section">
+          <div class="store-section-hdr"><span data-i18n="store.skin_bundles">🎁 แพ็คเกจสกิน</span></div>
+          <div id="store-bundle-status" class="fail-ad-remaining"></div>
+          <div class="store-packs">
+            <button class="btn btn-outline bundle-btn" id="btn-bundle-streak" data-bundle="streak"></button>
+            <button class="btn btn-outline bundle-btn" id="btn-bundle-royale" data-bundle="royale"></button>
+            <button class="btn btn-primary bundle-btn" id="btn-bundle-all" data-bundle="all"></button>
+          </div>
         </div>
       </div>
     </div>
