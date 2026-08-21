@@ -63,10 +63,17 @@ document.addEventListener('DOMContentLoaded', () => {
     Storage.set('currentLevel', 300);
     Storage.set('dailyStreak', 999);
     Storage.set('gems', 999999);
-    // Covers both primary-iap-only skins (the "royale" prestige tier, unlock.type
-    // === 'iap') and the streak-track skins whose altUnlock is an iap bypass -
-    // previously only the latter was included, leaving the royale tier locked.
-    Storage.set('ownedIapSkins', Skins.ALL.filter(s => s.unlock.type === 'iap' || (s.altUnlock && s.altUnlock.type === 'iap')).map(s => s.id));
+    // Covers primary-iap-only skins (the "royale" prestige tier, unlock.type
+    // === 'iap'), streak-track skins whose altUnlock is an iap bypass, and
+    // level-track skins whose altUnlock2 is an iap bypass (2026-08-21) - not
+    // load-bearing for level-track visibility here since highestUnlocked=300
+    // above already satisfies their primary unlock, but keeps this set
+    // accurate for anything that inspects ownedIapSkins directly.
+    Storage.set('ownedIapSkins', Skins.ALL.filter(s =>
+      s.unlock.type === 'iap' ||
+      (s.altUnlock && s.altUnlock.type === 'iap') ||
+      (s.altUnlock2 && s.altUnlock2.type === 'iap')
+    ).map(s => s.id));
     // Gems-track skins need to actually be "owned" (not just affordable) to show
     // unlocked - the debug gems balance above doesn't do that by itself.
     Storage.set('ownedGemSkins', Skins.ALL.filter(s => s.unlock.type === 'gems').map(s => s.id));

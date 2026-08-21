@@ -1024,10 +1024,38 @@ const UI = (() => {
       }
     }
 
+    // Appends a real-money "skip with real money" button for skin.id - shared
+    // by both altUnlock (streak-track, money-only) and altUnlock2 (level-
+    // track, money ALONGSIDE the gems button below) since both key off the
+    // exact same SKINS_IAP/Storage.grantIapSkin(skin.id) plumbing regardless
+    // of which field named the bypass.
+    function appendIapAltButton() {
+      // On web (no native purchase) this bypass is silently omitted rather
+      // than showing a second "unavailable" line - the primary condition
+      // above (streak progress / level) already explains the only route there.
+      const priceLabel = Iap.skinPriceLabel(skin.id);
+      const altBtn = document.createElement('button');
+      altBtn.className = 'btn btn-outline';
+      altBtn.textContent = priceLabel ? I18N.t('skins.buy_alt_iap', { price: priceLabel }) : '···';
+      altBtn.addEventListener('click', () => {
+        altBtn.disabled = true;
+        Iap.purchaseSkin(skin.id, () => {
+          Storage.grantIapSkin(skin.id);
+          closeSkinPreview();
+          buildSkinsScreen();
+          maybeShowIapRestoreHint();
+        }, () => {
+          altBtn.disabled = false;
+          alert(I18N.t('iap.purchase_failed'));
+        });
+      });
+      actionWrap.appendChild(altBtn);
+    }
+
     // altUnlock (2026-08-20): a secondary bypass button, shown alongside
     // whichever primary condition/button rendered above - never replaces it.
-    // Only level-track (gems bypass) and streak-track (money-only bypass)
-    // skins carry this field, see js/skins.js.
+    // Level-track skins carry a gems altUnlock; streak-track skins carry a
+    // money-only (iap) altUnlock instead, see js/skins.js.
     if (skin.altUnlock) {
       if (skin.altUnlock.type === 'gems') {
         const price = skin.altUnlock.value;
@@ -1044,27 +1072,14 @@ const UI = (() => {
         });
         actionWrap.appendChild(altBtn);
       } else if (skin.altUnlock.type === 'iap' && Iap.isNative()) {
-        // On web (no native purchase) this bypass is silently omitted rather
-        // than showing a second "unavailable" line - the primary condition
-        // above (streak progress) already explains the only route there.
-        const priceLabel = Iap.skinPriceLabel(skin.id);
-        const altBtn = document.createElement('button');
-        altBtn.className = 'btn btn-outline';
-        altBtn.textContent = priceLabel ? I18N.t('skins.buy_alt_iap', { price: priceLabel }) : '···';
-        altBtn.addEventListener('click', () => {
-          altBtn.disabled = true;
-          Iap.purchaseSkin(skin.id, () => {
-            Storage.grantIapSkin(skin.id);
-            closeSkinPreview();
-            buildSkinsScreen();
-            maybeShowIapRestoreHint();
-          }, () => {
-            altBtn.disabled = false;
-            alert(I18N.t('iap.purchase_failed'));
-          });
-        });
-        actionWrap.appendChild(altBtn);
+        appendIapAltButton();
       }
+    }
+    // altUnlock2 (2026-08-21): level-track skins ALSO get a real-money bypass
+    // on top of the gems one above (priced cheaper than gems at every tier,
+    // per direct request, so money reads as the convenient shortcut).
+    if (skin.altUnlock2 && skin.altUnlock2.type === 'iap' && Iap.isNative()) {
+      appendIapAltButton();
     }
 
     modal.classList.remove('hidden');

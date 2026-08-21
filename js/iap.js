@@ -61,10 +61,13 @@ const Iap = (() => {
   };
 
   // Premium skins (js/skins.js's type:'iap' entries, PLUS every streak-track
-  // skin's altUnlock as of 2026-08-20 - see the comment there for why streak
-  // gets a money-only bypass instead of a gems one) - keyed by skin id so
-  // callers can go straight from a Skins.ALL entry to a purchase without a
-  // second lookup table to keep in sync.
+  // skin's altUnlock as of 2026-08-20, PLUS every level-track skin's
+  // altUnlock2 as of 2026-08-21 - a real-money bypass ALONGSIDE the existing
+  // gems one, deliberately priced cheaper than the gems price at every tier
+  // since gems are farmable for free and money is meant to read as the
+  // convenient shortcut, not a discount on top of a discount) - keyed by
+  // skin id so callers can go straight from a Skins.ALL entry to a purchase
+  // without a second lookup table to keep in sync.
   const SKINS_IAP = {
     royaleneon:      { productId: 'skin_royaleneon' },
     royaleinferno:   { productId: 'skin_royaleinferno' },
@@ -81,7 +84,24 @@ const Iap = (() => {
     streakaurora:    { productId: 'skin_streakaurora' },
     streakcandy:     { productId: 'skin_streakcandy' },
     streakbunny:     { productId: 'skin_streakbunny' },
-    streakpanda:     { productId: 'skin_streakpanda' }
+    streakpanda:     { productId: 'skin_streakpanda' },
+    // Level-track altUnlock2 (2026-08-21) - agreed price ladder ฿19/29/49/69
+    // grouped 3-skins-per-tier by unlock.value (25-75/100-150/175-225/250-300).
+    // Not yet created in Play Console - purchases fail gracefully (onFailed)
+    // until the matching products exist there, same as every other
+    // not-yet-created product in this file.
+    emerald:   { productId: 'skin_emerald' },
+    sunset:    { productId: 'skin_sunset' },
+    violet:    { productId: 'skin_violet' },
+    crimson:   { productId: 'skin_crimson' },
+    gold:      { productId: 'skin_gold' },
+    mint:      { productId: 'skin_mint' },
+    rose:      { productId: 'skin_rose' },
+    cyber:     { productId: 'skin_cyber' },
+    obsidian:  { productId: 'skin_obsidian' },
+    aurora:    { productId: 'skin_aurora' },
+    celestial: { productId: 'skin_celestial' },
+    legendary: { productId: 'skin_legendary' }
   };
 
   // Skin bundles (2026-08-20) - skins only, per the user's explicit scope
