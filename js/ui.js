@@ -1188,7 +1188,10 @@ const UI = (() => {
       return;
     }
     if (activeScreen.id === 'screen-game') {
-      document.getElementById('modal-pause').classList.remove('hidden');
+      // Clicking the real pause button (not just un-hiding the modal directly)
+      // so this takes the same Game.pause()/Sound.pauseMusic() path as tapping
+      // it normally would.
+      document.getElementById('btn-pause').click();
       return;
     }
     // Bare main menu, nothing open - let this one actually exit the app.
@@ -1296,10 +1299,14 @@ const UI = (() => {
       // paused, quietly costing the player their time bonus for however long
       // they left the modal open.
       Game.pause();
+      // pauseMusic() (not stopMusic()) - preserves playback position so
+      // resuming continues the same track instead of restarting it from 0:00.
+      Sound.pauseMusic();
     });
     document.getElementById('btn-resume').addEventListener('click', () => {
       document.getElementById('modal-pause').classList.add('hidden');
       Game.resume();
+      Sound.resumeMusic();
     });
     document.getElementById('btn-restart').addEventListener('click', () => {
       document.getElementById('modal-pause').classList.add('hidden');
