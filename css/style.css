@@ -103,22 +103,19 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
 .hud-top, .hud-bottom { width: 100%; display: flex; justify-content: space-between; align-items: flex-start; padding: 16px 20px; }
 .hud-bottom { align-items: center; }
 .hud-controls-group { display: flex; gap: 10px; align-items: center; }
-/* Left group stacks vertically (pause on its own row, theme+settings below it,
-   remove-ads pill below that) instead of one dense horizontal row - real-device
-   testing on smaller phones showed the old single-row layout crowding the top
-   edge and pushing the store icon off-screen on the right. */
+/* Left group: pause, theme, settings each stacked as their own row (not a
+   paired subrow anymore) - remove-ads moved out entirely to the right group
+   under the cart icon, per direct request. */
 .hud-left-group { flex-direction: column; align-items: flex-start; gap: 6px; }
-.hud-left-subrow { display: flex; gap: 6px; }
 .hud-center-cluster { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
 .hud-level-tier-row { display: flex; align-items: center; gap: 10px; }
 .hud-level-badge { background: var(--bg-card); padding: 4px 16px; border-radius: 18px; text-align: center; border: 2px solid var(--accent); }
 .hud-lvl-label { display: block; font-size: 0.55rem; font-weight: 800; letter-spacing: 1.5px; color: var(--text-secondary); }
 .hud-lvl-num { display: block; font-size: 1.05rem; font-family: var(--font-logo); font-weight: 900; color: var(--accent); line-height: 1; }
 .hud-hint-btn { background: var(--bg-card); border: 2px solid var(--accent); color: var(--accent); padding: 8px 16px; border-radius: 99px; font-weight: 800; flex-shrink: 0; }
-/* Right group stacks vertically too (hint+gems subrow on top, store/cart icon
-   directly below the gem count) - mirrors the left group's own stacked
-   layout, and puts the cart specifically under the gems rather than at the
-   very bottom of the whole HUD. */
+/* Right group stacks vertically: hint+gems subrow, then the store/cart icon
+   directly below the gem count, then the remove-ads pill below the cart
+   (moved here from the old left group) - all per direct request. */
 .hud-right-group { flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
 .hud-right-subrow { display: flex; gap: 6px; align-items: center; }
 .hud-store-icon { width: 34px; height: 34px; font-size: 0.95rem; flex-shrink: 0; }
@@ -148,20 +145,21 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
 .hud-undo-btn { padding: 8px 16px; font-size: 0.85rem; border: 2px solid var(--accent); background: var(--bg-card); border-radius: 99px; font-weight: 800; color: var(--accent); }
 .hud-undo-btn:disabled { opacity: 0.5; border-color: var(--text-secondary); color: var(--text-secondary); }
 
-/* flex-wrap (not a fixed single line) so on narrow phones/Daily mode (where the
-   level badge + tier pill above already run wide with the redundant "DAILY"
-   label) the arrows/lives/difficulty pills wrap onto their own line instead of
-   silently overflowing the shrunk .hud-center-cluster box sideways into the
-   left control column - that overflow-without-wrap was invisible in the CSS
-   itself but rendered as the settings gear icon getting visually overlapped
-   by the arrows-remaining count on real devices. */
-.hud-stats-row { pointer-events: none; display: flex; justify-content: center; align-items: center; gap: 6px; flex-wrap: wrap; row-gap: 4px; }
-.hud-arrows-badge { display: flex; align-items: center; gap: 4px; background: var(--bg-card); padding: 4px 10px; border-radius: 99px; font-weight: 800; font-size: 0.85rem; color: var(--accent); border: 2px solid var(--accent); }
+/* Kept as a single line on purpose (arrows/lives/difficulty always stay
+   together, per direct request) - now that the left control group only
+   holds the pause button, there's enough room that .hud-difficulty-badge's
+   own auto-shrink (updateHUD()'s shrinkToFit(), js/ui.js) handles a too-long
+   difficulty label by scaling its font down rather than this row wrapping. */
+.hud-stats-row { pointer-events: none; display: flex; justify-content: center; align-items: center; gap: 6px; flex-wrap: nowrap; }
+.hud-arrows-badge { display: flex; align-items: center; gap: 4px; background: var(--bg-card); padding: 4px 10px; border-radius: 99px; font-weight: 800; font-size: 0.85rem; color: var(--accent); border: 2px solid var(--accent); flex-shrink: 0; }
 .hud-arrows-icon { font-size: 0.8rem; }
-.hud-lives-row { display: flex; gap: 3px; }
+.hud-lives-row { display: flex; gap: 3px; flex-shrink: 0; }
 .heart-icon { font-size: 1.05rem; color: #ff4d6d; transition: color 0.3s, transform 0.3s; }
 .heart-icon.lost { color: var(--text-secondary); opacity: 0.3; transform: scale(0.85); }
-.hud-difficulty-badge { background: var(--bg-card); padding: 4px 10px; border-radius: 99px; font-size: 0.65rem; font-weight: 800; color: var(--text-secondary); border: 2px solid transparent; }
+/* min-width:0 + shrink is what lets shrinkToFit() actually reclaim space
+   here specifically (see js/ui.js) without this badge's own box overflowing
+   sideways the way the unbounded row used to. */
+.hud-difficulty-badge { background: var(--bg-card); padding: 4px 10px; border-radius: 99px; font-size: 0.65rem; font-weight: 800; color: var(--text-secondary); border: 2px solid transparent; white-space: nowrap; overflow: hidden; flex-shrink: 1; min-width: 0; }
 
 /* Milestone levels (every 10th) — aggressive/intense tier treatment */
 .hud-tier-label.milestone {
@@ -360,7 +358,6 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
   .hud-top { padding: 10px 8px; }
   .hud-controls-group { gap: 6px; }
   .hud-left-group { gap: 4px; }
-  .hud-left-subrow { gap: 4px; }
   .icon-btn { width: 34px; height: 34px; font-size: 0.95rem; }
   .hud-store-icon { width: 28px; height: 28px; font-size: 0.8rem; }
   .hud-remove-ads-btn { padding: 3px 6px; font-size: 0.52rem; max-width: 72px; }

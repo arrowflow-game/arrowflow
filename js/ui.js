@@ -294,6 +294,21 @@ const UI = (() => {
     }
   }
 
+  // Resets then shrinks an element's own font-size (only that element - never
+  // touches siblings/anything else) one px at a time until its text no longer
+  // overflows its box, down to minPx. Requires the element's CSS to actually
+  // allow it to be squeezed narrower than its text (min-width:0 + flex-shrink,
+  // see .hud-difficulty-badge) - otherwise scrollWidth/clientWidth never
+  // diverge and this is a no-op.
+  function shrinkToFit(el, minPx) {
+    el.style.fontSize = '';
+    let size = parseFloat(getComputedStyle(el).fontSize);
+    while (el.scrollWidth > el.clientWidth && size > minPx) {
+      size -= 1;
+      el.style.fontSize = size + 'px';
+    }
+  }
+
   function updateHUD(payload) {
     const { level, tier, isMilestone, difficulty, remaining, hints, lives, livesMax, canUndo } = payload;
 
@@ -311,7 +326,14 @@ const UI = (() => {
     if (arrowsEl) arrowsEl.textContent = remaining;
 
     const diffEl = document.getElementById('hud-difficulty');
-    if (diffEl) diffEl.textContent = difficulty ? I18N.t('difficulty.' + difficulty) : '';
+    if (diffEl) {
+      diffEl.textContent = difficulty ? I18N.t('difficulty.' + difficulty) : '';
+      // Scoped to just this one badge (see shrinkToFit below) - keeps it on
+      // the same line as the arrows/hearts row instead of wrapping when a
+      // longer translated difficulty word doesn't fit, per direct request
+      // not to touch font sizing anywhere else.
+      shrinkToFit(diffEl, 8);
+    }
 
     const livesRow = document.getElementById('hud-lives-row');
     if (livesRow) {
