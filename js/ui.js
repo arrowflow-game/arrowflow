@@ -971,7 +971,16 @@ const UI = (() => {
             Storage.grantIapSkin(skin.id);
             closeSkinPreview();
             buildSkinsScreen();
-          }, () => { buyBtn.disabled = false; });
+          }, () => {
+            // Was silent before (button just re-enabled with no feedback at
+            // all) - reported as "bought it, nothing happened, looks like a
+            // bug" since a real Play Billing failure (e.g. re-attempting a
+            // non-consumable the account already owns from earlier testing)
+            // gave no indication anything went wrong. Matches the alert the
+            // bundle purchase path already shows on failure.
+            buyBtn.disabled = false;
+            alert(I18N.t('iap.purchase_failed'));
+          });
         });
         actionWrap.appendChild(buyBtn);
       }
@@ -1010,7 +1019,10 @@ const UI = (() => {
             Storage.grantIapSkin(skin.id);
             closeSkinPreview();
             buildSkinsScreen();
-          }, () => { altBtn.disabled = false; });
+          }, () => {
+            altBtn.disabled = false;
+            alert(I18N.t('iap.purchase_failed'));
+          });
         });
         actionWrap.appendChild(altBtn);
       }
