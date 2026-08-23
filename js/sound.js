@@ -268,9 +268,20 @@ const Sound = (() => {
 
   function resumeMusic() {
     if (musicPlaying || !musicEnabled()) return;
-    musicPlaying = true;
-    if (currentAudioEl) currentAudioEl.play().catch(() => {});
-    else startMusic();
+    // Bug (reported directly: music silent on cold start, only started
+    // working after toggling the music setting off/on): this used to set
+    // musicPlaying = true BEFORE falling back to startMusic() when there
+    // was no currentAudioEl yet (i.e. every very first entry into the game
+    // screen, since no track has ever played) - startMusic() itself opens
+    // with `if (musicPlaying ...) return;`, so it always saw musicPlaying
+    // already true and silently no-opped, never actually creating/playing
+    // any <audio>. Only let startMusic() own that flag in this branch.
+    if (currentAudioEl) {
+      musicPlaying = true;
+      currentAudioEl.play().catch(() => {});
+    } else {
+      startMusic();
+    }
   }
 
   // <audio> elements (unlike a bare AudioContext) already pause themselves

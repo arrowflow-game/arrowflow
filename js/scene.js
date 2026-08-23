@@ -2265,7 +2265,13 @@ const Scene3D = (() => {
     const touchesRemaining = e.touches ? e.touches.length : 0;
     const pinched = wasPinching;
     if (touchesRemaining === 0) wasPinching = false;
-    if (!pinched && dragDist < 10 && e.target.id === 'three-canvas') {
+    // Bumped from 10 (2026-08-23, alongside game.js's tap fallback above) -
+    // reported directly that intended taps on a path sometimes got eaten as
+    // a micro-drag instead, from the small amount of finger wobble a tap
+    // naturally has. Still small enough that a deliberate rotate drag is
+    // never mistaken for a tap.
+    const TAP_MAX_DRAG_DIST = 16;
+    if (!pinched && dragDist < TAP_MAX_DRAG_DIST && e.target.id === 'three-canvas') {
       velX = 0; velY = 0;
       handleTap(getEventPos(e));
     }

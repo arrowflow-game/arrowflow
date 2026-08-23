@@ -1,9 +1,84 @@
 diff --git a/node_modules/@capgo/native-purchases/android/src/main/java/ee/forgr/nativepurchases/NativePurchasesPlugin.java b/node_modules/@capgo/native-purchases/android/src/main/java/ee/forgr/nativepurchases/NativePurchasesPlugin.java
-index dfb6cca..18b2673 100644
+index dfb6cca..8f1800e 100644
 --- a/node_modules/@capgo/native-purchases/android/src/main/java/ee/forgr/nativepurchases/NativePurchasesPlugin.java
 +++ b/node_modules/@capgo/native-purchases/android/src/main/java/ee/forgr/nativepurchases/NativePurchasesPlugin.java
-@@ -344,11 +344,21 @@ public class NativePurchasesPlugin extends Plugin {
+@@ -217,23 +217,40 @@ public class NativePurchasesPlugin extends Plugin {
+             String purchaseAccountId = accountIdentifiers != null ? accountIdentifiers.getObfuscatedAccountId() : null;
+             Log.d(TAG, "Purchase account identifier present: " + (purchaseAccountId != null ? "[REDACTED]" : "none"));
+ 
++            // Whichever branch below fires must close the billing client exactly
++            // once it's genuinely done with it - CONSUME/ACKNOWLEDGE are async
++            // Play Billing calls, so closing has to wait for THEIR callback, not
++            // happen synchronously right after kicking them off (see the removed
++            // closeBillingClient() call in onPurchasesUpdated above for why).
+             switch (action) {
+                 case CONSUME:
+                     Log.d(TAG, "Purchase flagged as consumable, consuming...");
+                     ConsumeParams consumeParams = ConsumeParams.newBuilder().setPurchaseToken(purchase.getPurchaseToken()).build();
+-                    billingClient.consumeAsync(consumeParams, this::onConsumeResponse);
++                    billingClient.consumeAsync(consumeParams, (billingResult, purchaseToken) -> {
++                        onConsumeResponse(billingResult, purchaseToken);
++                        closeBillingClient();
++                    });
+                     break;
+                 case ACKNOWLEDGE:
+                     if (autoAcknowledge) {
+                         Log.d(TAG, "Purchase not acknowledged, auto-acknowledging...");
+-                        acknowledgePurchase(purchase.getPurchaseToken());
++                        AcknowledgePurchaseParams ackParams = AcknowledgePurchaseParams.newBuilder()
++                            .setPurchaseToken(purchase.getPurchaseToken())
++                            .build();
++                        billingClient.acknowledgePurchase(ackParams, billingResult -> {
++                            Log.d(TAG, "onAcknowledgePurchaseResponse() called");
++                            Log.d(TAG, "Acknowledge result: " + billingResult.getResponseCode() + " - " + billingResult.getDebugMessage());
++                            closeBillingClient();
++                        });
+                     } else {
+                         Log.d(TAG, "Purchase not acknowledged, but auto-acknowledge is disabled. Developer must manually acknowledge.");
++                        closeBillingClient();
+                     }
+                     break;
+                 case NONE:
+                 default:
+                     Log.d(TAG, "No additional purchase handling required");
++                    closeBillingClient();
+                     break;
+             }
+ 
+@@ -285,6 +302,7 @@ public class NativePurchasesPlugin extends Plugin {
+             } else {
+                 Log.d(TAG, "purchaseCall is null for pending purchase");
+             }
++            closeBillingClient();
+         } else {
+             Log.d(TAG, "Purchase state is OTHER: " + purchase.getPurchaseState());
+             // Handle any other error codes.
+@@ -293,6 +311,7 @@ public class NativePurchasesPlugin extends Plugin {
+             } else {
+                 Log.d(TAG, "purchaseCall is null for failed purchase");
+             }
++            closeBillingClient();
+         }
+     }
+ 
+@@ -342,16 +361,40 @@ public class NativePurchasesPlugin extends Plugin {
+                             //                          for (Purchase purchase : purchases) {
+                             //                              handlePurchase(purchase, purchaseCall);
                              //                          }
++                            // handlePurchase() itself now owns closing the billing client - a
++                            // CONSUME/ACKNOWLEDGE it kicks off is async (consumeAsync/
++                            // acknowledgePurchase), and closeBillingClient() calls
++                            // billingClient.endConnection() + nulls the reference immediately.
++                            // Closing right here, synchronously, used to tear down the
++                            // connection microseconds after firing that async call - almost
++                            // always before Google's server round-trip finished, so a
++                            // consumable (e.g. a gem pack) purchase's consumeAsync request
++                            // was cut off mid-flight and the token never actually got consumed
++                            // server-side. That silently left the SKU permanently "owned" from
++                            // Play Billing's point of view, blocking every future purchase of
++                            // the same consumable with ITEM_ALREADY_OWNED (reported directly:
++                            // "bought gems once, can never buy more"). See arrowflow's fork of
++                            // this patch.
                              handlePurchase(purchases.get(0), purchaseCall);
                          } else {
 -                            // Handle any other error codes.
@@ -24,5 +99,9 @@ index dfb6cca..18b2673 100644
 +                                    : ("CODE_" + code);
 +                                purchaseCall.reject("Purchase is not purchased: " + tag);
                              }
++                            closeBillingClient();
                          }
-                         closeBillingClient();
+-                        closeBillingClient();
+                         return;
+                     }
+                 }

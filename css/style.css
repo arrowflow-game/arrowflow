@@ -140,6 +140,13 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
 .hud-remove-ads-btn.hidden { display: none; }
 .hud-remove-ads-icon { font-size: 0.85rem; }
 
+/* Skins-shop HUD shortcut (2026-08-23) - reported directly: no way to reach
+   the skin shop mid-game without pausing first, unlike remove-ads which has
+   its own always-visible pill. Reuses .hud-remove-ads-btn's pill shape but
+   outlined rather than accent-filled, so it doesn't compete with remove-ads'
+   deliberately "stand out" look for the same visual priority. */
+.hud-skins-btn { background: var(--bg-card); color: var(--accent); border: 2px solid var(--accent); box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+
 .hud-star { font-size: 1.5rem; color: #ccc; transition: color 0.3s; }
 .hud-star.earned { color: var(--star-color); }
 .hud-undo-btn { padding: 8px 16px; font-size: 0.85rem; border: 2px solid var(--accent); background: var(--bg-card); border-radius: 99px; font-weight: 800; color: var(--accent); }

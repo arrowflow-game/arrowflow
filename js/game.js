@@ -204,15 +204,45 @@ const Game = (() => {
     return { blockedBy, blockDist };
   }
 
+  // How close a missed tap is allowed to "snap" to a nearby path's cell, in
+  // cell-units - see the fallback below. 0.75 reaches just past a cell's own
+  // border into an empty neighboring cell, but can never reach a second ring
+  // of cells (that would need >=1.5), so it only rescues genuine near-misses.
+  const TAP_FALLBACK_MAX_DIST = 0.75;
+
   function onArrowTap(facePos, faceDir, u, v) {
     if (state.failed || state.won) return;
     const unitGrid = state.levelData.unitGrid;
-    const col = Math.floor(u * unitGrid);
-    const row = Math.floor((1 - v) * unitGrid);
+    const colF = u * unitGrid;
+    const rowF = (1 - v) * unitGrid;
+    const col = Math.floor(colF);
+    const row = Math.floor(rowF);
     const faceKey = Polycube.faceKey(facePos, faceDir);
+    const idlePaths = state.paths.filter(p => !p.cleared && p.status === 'idle');
 
     // Any cell along the path is tappable, not just the head - matches the reference app's feel.
-    const path = state.paths.find(p => !p.cleared && p.status === 'idle' && p.segments.some(s => segFaceKey(s) === faceKey && s.r === row && s.c === col));
+    let path = idlePaths.find(p => p.segments.some(s => segFaceKey(s) === faceKey && s.r === row && s.c === col));
+
+    // Fat-finger fallback (reported directly: tapping a path felt hard to land):
+    // the tap missed every cell outright (landed on an empty gap/border cell).
+    // Rather than blindly widening the hit area - which would risk grabbing
+    // whichever DIFFERENT path happens to sit in a neighboring cell even when
+    // the finger was clearly aimed elsewhere - measure the actual distance
+    // from the tap point to every idle path segment's cell center on this
+    // face and take the nearest one, only if it's within TAP_FALLBACK_MAX_DIST.
+    // This resolves two paths running in adjacent cells by real proximity to
+    // the tap, not by whichever happens to be found first.
+    if (!path) {
+      let best = null, bestDist = Infinity;
+      idlePaths.forEach(p => {
+        p.segments.forEach(s => {
+          if (segFaceKey(s) !== faceKey) return;
+          const dist = Math.hypot((s.r + 0.5) - rowF, (s.c + 0.5) - colF);
+          if (dist < bestDist) { bestDist = dist; best = p; }
+        });
+      });
+      if (best && bestDist <= TAP_FALLBACK_MAX_DIST) path = best;
+    }
 
     if (path) {
       handlePathTap(path);

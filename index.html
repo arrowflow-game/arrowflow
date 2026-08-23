@@ -110,6 +110,7 @@
           <span id="hud-gems" class="hud-gems-badge">💎 <span id="hud-gems-count">0</span></span>
         </div>
         <button id="btn-hud-store" class="icon-btn hud-store-icon" aria-label="Store">🛒</button>
+        <button id="btn-hud-skins" class="hud-remove-ads-btn hud-skins-btn" aria-label="Skins" data-i18n="hud.skins_btn">🎨 สกิน</button>
         <button id="btn-hud-remove-ads" class="hud-remove-ads-btn hidden" aria-label="Remove ads">
           <span class="hud-remove-ads-icon">🚫📺</span>
           <span id="hud-remove-ads-label" class="hud-remove-ads-label"></span>
@@ -318,6 +319,18 @@
       <div class="modal-btns">
         <button id="btn-reset-confirm" class="btn btn-primary reset-danger-btn" data-i18n="reset.confirm">ล้างข้อมูลและเริ่มใหม่</button>
         <button id="btn-reset-cancel" class="btn btn-outline" data-i18n="reset.cancel">ยกเลิก</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- EXIT-APP CONFIRM MODAL - hardware back button at the bare main menu -->
+  <div id="modal-exit-confirm" class="modal-overlay hidden" data-back-close="btn-exit-cancel">
+    <div class="modal-box">
+      <h2 class="modal-title" data-i18n="exit.title">ออกจากเกม?</h2>
+      <p class="modal-sub" data-i18n="exit.warning">ต้องการออกจาก ArrowFlow ใช่หรือไม่</p>
+      <div class="modal-btns">
+        <button id="btn-exit-confirm" class="btn btn-primary reset-danger-btn" data-i18n="exit.confirm">ออกจากเกม</button>
+        <button id="btn-exit-cancel" class="btn btn-outline" data-i18n="exit.cancel">ยกเลิก</button>
       </div>
     </div>
   </div>

@@ -112,33 +112,41 @@ const Skins = (() => {
       colors: { face: { light: '#f0f0f0', dark: '#0d0d0d' }, path: { light: '#1a1a1a', dark: '#f0f0f0' } },
       material: 'badge', arrowShape: 'chevron', particleTheme: 'ash', lineStyle: 'pawprint' },
 
-    { id: 'gemshard', unlock: { type: 'gems', value: 300 },  name: { th: 'เศษผลึก',          en: 'Gem Shard' },
+    // altUnlock2 (2026-08-23): these 8 gems-track skins had NO real-money
+    // bypass at all until now (reported directly: the skin-change screen
+    // showed no money price for any gems-bought skin) - mirrors the
+    // level-track skins' altUnlock2 pattern exactly (money cheaper than the
+    // gems price at every tier, since gems are farmable for free and money
+    // should read as the convenient shortcut). Play Console products not
+    // yet created - purchases fail gracefully until they exist, same as
+    // every other not-yet-created product in this codebase.
+    { id: 'gemshard', unlock: { type: 'gems', value: 300 }, altUnlock2: { type: 'iap', productId: 'skin_gemshard' }, name: { th: 'เศษผลึก',          en: 'Gem Shard' },
       colors: { face: { light: '#8fdcff', dark: '#031824' }, path: { light: '#03415c', dark: '#7fe0ff' } },
       material: 'holo', arrowShape: 'triangle', particleTheme: 'sparks', lineStyle: 'laser' },
-    { id: 'gemamber', unlock: { type: 'gems', value: 600 },  name: { th: 'อำพัน',            en: 'Gem Amber' },
+    { id: 'gemamber', unlock: { type: 'gems', value: 600 }, altUnlock2: { type: 'iap', productId: 'skin_gemamber' }, name: { th: 'อำพัน',            en: 'Gem Amber' },
       colors: { face: { light: '#ffc880', dark: '#241304' }, path: { light: '#703300', dark: '#ffb066' } },
       material: 'holo', arrowShape: 'chevron', particleTheme: 'leaves', lineStyle: 'laser' },
-    { id: 'gemdragon', unlock: { type: 'gems', value: 1000 }, name: { th: 'มังกรอัญมณี',      en: 'Gem Dragon' },
+    { id: 'gemdragon', unlock: { type: 'gems', value: 1000 }, altUnlock2: { type: 'iap', productId: 'skin_gemdragon' }, name: { th: 'มังกรอัญมณี',      en: 'Gem Dragon' },
       colors: { face: { light: '#a3ef80', dark: '#0d1a02' }, path: { light: '#1f5c00', dark: '#a6ff66' } },
       material: 'holo', arrowShape: 'diamond', particleTheme: 'sparks', lineStyle: 'chain' },
     // Third option at the 600-gems tier - origami-fold lineStyle (see
     // scene.js's drawOrigamiSegment/drawOrigamiTip).
-    { id: 'gemorigami', unlock: { type: 'gems', value: 600 }, name: { th: 'กระดาษพับอัญมณี',    en: 'Gem Origami' },
+    { id: 'gemorigami', unlock: { type: 'gems', value: 600 }, altUnlock2: { type: 'iap', productId: 'skin_gemorigami' }, name: { th: 'กระดาษพับอัญมณี',    en: 'Gem Origami' },
       colors: { face: { light: '#fdf6ec', dark: '#1f1a12' }, path: { light: '#3a4a8a', dark: '#8aa0ff' } },
       material: 'marble', arrowShape: 'chevron', particleTheme: 'leaves', lineStyle: 'origami' },
     // Second option at the 300-gems tier.
-    { id: 'gemopal', unlock: { type: 'gems', value: 300 },  name: { th: 'โอปอล',            en: 'Gem Opal' },
+    { id: 'gemopal', unlock: { type: 'gems', value: 300 }, altUnlock2: { type: 'iap', productId: 'skin_gemopal' }, name: { th: 'โอปอล',            en: 'Gem Opal' },
       colors: { face: { light: '#c9a3ff', dark: '#12031f' }, path: { light: '#3d1a75', dark: '#c9a3ff' } },
       material: 'holo', arrowShape: 'triangle', particleTheme: 'bubbles', lineStyle: 'water' },
     // Second holo/stardust prestige option at the 1000-gems tier.
-    { id: 'gemphoenix', unlock: { type: 'gems', value: 1000 }, name: { th: 'ฟีนิกซ์อัญมณี',    en: 'Gem Phoenix' },
+    { id: 'gemphoenix', unlock: { type: 'gems', value: 1000 }, altUnlock2: { type: 'iap', productId: 'skin_gemphoenix' }, name: { th: 'ฟีนิกซ์อัญมณี',    en: 'Gem Phoenix' },
       colors: { face: { light: '#ff8a70', dark: '#1f0500' }, path: { light: '#7a1600', dark: '#ff9e80' } },
       material: 'holo', arrowShape: 'star', particleTheme: 'sparks', lineStyle: 'laser' },
     // 4th tier - new top-of-track above 1000 gems.
-    { id: 'gemcat', unlock: { type: 'gems', value: 1500 }, mascotIcon: 'cat', name: { th: 'แมวอัญมณี',        en: 'Gem Cat' },
+    { id: 'gemcat', unlock: { type: 'gems', value: 1500 }, altUnlock2: { type: 'iap', productId: 'skin_gemcat' }, mascotIcon: 'cat', name: { th: 'แมวอัญมณี',        en: 'Gem Cat' },
       colors: { face: { light: '#ffddb0', dark: '#241505' }, path: { light: '#8a4a12', dark: '#ffddb0' } },
       material: 'badge', arrowShape: 'triangle', particleTheme: 'sparks', lineStyle: 'pawprint' },
-    { id: 'gemdolphin', unlock: { type: 'gems', value: 1500 }, mascotIcon: 'dolphin', name: { th: 'โลมาอัญมณี',   en: 'Gem Dolphin' },
+    { id: 'gemdolphin', unlock: { type: 'gems', value: 1500 }, altUnlock2: { type: 'iap', productId: 'skin_gemdolphin' }, mascotIcon: 'dolphin', name: { th: 'โลมาอัญมณี',   en: 'Gem Dolphin' },
       colors: { face: { light: '#c2d6e6', dark: '#0a1a24' }, path: { light: '#2a4a5c', dark: '#c2d6e6' } },
       material: 'badge', arrowShape: 'chevron', particleTheme: 'bubbles', lineStyle: 'water' },
 

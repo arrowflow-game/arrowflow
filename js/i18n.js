@@ -24,6 +24,7 @@ const I18N = (() => {
       'hud.undo': '↩ ย้อนกลับ',
       'hud.tier.daily': 'รายวัน',
       'hud.tier.remix': 'เรมิกซ์',
+      'hud.skins_btn': '🎨 สกิน',
 
       'levels.title': 'เลือกด่าน',
 
@@ -91,6 +92,11 @@ const I18N = (() => {
       'reset.warning': 'การกระทำนี้จะลบความคืบหน้า ดาว คะแนน คำใบ้ และชื่อผู้เล่นทั้งหมดในเครื่องนี้ ไม่สามารถย้อนกลับได้ (คะแนนที่เคยขึ้นอันดับโลกแล้วจะยังคงอยู่ในตารางเหมือนเดิม)',
       'reset.confirm': 'ล้างข้อมูลและเริ่มใหม่',
       'reset.cancel': 'ยกเลิก',
+
+      'exit.title': 'ออกจากเกม?',
+      'exit.warning': 'ต้องการออกจาก ArrowFlow ใช่หรือไม่',
+      'exit.confirm': 'ออกจากเกม',
+      'exit.cancel': 'ยกเลิก',
       'reset.working': 'กำลังล้างข้อมูล...',
 
       'win.title': 'ผ่านด่านแล้ว!',
@@ -215,6 +221,7 @@ const I18N = (() => {
       'hud.undo': '↩ Undo',
       'hud.tier.daily': 'DAILY',
       'hud.tier.remix': 'REMIX',
+      'hud.skins_btn': '🎨 Skins',
 
       'levels.title': 'SELECT LEVEL',
 
@@ -282,6 +289,11 @@ const I18N = (() => {
       'reset.warning': "This deletes all progress, stars, score, hints, and your player name on this device. This can't be undone (any score you already have on the world ranking stays exactly as it is).",
       'reset.confirm': 'Reset & Start Over',
       'reset.cancel': 'Cancel',
+
+      'exit.title': 'Exit game?',
+      'exit.warning': 'Are you sure you want to exit ArrowFlow?',
+      'exit.confirm': 'Exit',
+      'exit.cancel': 'Cancel',
       'reset.working': 'Resetting...',
 
       'win.title': 'LEVEL COMPLETE!',

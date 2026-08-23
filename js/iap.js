@@ -101,7 +101,18 @@ const Iap = (() => {
     obsidian:  { productId: 'skin_obsidian' },
     aurora:    { productId: 'skin_aurora' },
     celestial: { productId: 'skin_celestial' },
-    legendary: { productId: 'skin_legendary' }
+    legendary: { productId: 'skin_legendary' },
+    // Gems-track altUnlock2 (2026-08-23) - mirrors the level-track price
+    // ladder above, grouped by unlock.value (300/600/1000/1500 gems). Not
+    // yet created in Play Console.
+    gemshard:   { productId: 'skin_gemshard' },
+    gemopal:    { productId: 'skin_gemopal' },
+    gemamber:   { productId: 'skin_gemamber' },
+    gemorigami: { productId: 'skin_gemorigami' },
+    gemdragon:  { productId: 'skin_gemdragon' },
+    gemphoenix: { productId: 'skin_gemphoenix' },
+    gemcat:     { productId: 'skin_gemcat' },
+    gemdolphin: { productId: 'skin_gemdolphin' }
   };
 
   // Skin bundles (2026-08-20) - skins only, per the user's explicit scope

@@ -1267,10 +1267,10 @@ const UI = (() => {
       document.getElementById('btn-pause').click();
       return;
     }
-    // Bare main menu, nothing open - let this one actually exit the app.
-    if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.App) {
-      Capacitor.Plugins.App.exitApp();
-    }
+    // Bare main menu, nothing open - ask for confirmation before actually
+    // exiting the app (reported directly: a single stray back-press used to
+    // close the whole app immediately, no way to cancel a misfire).
+    document.getElementById('modal-exit-confirm').classList.remove('hidden');
   }
 
   function wireEvents() {
@@ -1434,6 +1434,15 @@ const UI = (() => {
       location.reload();
     });
 
+    document.getElementById('btn-exit-cancel').addEventListener('click', () => {
+      document.getElementById('modal-exit-confirm').classList.add('hidden');
+    });
+    document.getElementById('btn-exit-confirm').addEventListener('click', () => {
+      if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.App) {
+        Capacitor.Plugins.App.exitApp();
+      }
+    });
+
     document.getElementById('btn-next').addEventListener('click', async () => {
       hideAllModals();
 
@@ -1581,6 +1590,11 @@ const UI = (() => {
       storeReturnScreen = 'screen-game';
       buildStoreScreen();
       showScreen('screen-store');
+    });
+    document.getElementById('btn-hud-skins').addEventListener('click', () => {
+      skinsReturnScreen = 'screen-game';
+      buildSkinsScreen();
+      showScreen('screen-skins');
     });
     document.getElementById('btn-back-store').addEventListener('click', () => {
       // Buying/ad-earning hints in-level doesn't otherwise touch the HUD until the next
