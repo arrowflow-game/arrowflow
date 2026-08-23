@@ -81,8 +81,12 @@ const Scene3D = (() => {
   }
   // World-space length of the whole polycube's LONGEST bounding-box axis -
   // kept constant across every level (same role the old fixed CUBE_SIZE=2
-  // played) so the camera never needs to re-frame per level; only the
-  // shape's proportions (from its actual cube positions) change.
+  // played), so only the shape's proportions (from its actual cube
+  // positions) change here. The camera USED to never re-frame per level on
+  // top of this, but that alone let bulkier shapes (large across two+ axes,
+  // not just long in one) feel harder to rotate than their longest-axis
+  // size suggested - see fitCameraAndSensitivityToShape() further down for
+  // the per-level correction now layered on top.
   const BOX_LONGEST_AXIS = 2;
   const FRONT_OPACITY = 0.88;
   const BACK_OPACITY = 0.55;
@@ -755,7 +759,48 @@ const Scene3D = (() => {
     const center = [0, 1, 2].map(i => (min[i] + max[i]) / 2);
     const extent = [0, 1, 2].map(i => max[i] - min[i]);
     const scale = BOX_LONGEST_AXIS / Math.max(...extent);
-    return { center, scale };
+    // Half the 3D diagonal of the normalized bounding box - how far the
+    // farthest corner sits from the rotation pivot. Normalizing only the
+    // longest axis (above) keeps a perfect-cube shape's apparent size
+    // constant across levels, but a shape that's large across TWO or more
+    // axes at once (a wide/thick cluster, not just "long") still ends up
+    // with a bigger diagonal than a single elongated spike - that's the
+    // actual quantity that determines how far a screen point swings per
+    // degree of rotation, so it's what fitCameraAndSensitivityToShape()
+    // below reacts to instead of raw extent.
+    const radius = 0.5 * Math.hypot(extent[0] * scale, extent[1] * scale, extent[2] * scale);
+    return { center, scale, radius };
+  }
+
+  // Reference: the plain 1x1x1 starting shape's own radius (extent [1,1,1]
+  // at BOX_LONGEST_AXIS/1 scale) - "1x" camera distance and "1x" rotation
+  // sensitivity are defined relative to this, so a typical small shape's
+  // feel is completely unchanged by the code below.
+  const REFERENCE_SHAPE_RADIUS = 0.5 * Math.hypot(BOX_LONGEST_AXIS, BOX_LONGEST_AXIS, BOX_LONGEST_AXIS);
+  const BASE_CAMERA_DISTANCE = 7.5; // matches the old fixed initial value
+  let rotationSensitivityMultiplier = 1;
+
+  // Reported directly: big/long polycube shapes felt like they had a
+  // stuck-in-place pivot and were "hard to rotate" compared to small ones -
+  // their farther corners swing across much more screen distance per degree
+  // of rotation than a small shape's do, at a fixed camera distance. Two
+  // complementary corrections, both keyed off the shape's own radius vs. the
+  // reference above:
+  //  1) push the camera back proportionally so the shape's ON-SCREEN size
+  //     (and therefore how far its corners visually swing per degree) stays
+  //     closer to constant across shapes - the dominant fix, since it
+  //     addresses the actual visual swing rather than just the finger's
+  //     pixel-to-degree ratio.
+  //  2) camera distance is clamped (MIN/MAX_CAMERA_DISTANCE) so an extreme
+  //     shape can still get camera-clamped short of the "ideal" distance -
+  //     rotation sensitivity picks up exactly that leftover gap, so even a
+  //     shape big enough to hit the clamp still rotates at roughly the same
+  //     felt rate as everything else.
+  function fitCameraAndSensitivityToShape(radius) {
+    const idealDistance = BASE_CAMERA_DISTANCE * (radius / REFERENCE_SHAPE_RADIUS);
+    setCameraDistance(idealDistance);
+    const residualRatio = idealDistance / cameraDistance; // >1 only when the clamp above capped us short
+    rotationSensitivityMultiplier = 1 / residualRatio;
   }
 
   // Builds one BufferGeometry for the whole polycube shape: each exposed
@@ -1047,9 +1092,10 @@ const Scene3D = (() => {
       }));
     });
 
-    const { center, scale } = shapeCenterAndScale(shape);
+    const { center, scale, radius } = shapeCenterAndScale(shape);
     currentCenter = center;
     currentScale = scale;
+    fitCameraAndSensitivityToShape(radius);
     const geometry = buildPolycubeGeometry(currentGraph.faces, center, scale);
 
     // Two meshes sharing one geometry instead of a single transparent mesh: a
@@ -2152,8 +2198,9 @@ const Scene3D = (() => {
   const DRAG_SENSITIVITY = 0.15;
 
   function applyDragRotation(dx, dy) {
+    const sensitivity = DRAG_SENSITIVITY * rotationSensitivityMultiplier;
     const deltaRotationQuaternion = new THREE.Quaternion().setFromEuler(
-      new THREE.Euler(Math.PI/180 * (dy * DRAG_SENSITIVITY), Math.PI/180 * (dx * DRAG_SENSITIVITY), 0, 'XYZ')
+      new THREE.Euler(Math.PI/180 * (dy * sensitivity), Math.PI/180 * (dx * sensitivity), 0, 'XYZ')
     );
     shapeGroup.quaternion.multiplyQuaternions(deltaRotationQuaternion, shapeGroup.quaternion);
   }

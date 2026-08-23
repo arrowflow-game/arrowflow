@@ -280,13 +280,25 @@ const Sound = (() => {
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
       wasMusicPlaying = musicPlaying;
-      stopMusic();
+      pauseMusic();
       if (ctx && ctx.state === 'running') ctx.suspend();
     } else {
       if (ctx && ctx.state === 'suspended') ctx.resume();
-      if (wasMusicPlaying) startMusic();
+      if (wasMusicPlaying) resumeMusic();
     }
   });
+
+  // Cold-start fix: getCtx()'s ctx.resume() is async, so the very first SFX
+  // triggered right after page load can get scheduled before the context is
+  // actually running and silently drop (reported as "no sound until I toggle
+  // sound off/on" - by then resume() had finished, so it was never really
+  // about the toggle). Warm the context up on the earliest possible real user
+  // gesture instead of waiting for the first deliberate sound trigger.
+  function warmUpOnce() {
+    getCtx();
+  }
+  document.addEventListener('pointerdown', warmUpOnce, { once: true });
+  document.addEventListener('touchstart', warmUpOnce, { once: true });
 
   return { playSlide, playBump, playWin, playFail, startMusic, stopMusic, pauseMusic, resumeMusic, setLevelContext };
 })();
