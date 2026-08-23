@@ -24,7 +24,6 @@ const I18N = (() => {
       'hud.undo': '↩ ย้อนกลับ',
       'hud.tier.daily': 'รายวัน',
       'hud.tier.remix': 'เรมิกซ์',
-      'hud.skins_btn': '🎨 สกิน',
 
       'levels.title': 'เลือกด่าน',
 
@@ -221,7 +220,6 @@ const I18N = (() => {
       'hud.undo': '↩ Undo',
       'hud.tier.daily': 'DAILY',
       'hud.tier.remix': 'REMIX',
-      'hud.skins_btn': '🎨 Skins',
 
       'levels.title': 'SELECT LEVEL',
 

@@ -118,7 +118,9 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
    (moved here from the old left group) - all per direct request. */
 .hud-right-group { flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
 .hud-right-subrow { display: flex; gap: 6px; align-items: center; }
-.hud-store-icon { width: 34px; height: 34px; font-size: 0.95rem; flex-shrink: 0; }
+/* Bumped from 34px/0.95rem (2026-08-23, per direct request) - now shared by
+   both the cart and Skins icons, which sit side by side in the same subrow. */
+.hud-store-icon { width: 38px; height: 38px; font-size: 1.05rem; flex-shrink: 0; }
 .hud-tier-label { font-size: 0.75rem; font-weight: 800; letter-spacing: 2px; color: var(--text-secondary); pointer-events: none; white-space: nowrap; }
 .hud-instruction { margin-top: auto; margin-bottom: 20px; background: rgba(0,0,0,0.5); color: #fff; padding: 8px 16px; border-radius: 99px; font-size: 0.85rem; font-weight: 700; transition: opacity 0.5s; pointer-events: none; }
 
@@ -140,12 +142,6 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
 .hud-remove-ads-btn.hidden { display: none; }
 .hud-remove-ads-icon { font-size: 0.85rem; }
 
-/* Skins-shop HUD shortcut (2026-08-23) - reported directly: no way to reach
-   the skin shop mid-game without pausing first, unlike remove-ads which has
-   its own always-visible pill. Reuses .hud-remove-ads-btn's pill shape but
-   outlined rather than accent-filled, so it doesn't compete with remove-ads'
-   deliberately "stand out" look for the same visual priority. */
-.hud-skins-btn { background: var(--bg-card); color: var(--accent); border: 2px solid var(--accent); box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
 
 .hud-star { font-size: 1.5rem; color: #ccc; transition: color 0.3s; }
 .hud-star.earned { color: var(--star-color); }
@@ -255,6 +251,7 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
 .skin-btn.selected { border-color: var(--accent); }
 .skin-btn.locked { opacity: 0.7; background: var(--bg-secondary); cursor: pointer; }
 .skin-btn-lock { font-size: 0.7rem; color: var(--text-secondary); font-weight: 600; }
+.skin-btn-alt-price { font-size: 0.68rem; color: var(--accent); font-weight: 800; }
 .win-new-skin-btn { width: 100%; margin: 0 0 14px; padding: 10px; border-radius: 10px; border: 2px dashed var(--accent); background: transparent; color: var(--accent); font-weight: 800; font-size: 0.85rem; }
 
 /* Gems currency display - menu card + in-game HUD */
@@ -366,7 +363,7 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
   .hud-controls-group { gap: 6px; }
   .hud-left-group { gap: 4px; }
   .icon-btn { width: 34px; height: 34px; font-size: 0.95rem; }
-  .hud-store-icon { width: 28px; height: 28px; font-size: 0.8rem; }
+  .hud-store-icon { width: 31px; height: 31px; font-size: 0.88rem; }
   .hud-remove-ads-btn { padding: 3px 6px; font-size: 0.52rem; max-width: 72px; }
   .hud-hint-btn { padding: 5px 8px; font-size: 0.8rem; }
   .hud-level-badge { padding: 3px 8px; }

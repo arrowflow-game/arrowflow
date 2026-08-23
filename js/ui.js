@@ -894,6 +894,23 @@ const UI = (() => {
         lockEl.className = 'skin-btn-lock';
         lockEl.textContent = skinLockLabel(skin, ctx);
         btn.appendChild(lockEl);
+        // Real-money alt-unlock price, shown directly on the grid tile
+        // (reported directly: had to tap into the preview modal just to see
+        // if a skin even had a money option, or what it cost) - every
+        // gems/streak-track skin's altUnlock, and every level/gems-track
+        // skin's altUnlock2, that's type:'iap' gets a second small price
+        // line here so the whole decision is visible without opening
+        // anything. Web/no-native still omits it (same "no fake IAP UI on
+        // web" rule as everywhere else this price is shown).
+        const iapAlt = (skin.altUnlock && skin.altUnlock.type === 'iap') ? skin.altUnlock
+          : (skin.altUnlock2 && skin.altUnlock2.type === 'iap') ? skin.altUnlock2 : null;
+        if (iapAlt && Iap.isNative()) {
+          const priceLabel = Iap.skinPriceLabel(skin.id);
+          const altPriceEl = document.createElement('span');
+          altPriceEl.className = 'skin-btn-alt-price';
+          altPriceEl.textContent = priceLabel || '···';
+          btn.appendChild(altPriceEl);
+        }
         // Locked tiles of every type open the preview modal on tap (used to be
         // inert - no handler at all) - the modal is where the actual buy/
         // unlock-condition detail lives; the grid tile itself just shows the
