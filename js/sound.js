@@ -277,8 +277,16 @@ const Sound = (() => {
     // already true and silently no-opped, never actually creating/playing
     // any <audio>. Only let startMusic() own that flag in this branch.
     if (currentAudioEl) {
-      musicPlaying = true;
-      currentAudioEl.play().catch(() => {});
+      // Only set musicPlaying once play() actually succeeds - it used to be
+      // set true right before calling play() (to satisfy the cold-start fix
+      // above), but a rejected play() (e.g. right after a native rewarded-ad
+      // activity hands focus back, before the WebView has a fresh user-gesture)
+      // left musicPlaying stuck true with nothing actually playing - every
+      // later resumeMusic() call then no-opped on the `if (musicPlaying...)`
+      // guard above, silent until the player toggled the music setting
+      // off/on. Reported directly: "music stops after watching a rewarded ad,
+      // have to toggle music off/on to get it back."
+      currentAudioEl.play().then(() => { musicPlaying = true; }).catch(() => {});
     } else {
       startMusic();
     }

@@ -620,6 +620,7 @@ const UI = (() => {
         skinBtn.classList.remove('hidden');
         skinBtn.onclick = () => {
           winModal.classList.add('hidden');
+          skinsReturnScreen = 'modal-win';
           buildSkinsScreen();
           showScreen('screen-skins');
         };
@@ -631,7 +632,13 @@ const UI = (() => {
     winModal.classList.remove('hidden');
     winModal.classList.toggle('campaign-complete', !!isCampaignFinale);
     const titleEl = document.getElementById('win-title');
-    if (titleEl) titleEl.textContent = I18N.t(isCampaignFinale ? 'win.finale_title' : 'win.title');
+    if (titleEl) {
+      if (isCampaignFinale) titleEl.textContent = I18N.t('win.finale_title');
+      else if (mode === 'daily') titleEl.textContent = I18N.t('win.title_daily');
+      else if (mode === 'remix') titleEl.textContent = I18N.t('win.title_remix');
+      else if (typeof levelNum === 'number') titleEl.textContent = I18N.t('win.title_num', { n: levelNum });
+      else titleEl.textContent = I18N.t('win.title');
+    }
     const subEl = document.getElementById('win-sub');
     if (subEl) {
       subEl.classList.toggle('hidden', !isCampaignFinale);
@@ -1353,7 +1360,16 @@ const UI = (() => {
     });
     document.getElementById('btn-back-skins').addEventListener('click', () => {
       dismissSkinTutorial();
-      showScreen(skinsReturnScreen);
+      // 'modal-win' isn't a real screen id - it means Skins was opened from the
+      // win modal's new-skin button (see showWin), which was hidden (not replaced)
+      // to get there. Without re-showing it here, a back tap leaves the player on
+      // a bare screen-game with the level already solved and nothing tappable.
+      if (skinsReturnScreen === 'modal-win') {
+        showScreen('screen-game');
+        document.getElementById('modal-win').classList.remove('hidden');
+      } else {
+        showScreen(skinsReturnScreen);
+      }
     });
     document.getElementById('skin-preview-close').addEventListener('click', closeSkinPreview);
 
@@ -1401,6 +1417,10 @@ const UI = (() => {
     document.getElementById('btn-restart').addEventListener('click', () => {
       document.getElementById('modal-pause').classList.add('hidden');
       Game.restart();
+      // Restarting directly from pause (without tapping Resume first) skips
+      // the btn-resume handler's Sound.resumeMusic() call - music stays
+      // paused from btn-pause's pauseMusic() forever otherwise.
+      Sound.resumeMusic();
     });
     document.getElementById('btn-quit').addEventListener('click', () => {
       document.getElementById('modal-pause').classList.add('hidden');
@@ -1499,6 +1519,7 @@ const UI = (() => {
     document.getElementById('btn-replay').addEventListener('click', () => {
       hideAllModals();
       Game.restart();
+      Sound.resumeMusic();
     });
 
     document.getElementById('btn-daily-tip-go').addEventListener('click', () => {
@@ -1569,6 +1590,12 @@ const UI = (() => {
     document.getElementById('btn-fail-restart').addEventListener('click', () => {
       document.getElementById('modal-fail').classList.add('hidden');
       Game.restart();
+      // Game.restart() -> Sound.setLevelContext() only crossfades if music is
+      // ALREADY playing (see sound.js) - it never starts/resumes music on its
+      // own. If music had gone silent earlier this session (e.g. a rewarded-ad
+      // interruption that never recovered), restarting from the fail modal
+      // left it silent forever since this path never called resumeMusic().
+      Sound.resumeMusic();
     });
 
     document.getElementById('btn-fail-quit').addEventListener('click', () => {
@@ -1588,7 +1615,7 @@ const UI = (() => {
 
     document.getElementById('btn-fail-remove-ads').addEventListener('click', () => {
       document.getElementById('modal-fail').classList.add('hidden');
-      openStoreForRemoveAds('screen-game');
+      openStoreForRemoveAds('modal-fail');
     });
     document.getElementById('btn-hud-remove-ads').addEventListener('click', () => {
       if (Storage.isAdsRemoved()) return; // status-only pill once owned, see updateRemoveAdsHud()
@@ -1617,11 +1644,20 @@ const UI = (() => {
       // Buying/ad-earning hints in-level doesn't otherwise touch the HUD until the next
       // updateHUD() call (e.g. on hint use) - refresh it immediately so the count shown
       // in the HUD matches what the store just showed.
-      if (storeReturnScreen === 'screen-game') {
+      if (storeReturnScreen === 'screen-game' || storeReturnScreen === 'modal-fail') {
         const hudHints = document.getElementById('hud-hints');
         if (hudHints) hudHints.textContent = Storage.getHintsTotal();
       }
-      showScreen(storeReturnScreen);
+      // 'modal-fail' isn't a real screen id - it means the store was opened from the
+      // no-hearts fail modal (see btn-fail-remove-ads), which was hidden (not replaced)
+      // to get there. Without re-showing it here, a no-purchase back leaves the player
+      // on a bare screen-game with hearts still at 0 and nothing left tappable.
+      if (storeReturnScreen === 'modal-fail') {
+        showScreen('screen-game');
+        showFail();
+      } else {
+        showScreen(storeReturnScreen);
+      }
     });
 
     document.getElementById('btn-store-hint-ad').addEventListener('click', (e) => {

@@ -145,7 +145,12 @@ const Leaderboard = (() => {
         }
       });
       return true;
-    } catch {
+    } catch (e) {
+      // Best-effort by design (see file header), but silently swallowing this
+      // hid a real bug once already (a stale/mismatched console-deployed Rules
+      // publish vs. the committed firestore.rules) - surface it so it's visible
+      // in remote devtools instead of just showing "-" with no trace.
+      console.warn('[Leaderboard] submitLevelScore failed', e);
       return false;
     }
   }
@@ -157,7 +162,8 @@ const Leaderboard = (() => {
       const snap = await db.collection('levelBests').doc(String(levelId)).get();
       if (!snap.exists) return null;
       return { score: snap.data().score, nickname: snap.data().nickname };
-    } catch {
+    } catch (e) {
+      console.warn('[Leaderboard] fetchLevelBest failed', e);
       return null;
     }
   }

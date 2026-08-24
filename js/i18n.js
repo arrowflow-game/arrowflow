@@ -99,6 +99,9 @@ const I18N = (() => {
       'reset.working': 'กำลังล้างข้อมูล...',
 
       'win.title': 'ผ่านด่านแล้ว!',
+      'win.title_num': 'ผ่านด่าน {n} แล้ว!',
+      'win.title_daily': '🗓️ ผ่านเควสประจำวันแล้ว!',
+      'win.title_remix': '✨ ผ่านด่าน REMIX แล้ว!',
       'win.finale_title': '🏆 จบแคมเปญแล้ว!',
       'win.finale_sub': 'จบแคมเปญ 300 ด่านแล้ว! ไปต่อกับโหมด REMIX ที่ยากขึ้นเรื่อยๆ',
       'win.score': 'คะแนน',
@@ -295,6 +298,9 @@ const I18N = (() => {
       'reset.working': 'Resetting...',
 
       'win.title': 'LEVEL COMPLETE!',
+      'win.title_num': 'LEVEL {n} COMPLETE!',
+      'win.title_daily': '🗓️ DAILY CHALLENGE COMPLETE!',
+      'win.title_remix': '✨ REMIX LEVEL COMPLETE!',
       'win.finale_title': '🏆 CAMPAIGN COMPLETE!',
       'win.finale_sub': "You beat all 300 levels! Keep going in REMIX mode - it only gets harder.",
       'win.score': 'Score',
