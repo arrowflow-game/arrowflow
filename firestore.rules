@@ -56,7 +56,13 @@ service cloud.firestore {
         && request.resource.data.score is int
         && request.resource.data.score >= 0
         && request.resource.data.score <= 50000
-        && (!resource.exists() || request.resource.data.score > resource.data.score);
+        // resource is null (not a Resource object with an .exists() method) for a
+        // brand-new document - the previous `!resource.exists()` here was invalid
+        // Firestore Rules syntax that threw a runtime null-value error on every
+        // first-ever write for a level, which Firestore then denies (rules fail
+        // closed on error) - confirmed via Rules Playground, this is why levelBests
+        // has had zero documents ever written since the 2026-08-19 collection wipe.
+        && (resource == null || request.resource.data.score > resource.data.score);
     }
   }
 }
