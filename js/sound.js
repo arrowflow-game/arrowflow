@@ -13,7 +13,9 @@ const Sound = (() => {
     // real user-gesture handler (a tap/click) - browsers block AudioContext
     // autoplay otherwise, so there's no separate "unlock" step needed.
     if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
-    if (ctx.state === 'suspended') ctx.resume();
+    // Don't undo handleAppBackground()'s suspend - see the isBackgrounded
+    // guards on the play*() functions below for why this matters.
+    if (ctx.state === 'suspended' && !isBackgrounded) ctx.resume();
     return ctx;
   }
 
@@ -33,7 +35,16 @@ const Sound = (() => {
 
   // One oscillator with a short exponential decay envelope, optionally sliding
   // its frequency from startFreq to endFreq over the note's lifetime.
+  //
+  // Guarded against isBackgrounded (2026-08-26, reported directly: spinning
+  // the Wheel then immediately switching apps/locking the phone let the
+  // reward chime play out loud in the background) - the Wheel's prize reveal
+  // fires from a setTimeout() that keeps running while backgrounded, and
+  // getCtx() below unconditionally resumes a suspended AudioContext, which
+  // undid handleAppBackground()'s suspend for exactly that one delayed call.
+  // Skipping here covers every SFX call site through this single choke point.
   function tone(startFreq, endFreq, duration, type, startTime, gain) {
+    if (isBackgrounded) return;
     const c = getCtx();
     const osc = c.createOscillator();
     const amp = c.createGain();
@@ -49,19 +60,19 @@ const Sound = (() => {
   }
 
   function playSlide() {
-    if (!sfxEnabled()) return;
+    if (!sfxEnabled() || isBackgrounded) return;
     const c = getCtx();
     tone(520, 900, 0.14, 'triangle', c.currentTime, 0.18);
   }
 
   function playBump() {
-    if (!sfxEnabled()) return;
+    if (!sfxEnabled() || isBackgrounded) return;
     const c = getCtx();
     tone(180, 90, 0.16, 'sawtooth', c.currentTime, 0.16);
   }
 
   function playWin() {
-    if (!sfxEnabled()) return;
+    if (!sfxEnabled() || isBackgrounded) return;
     const c = getCtx();
     // A quick rising arpeggio, one short note per step.
     [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
@@ -70,7 +81,7 @@ const Sound = (() => {
   }
 
   function playFail() {
-    if (!sfxEnabled()) return;
+    if (!sfxEnabled() || isBackgrounded) return;
     const c = getCtx();
     tone(300, 120, 0.45, 'sawtooth', c.currentTime, 0.15);
   }
@@ -80,7 +91,7 @@ const Sound = (() => {
   // flow rather than mixing with it. A quick descending tick-tick-tick, one
   // note per wedge tick, for the spin itself.
   function playWheelSpin() {
-    if (!sfxEnabled()) return;
+    if (!sfxEnabled() || isBackgrounded) return;
     const c = getCtx();
     [880, 830, 780, 740].forEach((freq, i) => {
       tone(freq, freq, 0.06, 'square', c.currentTime + i * 0.08, 0.08);
@@ -90,7 +101,7 @@ const Sound = (() => {
   // Reward reveal chime - same rising-arpeggio shape as playWin() but its own
   // function so wheel-prize logic never has to piggyback on level-win logic.
   function playWheelWin() {
-    if (!sfxEnabled()) return;
+    if (!sfxEnabled() || isBackgrounded) return;
     const c = getCtx();
     [659.25, 830.61, 1046.5, 1318.51].forEach((freq, i) => {
       tone(freq, freq, 0.18, 'triangle', c.currentTime + i * 0.1, 0.16);
