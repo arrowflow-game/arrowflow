@@ -90,6 +90,25 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
 }
 .notify-dot.hidden { display: none; }
 
+/* Non-blocking reward-confirmation toast (2026-08-26) - deliberately NOT a
+   native alert(): calling alert() synchronously from inside the ad SDK's
+   onDismiss event listener (js/ads.js's onRewardedVideoAdDismissed) risks a
+   real Android WebView hazard - the native dialog can fail to attach during
+   the Activity focus transition back from the full-screen ad, silently
+   swallowing all touch input until the app is force-restarted (reproduced
+   for real via test32.mp4 after repeated fail-screen continue-ad watches).
+   A plain DOM toast never touches the native bridge, so it can't hit that
+   class of bug - same safety property the wheel's inline result text already
+   had, which is why it alone never froze across any test round. */
+.app-toast {
+  position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%) translateY(10px);
+  background: var(--bg-card); color: var(--text-primary); padding: 12px 22px;
+  border-radius: 99px; font-weight: 800; font-size: 0.95rem; text-align: center;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3); z-index: 999; max-width: 85vw;
+  opacity: 0; pointer-events: none; transition: opacity 0.25s, transform 0.25s;
+}
+.app-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
 /* Menu */
 .menu-controls-top { position: absolute; top: 20px; left: 20px; right: 20px; display: flex; justify-content: space-between; }
 .menu-card { background: var(--bg-card); padding: 40px 30px; border-radius: 24px; text-align: center; box-shadow: 0 8px 30px rgba(0,0,0,0.1); backdrop-filter: blur(10px); }

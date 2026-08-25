@@ -1438,14 +1438,41 @@ const UI = (() => {
   // button while the ad loads/plays (DOM stays ui.js's job, ads.js never touches it),
   // then restores it either way. onGranted only runs on a real earned reward (or the
   // web/test fallback); onFailed runs on a genuine no-fill/dismiss-without-reward.
+  // Non-blocking confirmation toast - see the .app-toast CSS comment for why
+  // this exists instead of alert() for anything reachable from an ad SDK
+  // dismiss callback.
+  let toastHideTimer = null;
+  function showToast(message) {
+    let el = document.getElementById('app-toast');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'app-toast';
+      el.className = 'app-toast';
+      document.body.appendChild(el);
+    }
+    el.textContent = message;
+    el.classList.add('show');
+    clearTimeout(toastHideTimer);
+    toastHideTimer = setTimeout(() => el.classList.remove('show'), 2500);
+  }
+
   function watchRewardedAd(btn, onGranted, onFailed) {
     btn.disabled = true;
-    const original = btn.textContent;
-    btn.textContent = I18N.t('store.ad_loading');
+    // Swap text on a child [data-i18n] label when one exists (btn-wheel-spin-ad/
+    // btn-store-hint-ad now carry a sibling notify-dot span) rather than the
+    // button's own textContent - textContent wipes ALL children, silently
+    // destroying that dot permanently (confirmed via test32.mp4: the dot never
+    // came back after the first ad watch, and later code that looked it up by
+    // id threw on the now-missing element, aborting whatever ran after it -
+    // e.g. the wheel's remaining-spins counter never updating). Falls back to
+    // the button itself for plain buttons with no such child (btn-fail-continue-ad).
+    const labelEl = btn.querySelector('[data-i18n]') || btn;
+    const original = labelEl.textContent;
+    labelEl.textContent = I18N.t('store.ad_loading');
     Ads.showRewardedAd(
-      () => { btn.textContent = original; onGranted(); },
+      () => { labelEl.textContent = original; onGranted(); },
       () => {
-        btn.textContent = original;
+        labelEl.textContent = original;
         btn.disabled = false;
         if (onFailed) onFailed();
       }
@@ -1856,7 +1883,7 @@ const UI = (() => {
         Analytics.logEvent('continue_ad_used', {});
         document.getElementById('modal-fail').classList.add('hidden');
         Game.continueAfterFail();
-        alert(I18N.t('fail.continue_ad_success'));
+        showToast(I18N.t('fail.continue_ad_success'));
       }, () => alert(I18N.t('store.ad_failed')));
     });
 
@@ -1913,7 +1940,7 @@ const UI = (() => {
         Analytics.logEvent('hint_ad_used', {});
         Storage.addHints(1);
         buildStoreScreen();
-        alert(I18N.t('store.hint_ad_success'));
+        showToast(I18N.t('store.hint_ad_success'));
       }, () => alert(I18N.t('store.ad_failed')));
     });
 
