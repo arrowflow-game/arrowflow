@@ -128,6 +128,10 @@ const Iap = (() => {
     all:    { productId: 'skin_bundle_all' }
   };
 
+  // Every consumable product id in the file - used by sweepStuckConsumables()
+  // below to recognize which returned purchases are safe to auto-consume.
+  const CONSUMABLE_PRODUCT_IDS = new Set([...Object.values(HINT_PACKS), ...Object.values(GEM_PACKS)].map(e => e.productId));
+
   const cachedPriceLabels = {}; // productId -> localized price string
 
   function isNative() {
@@ -156,6 +160,46 @@ const Iap = (() => {
       });
     } catch {
       // Best-effort - the purchase functions below still work without cached prices.
+    }
+    sweepStuckConsumables();
+  }
+
+  // Self-healing: consumable purchases (hint/gem packs) are supposed to be
+  // consumed server-side right after granting, which is what lets the same
+  // product be bought again. A prior Android plugin bug (fixed in
+  // patches/@capgo+native-purchases+*.patch) closed the billing connection
+  // before that consume call's async round-trip finished, permanently
+  // stranding some already-made purchases as "still owned, never consumed" -
+  // the patch only stops NEW purchases from getting stuck, it can't reach
+  // back and fix tokens that were already stranded under the old broken
+  // code. Every app start, sweep for any leftover unconsumed consumable and
+  // consume it - this grants nothing (the player already got, or never got,
+  // whatever that old purchase was for), it just unblocks a future purchase
+  // attempt of the same product from failing with ITEM_ALREADY_OWNED.
+  // Fire-and-forget from init(), best-effort, never surfaces an error to the
+  // player - a no-op on every normal app start once nothing is stuck.
+  async function sweepStuckConsumables() {
+    if (!isNative()) return;
+    try {
+      const { purchases } = await plugin().getPurchases({ productType: 'inapp' });
+      const stuck = (purchases || []).filter(p => {
+        const id = p.productIdentifier || p.identifier || p.productId;
+        // purchaseState '1' = PURCHASED (Google Play Billing's
+        // Purchase.PurchaseState.PURCHASED) - skip PENDING (2) purchases,
+        // those aren't stuck, they're still legitimately in progress.
+        return id && CONSUMABLE_PRODUCT_IDS.has(id) && String(p.purchaseState) === '1';
+      });
+      for (const p of stuck) {
+        const token = p.purchaseToken || p.transactionId;
+        if (!token) continue;
+        try {
+          await plugin().consumePurchase({ purchaseToken: token });
+        } catch {
+          // One bad token shouldn't block the rest of the sweep.
+        }
+      }
+    } catch {
+      // Best-effort - no sweep this launch is fine, next app start retries.
     }
   }
 

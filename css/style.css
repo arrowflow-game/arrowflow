@@ -202,6 +202,29 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
 .confetti-area { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 1; }
 .confetti-area canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 
+/* Daily Wheel (2026-08-25) - same confetti-above-content layering as .modal-win-box. */
+.modal-wheel-box { position: relative; z-index: 2; }
+.wheel-wrap { position: relative; width: 220px; height: 220px; margin: 10px auto 20px; }
+.wheel-disc {
+  width: 100%; height: 100%; border-radius: 50%; position: relative;
+  border: 4px solid var(--bg-secondary);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  transition: transform 3s cubic-bezier(0.16, 0.85, 0.2, 1);
+}
+.wheel-disc .wheel-wedge-label {
+  position: absolute; top: 8%; left: 50%; width: 0; text-align: center;
+  transform-origin: 50% 400%; /* pivots around the disc's center, not the label's own box */
+  font-size: 0.85rem; font-weight: 800; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+  white-space: nowrap;
+}
+.wheel-pointer {
+  position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
+  width: 0; height: 0; z-index: 3;
+  border-left: 12px solid transparent; border-right: 12px solid transparent;
+  border-top: 18px solid var(--accent);
+}
+.wheel-result { text-align: center; font-size: 1.3rem; font-weight: 800; margin: 10px 0 15px; min-height: 1.6rem; }
+
 .settings-list { display: flex; flex-direction: column; gap: 18px; margin: 20px 0 25px; text-align: left; }
 .settings-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .settings-label { font-weight: 700; color: var(--text-primary); }

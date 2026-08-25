@@ -142,6 +142,7 @@ const UI = (() => {
       dailyBtn.textContent = I18N.t(done ? 'menu.daily_done' : 'menu.daily');
     }
     updateDailyStreakBadge();
+    updateWheelBadge();
 
     // Bundle promo button (2026-08-20) - hidden on web (nothing purchasable
     // there, same rule every other real-money surface follows) and once
@@ -212,7 +213,7 @@ const UI = (() => {
     remainingEl.classList.remove('hidden');
     const remaining = Storage.remainingRewardedAds('hint');
     btn.disabled = remaining <= 0;
-    remainingEl.textContent = I18N.t('store.ads_remaining', { n: Math.max(0, remaining) });
+    remainingEl.textContent = I18N.t('store.ads_remaining', { n: Math.max(0, remaining), cap: Storage.rewardedAdCap('hint') });
 
     const section = document.getElementById('store-remove-ads-section');
     const statusEl = document.getElementById('store-remove-ads-status');
@@ -530,8 +531,8 @@ const UI = (() => {
   // no skin selected) keeps today's exact rainbow confetti untouched.
   const RISING_THEMES = ['embers', 'bubbles'];
 
-  function burstConfetti(intensity) {
-    const area = document.getElementById('confetti-area');
+  function burstConfetti(intensity, areaId) {
+    const area = document.getElementById(areaId || 'confetti-area');
     if (!area) return;
     area.innerHTML = ''; // clear any still-running burst from a rapid replay
 
@@ -600,6 +601,148 @@ const UI = (() => {
       else area.innerHTML = '';
     }
     requestAnimationFrame(frame);
+  }
+
+  // --- Daily Wheel (2026-08-25) ---------------------------------------
+
+  // Weighted prize table - gems 1/3/5/10 and hints 1/3 (the same hint bonus
+  // amounts the game already grants at milestone/epic levels, see
+  // storage.js's completeLevel()). Weight = relative slice size on the
+  // wheel face AND relative pick probability (kept in sync deliberately -
+  // a wedge's visible size should honestly reflect its odds).
+  const WHEEL_PRIZES = [
+    { type: 'gems', amount: 1, weight: 30 },
+    { type: 'gems', amount: 3, weight: 20 },
+    { type: 'hints', amount: 1, weight: 20 },
+    { type: 'gems', amount: 5, weight: 15 },
+    { type: 'hints', amount: 3, weight: 8 },
+    { type: 'gems', amount: 10, weight: 7 }
+  ];
+  const WHEEL_WEDGE_COLORS = ['#1a7fe8', '#fbbf24', '#2ecc71', '#ff3b30', '#8e44ad', '#00b8b8'];
+
+  // Cumulative rotation applied to #wheel-disc so far this session (not
+  // persisted - just needs to always increase so every spin visually
+  // continues turning forward instead of snapping backward).
+  let wheelRotation = 0;
+
+  // One-time layout pass: paints the conic-gradient wedge background and
+  // positions one rotated label per wedge, sized proportionally to each
+  // prize's weight (see WHEEL_PRIZES comment above).
+  function renderWheelWedges() {
+    const disc = document.getElementById('wheel-disc');
+    if (!disc || disc.dataset.rendered) return; // static prize table, only needs building once
+    disc.dataset.rendered = '1';
+    const total = WHEEL_PRIZES.reduce((s, p) => s + p.weight, 0);
+    let angle = 0;
+    const stops = [];
+    disc.innerHTML = '';
+    WHEEL_PRIZES.forEach((prize, i) => {
+      const slice = (prize.weight / total) * 360;
+      const start = angle, end = angle + slice, mid = angle + slice / 2;
+      stops.push(`${WHEEL_WEDGE_COLORS[i % WHEEL_WEDGE_COLORS.length]} ${start}deg ${end}deg`);
+      const label = document.createElement('span');
+      label.className = 'wheel-wedge-label';
+      label.style.transform = `rotate(${mid}deg)`;
+      label.textContent = prize.type === 'gems' ? `💎${prize.amount}` : `💡${prize.amount}`;
+      disc.appendChild(label);
+      angle = end;
+    });
+    disc.style.background = `conic-gradient(${stops.join(', ')})`;
+  }
+
+  // Picks a prize honoring WHEEL_PRIZES' relative weights.
+  function pickWheelPrize() {
+    const total = WHEEL_PRIZES.reduce((s, p) => s + p.weight, 0);
+    let r = Math.random() * total;
+    for (const prize of WHEEL_PRIZES) {
+      if (r < prize.weight) return prize;
+      r -= prize.weight;
+    }
+    return WHEEL_PRIZES[WHEEL_PRIZES.length - 1];
+  }
+
+  // Refreshes the free/bonus spin buttons' enabled state + remaining-count
+  // label - same read-state-then-toggle pattern as updateFailContinueAdUI().
+  function buildWheelModal() {
+    const freeBtn = document.getElementById('btn-wheel-spin-free');
+    const adBtn = document.getElementById('btn-wheel-spin-ad');
+    const remainingEl = document.getElementById('wheel-ad-remaining');
+    const resultEl = document.getElementById('wheel-result');
+    resultEl.classList.add('hidden');
+    resultEl.textContent = '';
+    renderWheelWedges();
+
+    const freeAvailable = Storage.isWheelFreeSpinAvailable();
+    freeBtn.disabled = !freeAvailable;
+    freeBtn.textContent = I18N.t(freeAvailable ? 'wheel.spin_free' : 'wheel.spin_free_done');
+
+    const bonusRemaining = Storage.remainingWheelBonusSpins();
+    adBtn.classList.toggle('hidden', bonusRemaining <= 0);
+    remainingEl.classList.toggle('hidden', bonusRemaining <= 0);
+    if (bonusRemaining > 0) {
+      remainingEl.textContent = I18N.t('wheel.bonus_remaining', { n: bonusRemaining, cap: 5 });
+    }
+  }
+
+  // source: 'free' | 'bonus' - caller has already confirmed the spin is
+  // allowed (Storage.isWheelFreeSpinAvailable() / a granted rewarded ad) and,
+  // for 'bonus', already consumed the daily ad-spin slot.
+  function spinWheel(source) {
+    const freeBtn = document.getElementById('btn-wheel-spin-free');
+    const adBtn = document.getElementById('btn-wheel-spin-ad');
+    freeBtn.disabled = true;
+    adBtn.disabled = true;
+
+    const prize = pickWheelPrize();
+    const total = WHEEL_PRIZES.reduce((s, p) => s + p.weight, 0);
+    let angle = 0, mid = 0;
+    for (const p of WHEEL_PRIZES) {
+      const slice = (p.weight / total) * 360;
+      if (p === prize) { mid = angle + slice / 2; break; }
+      angle += slice;
+    }
+    const disc = document.getElementById('wheel-disc');
+    const extraTurns = 5 * 360;
+    wheelRotation += extraTurns + ((360 - mid) - (wheelRotation % 360) + 360) % 360;
+    disc.style.transform = `rotate(${wheelRotation}deg)`;
+    Sound.playWheelSpin();
+
+    setTimeout(() => {
+      if (source === 'free') Storage.useWheelFreeSpin();
+      if (prize.type === 'gems') Storage.addGems(prize.amount);
+      else Storage.addHints(prize.amount);
+      refreshGemsDisplay();
+      const hintEl = document.getElementById('hud-hints');
+      if (hintEl) hintEl.textContent = Storage.getHintsTotal();
+      const storeHintEl = document.getElementById('store-hint-count');
+      if (storeHintEl) storeHintEl.textContent = Storage.getHintsTotal();
+
+      Sound.playWheelWin();
+      burstConfetti(1, 'wheel-confetti-area');
+      const resultEl = document.getElementById('wheel-result');
+      resultEl.textContent = I18N.t(prize.type === 'gems' ? 'wheel.result_gems' : 'wheel.result_hints', { n: prize.amount });
+      resultEl.classList.remove('hidden');
+      Analytics.logEvent('wheel_spin', { prize_type: prize.type, amount: prize.amount, source });
+
+      freeBtn.disabled = !Storage.isWheelFreeSpinAvailable();
+      const bonusRemaining = Storage.remainingWheelBonusSpins();
+      adBtn.disabled = bonusRemaining <= 0;
+      updateWheelBadge();
+    }, 3000); // matches .wheel-disc's 3s CSS transition
+  }
+
+  // Main-menu wheel button badge - same on/off pattern as updateDailyStreakBadge().
+  function updateWheelBadge() {
+    const badge = document.getElementById('wheel-badge');
+    if (!badge) return;
+    badge.classList.toggle('hidden', !Storage.isWheelFreeSpinAvailable());
+    if (!badge.classList.contains('hidden')) badge.textContent = I18N.t('wheel.badge_available');
+  }
+
+  function openWheel() {
+    Sound.pauseMusic();
+    buildWheelModal();
+    document.getElementById('modal-wheel').classList.remove('hidden');
   }
 
   function formatTime(sec) {
@@ -1191,6 +1334,7 @@ const UI = (() => {
   function updateFailContinueAdUI() {
     const btn = document.getElementById('btn-fail-continue-ad');
     const remainingEl = document.getElementById('fail-continue-ad-remaining');
+    const adsRemoved = Storage.isAdsRemoved();
     // Opt-in rewarded ads stay available even after buying remove-ads - see
     // the matching comment in buildStoreScreen()'s hint-ad button.
     const remaining = Storage.remainingRewardedAds('continue');
@@ -1202,7 +1346,7 @@ const UI = (() => {
       remainingEl.classList.remove('hidden');
       btn.disabled = false;
       btn.textContent = I18N.t('fail.continue_ad');
-      remainingEl.textContent = I18N.t('store.ads_remaining', { n: remaining });
+      remainingEl.textContent = I18N.t('store.ads_remaining', { n: remaining, cap: Storage.rewardedAdCap('continue') });
     }
 
     // Promotional nudge toward the "remove ads" IAP - a shortcut into the Store's
@@ -1239,8 +1383,10 @@ const UI = (() => {
 
   function hideAllModals() {
     document.querySelectorAll('.modal-overlay').forEach(m => m.classList.add('hidden'));
-    const confettiArea = document.getElementById('confetti-area');
-    if (confettiArea) confettiArea.innerHTML = ''; // stop any still-running burst
+    ['confetti-area', 'wheel-confetti-area'].forEach(id => {
+      const area = document.getElementById(id);
+      if (area) area.innerHTML = ''; // stop any still-running burst
+    });
   }
 
   // Android hardware/gesture back button - Capacitor's own default handling
@@ -1534,6 +1680,24 @@ const UI = (() => {
     document.getElementById('btn-daily').addEventListener('click', () => {
       Game.loadDailyLevel();
       showScreen('screen-game');
+    });
+
+    document.getElementById('btn-wheel').addEventListener('click', () => openWheel());
+    document.getElementById('btn-wheel-spin-free').addEventListener('click', () => {
+      if (!Storage.isWheelFreeSpinAvailable()) return;
+      spinWheel('free');
+    });
+    document.getElementById('btn-wheel-spin-ad').addEventListener('click', (e) => {
+      watchRewardedAd(e.currentTarget, () => {
+        if (!Storage.useWheelBonusSpin()) { buildWheelModal(); return; }
+        Analytics.logEvent('wheel_bonus_ad_used', {});
+        spinWheel('bonus');
+      }, () => alert(I18N.t('store.ad_failed')));
+    });
+    document.getElementById('btn-wheel-close').addEventListener('click', () => {
+      Sound.resumeMusic();
+      document.getElementById('modal-wheel').classList.add('hidden');
+      updateMenu();
     });
 
     document.getElementById('btn-hint').addEventListener('click', () => {

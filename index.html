@@ -66,6 +66,10 @@
           <button id="btn-skins" class="btn btn-outline" data-i18n="menu.skins">🎨 สกิน</button>
           <button id="btn-bundle-promo" class="btn btn-outline menu-bundle-promo-btn hidden" data-i18n="menu.bundle_promo">🎁 ชุดสกินสุดคุ้ม</button>
         </div>
+        <div class="menu-btn-row">
+          <button id="btn-wheel" class="btn btn-outline" data-i18n="menu.wheel">🎡 วงล้อ</button>
+        </div>
+        <div id="wheel-badge" class="daily-streak-badge hidden"></div>
       </div>
       <div class="menu-progress-wrap">
         <div class="menu-progress-info">
@@ -374,6 +378,28 @@
         <button id="btn-next"   class="btn btn-primary btn-lg" data-i18n="win.next">NEXT LEVEL →</button>
         <button id="btn-view-leaderboard" class="btn btn-outline" data-i18n="win.leaderboard">🏆 ดูอันดับ</button>
         <button id="btn-replay" class="btn btn-outline" data-i18n="win.replay">↺ Replay</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DAILY WHEEL (2026-08-25): 1 free spin/day + up to 5 bonus spins/day via
+       rewarded ad, gems/hints prizes only. Music pauses (js/sound.js's
+       pauseMusic/resumeMusic) for the whole flow - see js/ui.js's openWheel()/
+       btn-wheel-close handler. -->
+  <div id="modal-wheel" class="modal-overlay hidden" data-back-close="btn-wheel-close">
+    <div id="wheel-confetti-area" class="confetti-area"></div>
+    <div class="modal-box modal-wheel-box">
+      <h2 class="modal-title" data-i18n="wheel.title">🎡 Daily Wheel</h2>
+      <div class="wheel-wrap">
+        <div class="wheel-pointer"></div>
+        <div class="wheel-disc" id="wheel-disc"></div>
+      </div>
+      <div class="wheel-result hidden" id="wheel-result"></div>
+      <div class="modal-btns">
+        <button id="btn-wheel-spin-free" class="btn btn-primary btn-lg" data-i18n="wheel.spin_free">Free Spin</button>
+        <button id="btn-wheel-spin-ad" class="btn btn-outline"><span data-i18n="wheel.spin_ad">📺 Spin Again (watch ad)</span></button>
+        <div id="wheel-ad-remaining" class="fail-ad-remaining"></div>
+        <button id="btn-wheel-close" class="btn btn-outline" data-i18n="wheel.close">Close</button>
       </div>
     </div>
   </div>

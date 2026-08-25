@@ -75,6 +75,28 @@ const Sound = (() => {
     tone(300, 120, 0.45, 'sawtooth', c.currentTime, 0.15);
   }
 
+  // Daily wheel SFX (2026-08-25) - deliberately separate from the game's
+  // background music, which pauses (Sound.pauseMusic()) for the whole wheel
+  // flow rather than mixing with it. A quick descending tick-tick-tick, one
+  // note per wedge tick, for the spin itself.
+  function playWheelSpin() {
+    if (!sfxEnabled()) return;
+    const c = getCtx();
+    [880, 830, 780, 740].forEach((freq, i) => {
+      tone(freq, freq, 0.06, 'square', c.currentTime + i * 0.08, 0.08);
+    });
+  }
+
+  // Reward reveal chime - same rising-arpeggio shape as playWin() but its own
+  // function so wheel-prize logic never has to piggyback on level-win logic.
+  function playWheelWin() {
+    if (!sfxEnabled()) return;
+    const c = getCtx();
+    [659.25, 830.61, 1046.5, 1318.51].forEach((freq, i) => {
+      tone(freq, freq, 0.18, 'triangle', c.currentTime + i * 0.1, 0.16);
+    });
+  }
+
   // --- Background music: real mp3 tracks (from Suno), multiple per context,
   // randomized per level so it doesn't get repetitive - see setLevelContext().
   // Falls back to a synthesized ambient chord loop (the original approach)
@@ -319,5 +341,5 @@ const Sound = (() => {
   document.addEventListener('pointerdown', warmUpOnce, { once: true });
   document.addEventListener('touchstart', warmUpOnce, { once: true });
 
-  return { playSlide, playBump, playWin, playFail, startMusic, stopMusic, pauseMusic, resumeMusic, setLevelContext };
+  return { playSlide, playBump, playWin, playFail, playWheelSpin, playWheelWin, startMusic, stopMusic, pauseMusic, resumeMusic, setLevelContext };
 })();

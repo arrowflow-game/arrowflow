@@ -16,6 +16,7 @@ const I18N = (() => {
       'menu.ranking': '🏆 อันดับ',
       'menu.store': '🛒 ร้านค้า',
       'menu.skins': '🎨 สกิน',
+      'menu.wheel': '🎡 วงล้อ',
       'menu.tagline': 'เลื่อนลูกศรออกจากลูกบาศก์ให้หมด!',
       'menu.level_label': 'ด่าน',
 
@@ -152,7 +153,7 @@ const I18N = (() => {
       'store.watch_ad_hint': '📺 ดูโฆษณาเพื่อรับคำใบ้ฟรี (+1)',
       'store.ad_loading': '⏳ กำลังโหลดโฆษณา...',
       'store.ad_failed': 'ไม่มีโฆษณาให้ดูตอนนี้ ลองใหม่อีกครั้ง',
-      'store.ads_remaining': 'เหลือวันนี้ {n}/3',
+      'store.ads_remaining': 'เหลือวันนี้ {n}/{cap}',
       'store.hint_packs': '📦 แพ็กคำใบ้',
       'store.pack_10': '10 คำใบ้ - ฿29',
       'store.pack_30': '30 คำใบ้ - ฿69',
@@ -205,7 +206,17 @@ const I18N = (() => {
       'tutorial.wrong_tap.continue': 'เข้าใจแล้ว เริ่มเล่นเลย!',
       'tutorial.skip': 'ข้ามบทแนะนำ',
       'tutorial.next': 'ต่อไป',
-      'tutorial.progress': 'ขั้นตอนที่ {step} / {total}'
+      'tutorial.progress': 'ขั้นตอนที่ {step} / {total}',
+
+      'wheel.title': '🎡 วงล้อรายวัน',
+      'wheel.badge_available': '🎡 มีสิทธิ์หมุนฟรีวันนี้!',
+      'wheel.spin_free': 'หมุนฟรี',
+      'wheel.spin_free_done': 'พรุ่งนี้ค่อยมาใหม่',
+      'wheel.spin_ad': '📺 หมุนเพิ่ม (ดูโฆษณา)',
+      'wheel.bonus_remaining': 'เหลือวันนี้ {n}/{cap}',
+      'wheel.close': 'ปิด',
+      'wheel.result_gems': '💎 ได้รับ {n} เพชร!',
+      'wheel.result_hints': '💡 ได้รับ {n} คำใบ้!'
     },
     en: {
       'menu.play': '▶  PLAY',
@@ -215,6 +226,7 @@ const I18N = (() => {
       'menu.ranking': '🏆 Ranking',
       'menu.store': '🛒 Store',
       'menu.skins': '🎨 Skins',
+      'menu.wheel': '🎡 Wheel',
       'menu.tagline': 'Slide all arrows off the cube!',
       'menu.level_label': 'Level',
 
@@ -351,7 +363,7 @@ const I18N = (() => {
       'store.watch_ad_hint': '📺 Watch Ad for a Free Hint (+1)',
       'store.ad_loading': '⏳ Loading ad...',
       'store.ad_failed': 'No ad available right now - try again',
-      'store.ads_remaining': '{n}/3 left today',
+      'store.ads_remaining': '{n}/{cap} left today',
       'store.hint_packs': '📦 Hint Packs',
       'store.pack_10': '10 Hints - $0.99',
       'store.pack_30': '30 Hints - $1.99',
@@ -404,7 +416,17 @@ const I18N = (() => {
       'tutorial.wrong_tap.continue': 'Got it, let’s play!',
       'tutorial.skip': 'Skip tutorial',
       'tutorial.next': 'Next',
-      'tutorial.progress': 'Step {step} / {total}'
+      'tutorial.progress': 'Step {step} / {total}',
+
+      'wheel.title': '🎡 Daily Wheel',
+      'wheel.badge_available': '🎡 Free spin available today!',
+      'wheel.spin_free': 'Free Spin',
+      'wheel.spin_free_done': 'Come back tomorrow',
+      'wheel.spin_ad': '📺 Spin Again (watch ad)',
+      'wheel.bonus_remaining': '{n}/{cap} left today',
+      'wheel.close': 'Close',
+      'wheel.result_gems': '💎 You got {n} gems!',
+      'wheel.result_hints': '💡 You got {n} hints!'
     }
   };
 

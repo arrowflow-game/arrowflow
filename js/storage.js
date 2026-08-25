@@ -8,6 +8,10 @@
     remixHighest: 0, remixBestScoreByLevel: {},
     continueAdsUsedToday: 0, continueAdsDate: null,
     hintAdsUsedToday: 0, hintAdsDate: null,
+    // Daily prize wheel (2026-08-25). wheelSpunDate = last date the free spin was
+    // used (null = never); the bonus-spins-via-ad pair mirrors the hintAds/
+    // continueAds shape above (its own daily cap, see WHEEL_BONUS_SPIN_DAILY_CAP).
+    wheelSpunDate: null, wheelBonusSpinsUsedToday: 0, wheelBonusSpinsDate: null,
     adsRemovedUntil: 0, adsRemovedForever: false,
     levelsSinceInterstitial: 0, nextInterstitialThreshold: 0,
     selectedSkin: null, skinTutorialSeen: false,
@@ -45,7 +49,12 @@
   function isMilestoneLevel(n) { return typeof n === 'number' && n % 10 === 0; }
   function isEpicLevel(n) { return typeof n === 'number' && n % 100 === 0; }
 
-  const REWARDED_AD_DAILY_CAP = 3;
+  // Each rewarded-ad "kind" gets its own independent daily cap - hint-ads were
+  // raised to 5/day (2026-08-25) to feel more generous alongside the new daily
+  // wheel below; the fail-screen continue-ad intentionally stays scarcer at 3/day
+  // so it doesn't cheapen the stakes of running out of hearts.
+  const DAILY_AD_CAPS = { hint: 5, continue: 3 };
+  const WHEEL_BONUS_SPIN_DAILY_CAP = 5;
 
   function rollInterstitialThreshold() {
     return 3 + Math.floor(Math.random() * 3); // 3, 4, or 5 inclusive
@@ -127,6 +136,11 @@
     // Deliberately no negative-guard on n since this only ever fires from a
     // completed purchase (Iap.purchaseGemPack's onGranted), never user input.
     grantGems: (n) => { _state.paidGems += n; save(_state); },
+    // Earned gems from a small fixed-amount source (daily wheel prize) - guarded
+    // like addHints(), unlike awardDailyGems()'s unguarded += (that one derives its
+    // amount from stars and is never negative by construction; this one is called
+    // with a small constant from an anonymous call site, same shape as a hint-ad grant).
+    addGems: (n) => { _state.gems = Math.max(0, _state.gems + n); save(_state); },
     getGemsTotal: () => (_state.gems || 0) + (_state.paidGems || 0),
 
     // Gems currency (earned via completeLevel() above) - spend is guarded here
@@ -231,20 +245,48 @@
 
     // Rewarded-ad placeholders (no real ad SDK yet - see [[arrowflow_daily_remix_i18n]]-era
     // memory system). 'continue' = fail-screen continue, 'hint' = store's free-hint ad. Each
-    // has its own independent daily cap, reset on calendar-day rollover like dailyStreak above.
+    // has its own independent daily cap (DAILY_AD_CAPS above), reset on calendar-day
+    // rollover like dailyStreak above.
     remainingRewardedAds(kind) {
       const usedKey = kind === 'hint' ? 'hintAdsUsedToday' : 'continueAdsUsedToday';
       const dateKey = kind === 'hint' ? 'hintAdsDate' : 'continueAdsDate';
       const used = _state[dateKey] === localDateStr() ? _state[usedKey] : 0;
-      return Math.max(0, REWARDED_AD_DAILY_CAP - used);
+      return Math.max(0, DAILY_AD_CAPS[kind] - used);
     },
     useRewardedAd(kind) {
       const usedKey = kind === 'hint' ? 'hintAdsUsedToday' : 'continueAdsUsedToday';
       const dateKey = kind === 'hint' ? 'hintAdsDate' : 'continueAdsDate';
       const today = localDateStr();
       if (_state[dateKey] !== today) { _state[usedKey] = 0; _state[dateKey] = today; }
-      if (_state[usedKey] >= REWARDED_AD_DAILY_CAP) return false;
+      if (_state[usedKey] >= DAILY_AD_CAPS[kind]) return false;
       _state[usedKey]++;
+      save(_state);
+      return true;
+    },
+    // Public getter so UI code can render the correct per-kind cap number
+    // (e.g. "3/5 left today") without DAILY_AD_CAPS itself needing to be exported.
+    rewardedAdCap: (kind) => DAILY_AD_CAPS[kind] || 0,
+
+    // Daily prize wheel (2026-08-25) - one free spin/day plus up to
+    // WHEEL_BONUS_SPIN_DAILY_CAP bonus spins/day unlocked by watching a rewarded ad.
+    // Deliberately NOT gated on isAdsRemoved() - same "opt-in rewarded ads stay
+    // available even after buying remove-ads" precedent as the hint/continue ads above.
+    isWheelFreeSpinAvailable: () => _state.wheelSpunDate !== localDateStr(),
+    useWheelFreeSpin() {
+      if (_state.wheelSpunDate === localDateStr()) return false;
+      _state.wheelSpunDate = localDateStr();
+      save(_state);
+      return true;
+    },
+    remainingWheelBonusSpins() {
+      const used = _state.wheelBonusSpinsDate === localDateStr() ? _state.wheelBonusSpinsUsedToday : 0;
+      return Math.max(0, WHEEL_BONUS_SPIN_DAILY_CAP - used);
+    },
+    useWheelBonusSpin() {
+      const today = localDateStr();
+      if (_state.wheelBonusSpinsDate !== today) { _state.wheelBonusSpinsUsedToday = 0; _state.wheelBonusSpinsDate = today; }
+      if (_state.wheelBonusSpinsUsedToday >= WHEEL_BONUS_SPIN_DAILY_CAP) return false;
+      _state.wheelBonusSpinsUsedToday++;
       save(_state);
       return true;
     },
