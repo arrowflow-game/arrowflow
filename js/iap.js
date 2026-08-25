@@ -214,14 +214,28 @@ const Iap = (() => {
       if (onFailed) onFailed();
       return;
     }
+    // Fail-safe: confirmed via device testing that cancelling the native purchase
+    // sheet doesn't always reject this plugin's promise on Android - the button
+    // stayed disabled forever (no onFailed ever fired) after tapping cancel on a
+    // hint-pack purchase. Fall back to onFailed after a timeout so the UI always
+    // recovers. A genuine purchase that completes after this still grants
+    // normally below (correctness wins over a stuck promise) - only the
+    // "failed" reaction is capped to firing once via failedAlready.
+    let failedAlready = false;
+    const failSafeTimer = setTimeout(() => {
+      failedAlready = true;
+      if (onFailed) onFailed();
+    }, 20000);
     try {
       await plugin().purchaseProduct({
         productIdentifier: entry.productId,
         productType: 'inapp',
         isConsumable
       });
+      clearTimeout(failSafeTimer);
       onGranted(entry);
     } catch (err) {
+      clearTimeout(failSafeTimer);
       if (!isConsumable && isAlreadyOwnedError(err)) {
         // Already genuinely owned by this account - treat exactly like a
         // fresh successful purchase (same grant path, no re-charge since
@@ -231,7 +245,7 @@ const Iap = (() => {
       }
       // Covers both a real error and the user cancelling the purchase sheet -
       // either way nothing was charged, so just restore the button.
-      if (onFailed) onFailed();
+      if (!failedAlready && onFailed) onFailed();
     }
   }
 

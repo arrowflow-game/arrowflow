@@ -203,20 +203,16 @@ const UI = (() => {
     document.getElementById('store-hint-count').textContent = Storage.getHintsTotal();
     const btn = document.getElementById('btn-store-hint-ad');
     const remainingEl = document.getElementById('store-hint-ad-remaining');
-    const adsRemoved = Storage.isAdsRemoved();
-    // Ads-removed players see no "watch ad" buttons anywhere at all, per the
-    // product decision that the purchase means literally no ads shown, ever
-    // (see [[arrowflow_monetization_placeholder]]) - not just the display ones.
-    if (adsRemoved) {
-      btn.classList.add('hidden');
-      remainingEl.classList.add('hidden');
-    } else {
-      btn.classList.remove('hidden');
-      remainingEl.classList.remove('hidden');
-      const remaining = Storage.remainingRewardedAds('hint');
-      btn.disabled = remaining <= 0;
-      remainingEl.textContent = I18N.t('store.ads_remaining', { n: Math.max(0, remaining) });
-    }
+    // Opt-in rewarded ads stay available even after buying remove-ads - that
+    // purchase removes the forced/interstitial/banner ads, not the player's
+    // own choice to watch one for a reward. Hiding this too would leave a
+    // paying player with strictly fewer options than a free one (see
+    // [[arrowflow_monetization_placeholder]]).
+    btn.classList.remove('hidden');
+    remainingEl.classList.remove('hidden');
+    const remaining = Storage.remainingRewardedAds('hint');
+    btn.disabled = remaining <= 0;
+    remainingEl.textContent = I18N.t('store.ads_remaining', { n: Math.max(0, remaining) });
 
     const section = document.getElementById('store-remove-ads-section');
     const statusEl = document.getElementById('store-remove-ads-status');
@@ -1194,9 +1190,10 @@ const UI = (() => {
   function updateFailContinueAdUI() {
     const btn = document.getElementById('btn-fail-continue-ad');
     const remainingEl = document.getElementById('fail-continue-ad-remaining');
-    const adsRemoved = Storage.isAdsRemoved();
+    // Opt-in rewarded ads stay available even after buying remove-ads - see
+    // the matching comment in buildStoreScreen()'s hint-ad button.
     const remaining = Storage.remainingRewardedAds('continue');
-    if (adsRemoved || remaining <= 0) {
+    if (remaining <= 0) {
       btn.classList.add('hidden');
       remainingEl.classList.add('hidden');
     } else {
