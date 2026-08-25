@@ -261,6 +261,15 @@ const Sound = (() => {
   function startMusic() {
     if (musicPlaying || !musicEnabled()) return;
     musicPlaying = true;
+    // Safety net (2026-08-26, reported directly: tapping the Wheel/Store
+    // buttons left music "starting over, overlapping, again and again", and
+    // backgrounding the app didn't stop it either): if a previous track's
+    // <audio> is still sitting in currentAudioEl - e.g. a pause that got
+    // desynced from actual native playback state during an app
+    // background/foreground cycle - release it before creating a new one, so
+    // two tracks can never play at once outside of crossfadeTo()'s
+    // deliberate brief overlap.
+    if (currentAudioEl) { releaseAudio(currentAudioEl); currentAudioEl = null; }
     playTrack(pendingTrackPath || pickTrackPath('normal'), true);
   }
 
@@ -317,17 +326,40 @@ const Sound = (() => {
   // <audio> elements (unlike a bare AudioContext) already pause themselves
   // when backgrounded on most platforms, but the synth fallback's oscillators
   // keep running via the shared AudioContext - suspend/resume that explicitly.
+  //
+  // Reported directly (2026-08-26): switching apps left music playing
+  // continuously instead of pausing. document.visibilitychange alone isn't a
+  // reliable background/foreground signal inside a real Capacitor WebView -
+  // Capacitor's own docs recommend the native App plugin's appStateChange
+  // event for exactly this reason. Both listeners now feed the same
+  // idempotent handlers (guarded by isBackgrounded) so whichever fires first
+  // on a given platform wins and the other is just a no-op, rather than
+  // risking a double-pause/double-resume race between the two APIs.
   let wasMusicPlaying = false;
+  let isBackgrounded = false;
+  function handleAppBackground() {
+    if (isBackgrounded) return;
+    isBackgrounded = true;
+    wasMusicPlaying = musicPlaying;
+    pauseMusic();
+    if (ctx && ctx.state === 'running') ctx.suspend();
+  }
+  function handleAppForeground() {
+    if (!isBackgrounded) return;
+    isBackgrounded = false;
+    if (ctx && ctx.state === 'suspended') ctx.resume();
+    if (wasMusicPlaying) resumeMusic();
+  }
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-      wasMusicPlaying = musicPlaying;
-      pauseMusic();
-      if (ctx && ctx.state === 'running') ctx.suspend();
-    } else {
-      if (ctx && ctx.state === 'suspended') ctx.resume();
-      if (wasMusicPlaying) resumeMusic();
-    }
+    if (document.hidden) handleAppBackground();
+    else handleAppForeground();
   });
+  if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.App) {
+    Capacitor.Plugins.App.addListener('appStateChange', ({ isActive }) => {
+      if (isActive) handleAppForeground();
+      else handleAppBackground();
+    });
+  }
 
   // Cold-start fix: getCtx()'s ctx.resume() is async, so the very first SFX
   // triggered right after page load can get scheduled before the context is
