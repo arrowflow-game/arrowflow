@@ -217,6 +217,7 @@ const UI = (() => {
     const section = document.getElementById('store-remove-ads-section');
     const statusEl = document.getElementById('store-remove-ads-status');
     const forever = Storage.get('adsRemovedForever');
+    const adsRemoved = Storage.isAdsRemoved();
     if (!Iap.isNative()) {
       section.classList.add('hidden');
     } else {
@@ -1535,7 +1536,18 @@ const UI = (() => {
       showScreen('screen-game');
     });
 
-    document.getElementById('btn-hint').addEventListener('click', () => Game.useHint());
+    document.getElementById('btn-hint').addEventListener('click', () => {
+      // Out of hints -> Game.useHint() would just silently no-op, leaving the
+      // player with no idea why nothing happened. Send them straight to the
+      // Store instead, same shortcut pattern as btn-hud-store.
+      if (Storage.getHintsTotal() <= 0) {
+        storeReturnScreen = 'screen-game';
+        buildStoreScreen();
+        showScreen('screen-store');
+        return;
+      }
+      Game.useHint();
+    });
     document.getElementById('btn-undo').addEventListener('click', () => Game.undo());
 
     document.getElementById('toggle-music').addEventListener('click', () => {
