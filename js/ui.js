@@ -143,6 +143,7 @@ const UI = (() => {
     }
     updateDailyStreakBadge();
     updateWheelBadge();
+    updateNotifyDots();
 
     // Bundle promo button (2026-08-20) - hidden on web (nothing purchasable
     // there, same rule every other real-money surface follows) and once
@@ -214,6 +215,7 @@ const UI = (() => {
     const remaining = Storage.remainingRewardedAds('hint');
     btn.disabled = remaining <= 0;
     remainingEl.textContent = I18N.t('store.ads_remaining', { n: Math.max(0, remaining), cap: Storage.rewardedAdCap('hint') });
+    updateNotifyDots();
 
     const section = document.getElementById('store-remove-ads-section');
     const statusEl = document.getElementById('store-remove-ads-status');
@@ -345,6 +347,7 @@ const UI = (() => {
     if (undoBtn) undoBtn.disabled = !canUndo;
 
     updateRemoveAdsHud();
+    updateNotifyDots();
   }
 
   // "Remove ads" IAP (js/iap.js + Storage.grantAdsRemoved/grantAdsRemovedForever) -
@@ -691,6 +694,7 @@ const UI = (() => {
     if (bonusRemaining > 0) {
       remainingEl.textContent = I18N.t('wheel.bonus_remaining', { n: bonusRemaining, cap: 5 });
     }
+    updateNotifyDots();
   }
 
   // source: 'free' | 'bonus' - caller has already confirmed the spin is
@@ -742,6 +746,7 @@ const UI = (() => {
       remainingEl.classList.toggle('hidden', bonusRemaining <= 0);
       if (bonusRemaining > 0) remainingEl.textContent = I18N.t('wheel.bonus_remaining', { n: bonusRemaining, cap: 5 });
       updateWheelBadge();
+      updateNotifyDots();
     }, 3000); // matches .wheel-disc's 3s CSS transition
   }
 
@@ -751,6 +756,27 @@ const UI = (() => {
     if (!badge) return;
     badge.classList.toggle('hidden', !Storage.isWheelFreeSpinAvailable());
     if (!badge.classList.contains('hidden')) badge.textContent = I18N.t('wheel.badge_available');
+  }
+
+  // Small red "!" dots on the Wheel/Store entry points (menu + in-game HUD),
+  // per direct request: unlike updateWheelBadge() above (which clears as soon
+  // as just the free spin is used), these stay lit until EVERY free item
+  // behind that button is claimed for the day - the wheel dot needs the free
+  // spin used AND all 5 bonus ad-spins watched, the store dot needs all 5
+  // free hint-ads watched. Called from every place that can change that
+  // state (menu/HUD render, wheel modal build, hint-ad watched) so it never
+  // shows stale.
+  function updateNotifyDots() {
+    const wheelHasReward = Storage.isWheelFreeSpinAvailable() || Storage.remainingWheelBonusSpins() > 0;
+    ['wheel-notify-dot', 'hud-wheel-notify-dot'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.toggle('hidden', !wheelHasReward);
+    });
+    const storeHasReward = Storage.remainingRewardedAds('hint') > 0;
+    ['store-notify-dot', 'hud-store-notify-dot'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.toggle('hidden', !storeHasReward);
+    });
   }
 
   let wheelCountdownTimer = null;

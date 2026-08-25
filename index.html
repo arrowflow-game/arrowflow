@@ -60,14 +60,14 @@
         <div id="daily-streak-badge" class="daily-streak-badge hidden"></div>
         <div class="menu-btn-row">
           <button id="btn-ranking" class="btn btn-outline" data-i18n="menu.ranking">🏆 อันดับ</button>
-          <button id="btn-store" class="btn btn-outline" data-i18n="menu.store">🛒 ร้านค้า</button>
+          <button id="btn-store" class="btn btn-outline"><span data-i18n="menu.store">🛒 ร้านค้า</span><span id="store-notify-dot" class="notify-dot hidden">!</span></button>
         </div>
         <div class="menu-btn-row">
           <button id="btn-skins" class="btn btn-outline" data-i18n="menu.skins">🎨 สกิน</button>
           <button id="btn-bundle-promo" class="btn btn-outline menu-bundle-promo-btn hidden" data-i18n="menu.bundle_promo">🎁 ชุดสกินสุดคุ้ม</button>
         </div>
         <div class="menu-btn-row">
-          <button id="btn-wheel" class="btn btn-outline" data-i18n="menu.wheel">🎡 วงล้อ</button>
+          <button id="btn-wheel" class="btn btn-outline"><span data-i18n="menu.wheel">🎡 วงล้อ</span><span id="wheel-notify-dot" class="notify-dot hidden">!</span></button>
         </div>
         <div id="wheel-badge" class="daily-streak-badge hidden"></div>
       </div>
@@ -114,7 +114,7 @@
           <span id="hud-gems" class="hud-gems-badge">💎 <span id="hud-gems-count">0</span></span>
         </div>
         <div class="hud-right-subrow">
-          <button id="btn-hud-store" class="icon-btn hud-store-icon" aria-label="Store">🛒</button>
+          <button id="btn-hud-store" class="icon-btn hud-store-icon" aria-label="Store">🛒<span id="hud-store-notify-dot" class="notify-dot hidden">!</span></button>
           <button id="btn-hud-skins" class="icon-btn hud-store-icon" aria-label="Skins">🎨</button>
         </div>
         <div class="hud-right-subrow">
@@ -122,7 +122,7 @@
             <span class="hud-remove-ads-icon">🚫📺</span>
             <span id="hud-remove-ads-label" class="hud-remove-ads-label"></span>
           </button>
-          <button id="btn-hud-wheel" class="icon-btn hud-store-icon" aria-label="Daily Wheel">🎡</button>
+          <button id="btn-hud-wheel" class="icon-btn hud-store-icon" aria-label="Daily Wheel">🎡<span id="hud-wheel-notify-dot" class="notify-dot hidden">!</span></button>
         </div>
       </div>
     </header>

@@ -295,14 +295,30 @@ const Iap = (() => {
         // owned. Sweep now and retry once before giving up, rather than making
         // the player force-restart the app just to buy the same hint/gem pack
         // again in one sitting.
-        try {
-          await sweepStuckConsumables();
-          await plugin().purchaseProduct({ productIdentifier: entry.productId, productType: 'inapp', isConsumable });
-          onGranted(entry);
-          return;
-        } catch {
-          // Falls through to onFailed below - genuinely couldn't recover.
-        }
+        try { await sweepStuckConsumables(); } catch { /* best-effort */ }
+        // Fire-and-forget (not awaited) with its own fail-safe timer, same
+        // reasoning as the primary attempt's failSafeTimer above: this plugin
+        // doesn't always settle its promise on Android, and an awaited retry
+        // that never resolves would hang purchaseProductFor forever, leaving
+        // the button disabled permanently - reproduced for real with a rapid
+        // repeat-tier-purchase test (test29.mp4). If the retry resolves late,
+        // after the fail-safe already fired onFailed, still grant it - never
+        // silently drop a purchase that actually went through.
+        let retryFailedAlready = false;
+        const retryFailSafe = setTimeout(() => {
+          retryFailedAlready = true;
+          if (!failedAlready) { failedAlready = true; if (onFailed) onFailed(); }
+        }, 15000);
+        plugin().purchaseProduct({ productIdentifier: entry.productId, productType: 'inapp', isConsumable })
+          .then(() => {
+            clearTimeout(retryFailSafe);
+            onGranted(entry);
+          })
+          .catch(() => {
+            clearTimeout(retryFailSafe);
+            if (!retryFailedAlready && !failedAlready) { failedAlready = true; if (onFailed) onFailed(); }
+          });
+        return;
       }
       // Covers both a real error and the user cancelling the purchase sheet -
       // either way nothing was charged, so just restore the button.
