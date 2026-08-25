@@ -287,6 +287,23 @@ const Iap = (() => {
         onGranted(entry);
         return;
       }
+      if (isConsumable && isAlreadyOwnedError(err) && !failedAlready) {
+        // Self-heal within the SAME app session: the plugin's own consumeAsync
+        // for a prior purchase of this same product (kicked off fire-and-forget
+        // from its native handlePurchase(), see sweepStuckConsumables() above)
+        // may simply not have finished yet, so Play Billing still sees it as
+        // owned. Sweep now and retry once before giving up, rather than making
+        // the player force-restart the app just to buy the same hint/gem pack
+        // again in one sitting.
+        try {
+          await sweepStuckConsumables();
+          await plugin().purchaseProduct({ productIdentifier: entry.productId, productType: 'inapp', isConsumable });
+          onGranted(entry);
+          return;
+        } catch {
+          // Falls through to onFailed below - genuinely couldn't recover.
+        }
+      }
       // Covers both a real error and the user cancelling the purchase sheet -
       // either way nothing was charged, so just restore the button.
       if (!failedAlready && onFailed) onFailed();

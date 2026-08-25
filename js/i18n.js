@@ -215,6 +215,7 @@ const I18N = (() => {
       'wheel.spin_ad': '📺 หมุนเพิ่ม (ดูโฆษณา)',
       'wheel.bonus_remaining': 'เหลือวันนี้ {n}/{cap}',
       'wheel.close': 'ปิด',
+      'wheel.reset_in': 'รีเซ็ตใน {t}',
       'wheel.result_gems': '💎 ได้รับ {n} เพชร!',
       'wheel.result_hints': '💡 ได้รับ {n} คำใบ้!'
     },
@@ -425,6 +426,7 @@ const I18N = (() => {
       'wheel.spin_ad': '📺 Spin Again (watch ad)',
       'wheel.bonus_remaining': '{n}/{cap} left today',
       'wheel.close': 'Close',
+      'wheel.reset_in': 'Resets in {t}',
       'wheel.result_gems': '💎 You got {n} gems!',
       'wheel.result_hints': '💡 You got {n} hints!'
     }

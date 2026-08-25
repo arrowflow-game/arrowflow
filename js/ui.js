@@ -640,9 +640,18 @@ const UI = (() => {
       const slice = (prize.weight / total) * 360;
       const start = angle, end = angle + slice, mid = angle + slice / 2;
       stops.push(`${WHEEL_WEDGE_COLORS[i % WHEEL_WEDGE_COLORS.length]} ${start}deg ${end}deg`);
+      // Positioned radially by trig (not CSS rotate) so the icon+number stay
+      // upright and readable in every wedge at rest - a rotated label reads
+      // sideways/upside-down past 90deg, which is what looked messy before.
+      // They still spin along with the disc's own rotation during a spin
+      // (expected motion, same as a real prize wheel) since they're children
+      // of #wheel-disc.
+      const rad = (mid * Math.PI) / 180;
+      const radius = 34; // % of disc size from center
       const label = document.createElement('span');
       label.className = 'wheel-wedge-label';
-      label.style.transform = `rotate(${mid}deg)`;
+      label.style.left = `calc(50% + ${(Math.sin(rad) * radius).toFixed(2)}%)`;
+      label.style.top = `calc(50% - ${(Math.cos(rad) * radius).toFixed(2)}%)`;
       label.textContent = prize.type === 'gems' ? `💎${prize.amount}` : `💡${prize.amount}`;
       disc.appendChild(label);
       angle = end;
@@ -725,8 +734,13 @@ const UI = (() => {
       Analytics.logEvent('wheel_spin', { prize_type: prize.type, amount: prize.amount, source });
 
       freeBtn.disabled = !Storage.isWheelFreeSpinAvailable();
+      freeBtn.textContent = I18N.t(Storage.isWheelFreeSpinAvailable() ? 'wheel.spin_free' : 'wheel.spin_free_done');
       const bonusRemaining = Storage.remainingWheelBonusSpins();
       adBtn.disabled = bonusRemaining <= 0;
+      adBtn.classList.toggle('hidden', bonusRemaining <= 0);
+      const remainingEl = document.getElementById('wheel-ad-remaining');
+      remainingEl.classList.toggle('hidden', bonusRemaining <= 0);
+      if (bonusRemaining > 0) remainingEl.textContent = I18N.t('wheel.bonus_remaining', { n: bonusRemaining, cap: 5 });
       updateWheelBadge();
     }, 3000); // matches .wheel-disc's 3s CSS transition
   }
@@ -739,10 +753,35 @@ const UI = (() => {
     if (!badge.classList.contains('hidden')) badge.textContent = I18N.t('wheel.badge_available');
   }
 
+  let wheelCountdownTimer = null;
+
+  // Local midnight, matching Storage's localDateStr()-based daily reset - not
+  // UTC midnight, so this stays correct across timezones.
+  function msUntilNextLocalMidnight() {
+    const now = new Date();
+    const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0);
+    return next.getTime() - now.getTime();
+  }
+
+  function tickWheelCountdown() {
+    const el = document.getElementById('wheel-reset-countdown');
+    if (!el) return;
+    const ms = msUntilNextLocalMidnight();
+    const totalSec = Math.max(0, Math.floor(ms / 1000));
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    const t = String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+    el.textContent = I18N.t('wheel.reset_in', { t });
+  }
+
   function openWheel() {
     Sound.pauseMusic();
     buildWheelModal();
     document.getElementById('modal-wheel').classList.remove('hidden');
+    tickWheelCountdown();
+    clearInterval(wheelCountdownTimer);
+    wheelCountdownTimer = setInterval(tickWheelCountdown, 1000);
   }
 
   function formatTime(sec) {
@@ -1683,6 +1722,7 @@ const UI = (() => {
     });
 
     document.getElementById('btn-wheel').addEventListener('click', () => openWheel());
+    document.getElementById('btn-hud-wheel').addEventListener('click', () => openWheel());
     document.getElementById('btn-wheel-spin-free').addEventListener('click', () => {
       if (!Storage.isWheelFreeSpinAvailable()) return;
       spinWheel('free');
@@ -1696,6 +1736,7 @@ const UI = (() => {
     });
     document.getElementById('btn-wheel-close').addEventListener('click', () => {
       Sound.resumeMusic();
+      clearInterval(wheelCountdownTimer);
       document.getElementById('modal-wheel').classList.add('hidden');
       updateMenu();
     });
@@ -1847,24 +1888,33 @@ const UI = (() => {
     // keyed by the same hint count. Falls back to the coming-soon alert on
     // web/test builds where there's no purchase SDK at all (see iap.js).
     document.querySelectorAll('.store-pack-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', () => {
         const packKey = btn.dataset.hints;
         if (!Iap.isNative()) {
           Analytics.logEvent('pack_purchase_clicked', { hints: packKey || null });
           alert(I18N.t('store.coming_soon'));
           return;
         }
-        e.currentTarget.disabled = true;
+        // Use the closured `btn`, not e.currentTarget - the DOM spec clears
+        // Event.currentTarget to null once the listener's dispatch finishes,
+        // and purchaseHintPack()'s callbacks fire later (async native billing
+        // round-trip). Reading e.currentTarget.disabled from inside them threw
+        // (null), which crashed the granted-callback right before its success
+        // alert, was swallowed as a generic failure, and left the button
+        // disabled forever - the exact "bought once, can't buy again" bug
+        // reported after real hint-pack purchases (test27.mp4), even though
+        // the hints themselves were already correctly granted beforehand.
+        btn.disabled = true;
         Iap.purchaseHintPack(packKey,
           (hints) => {
             Storage.grantPaidHints(hints);
             Analytics.logEvent('hint_pack_purchased', { hints });
-            e.currentTarget.disabled = false;
+            btn.disabled = false;
             buildStoreScreen();
             alert(I18N.t('iap.hint_pack_success', { n: hints }));
           },
           () => {
-            e.currentTarget.disabled = false;
+            btn.disabled = false;
             alert(I18N.t('iap.purchase_failed'));
           }
         );

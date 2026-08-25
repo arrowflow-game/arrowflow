@@ -117,10 +117,13 @@
           <button id="btn-hud-store" class="icon-btn hud-store-icon" aria-label="Store">🛒</button>
           <button id="btn-hud-skins" class="icon-btn hud-store-icon" aria-label="Skins">🎨</button>
         </div>
-        <button id="btn-hud-remove-ads" class="hud-remove-ads-btn hidden" aria-label="Remove ads">
-          <span class="hud-remove-ads-icon">🚫📺</span>
-          <span id="hud-remove-ads-label" class="hud-remove-ads-label"></span>
-        </button>
+        <div class="hud-right-subrow">
+          <button id="btn-hud-remove-ads" class="hud-remove-ads-btn hidden" aria-label="Remove ads">
+            <span class="hud-remove-ads-icon">🚫📺</span>
+            <span id="hud-remove-ads-label" class="hud-remove-ads-label"></span>
+          </button>
+          <button id="btn-hud-wheel" class="icon-btn hud-store-icon" aria-label="Daily Wheel">🎡</button>
+        </div>
       </div>
     </header>
     <div class="hud-instruction" id="hud-instruction" data-i18n="hud.instruction">Drag to rotate • Tap a path to slide it off!</div>
@@ -399,6 +402,7 @@
         <button id="btn-wheel-spin-free" class="btn btn-primary btn-lg" data-i18n="wheel.spin_free">Free Spin</button>
         <button id="btn-wheel-spin-ad" class="btn btn-outline"><span data-i18n="wheel.spin_ad">📺 Spin Again (watch ad)</span></button>
         <div id="wheel-ad-remaining" class="fail-ad-remaining"></div>
+        <div id="wheel-reset-countdown" class="fail-ad-remaining"></div>
         <button id="btn-wheel-close" class="btn btn-outline" data-i18n="wheel.close">Close</button>
       </div>
     </div>
