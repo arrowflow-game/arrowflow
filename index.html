@@ -238,7 +238,7 @@
             <span data-i18n="store.hints_section">💡 คำใบ้</span>
             <span id="store-hint-count">0</span>
           </div>
-          <button id="btn-store-hint-ad" class="btn btn-secondary store-ad-btn" data-i18n="store.watch_ad_hint">📺 ดูโฆษณาเพื่อรับคำใบ้ฟรี (+1)</button>
+          <button id="btn-store-hint-ad" class="btn btn-secondary store-ad-btn"><span data-i18n="store.watch_ad_hint">📺 ดูโฆษณาเพื่อรับคำใบ้ฟรี (+1)</span><span id="store-hint-ad-dot" class="notify-dot hidden">!</span></button>
           <div id="store-hint-ad-remaining" class="fail-ad-remaining"></div>
         </div>
         <div class="store-section">
@@ -399,8 +399,8 @@
       </div>
       <div class="wheel-result hidden" id="wheel-result"></div>
       <div class="modal-btns">
-        <button id="btn-wheel-spin-free" class="btn btn-primary btn-lg" data-i18n="wheel.spin_free">Free Spin</button>
-        <button id="btn-wheel-spin-ad" class="btn btn-outline"><span data-i18n="wheel.spin_ad">📺 Spin Again (watch ad)</span></button>
+        <button id="btn-wheel-spin-free" class="btn btn-primary btn-lg"><span id="wheel-spin-free-label" data-i18n="wheel.spin_free">Free Spin</span><span id="wheel-spin-free-dot" class="notify-dot hidden">!</span></button>
+        <button id="btn-wheel-spin-ad" class="btn btn-outline"><span data-i18n="wheel.spin_ad">📺 Spin Again (watch ad)</span><span id="wheel-spin-ad-dot" class="notify-dot hidden">!</span></button>
         <div id="wheel-ad-remaining" class="fail-ad-remaining"></div>
         <div id="wheel-reset-countdown" class="fail-ad-remaining"></div>
         <button id="btn-wheel-close" class="btn btn-outline" data-i18n="wheel.close">Close</button>

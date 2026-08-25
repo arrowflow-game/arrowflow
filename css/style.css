@@ -81,7 +81,7 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
    entry points until every free item behind them is claimed for the day
    (wheel: free spin AND all bonus ad-spins; store: all free hint-ads), not
    just the first one taken - see updateNotifyDots() in js/ui.js. */
-#btn-wheel, #btn-store { position: relative; }
+#btn-wheel, #btn-store, #btn-wheel-spin-free, #btn-wheel-spin-ad, #btn-store-hint-ad { position: relative; }
 .notify-dot {
   position: absolute; top: -4px; right: -4px; width: 16px; height: 16px;
   border-radius: 50%; background: #ff3b30; color: #fff; font-size: 0.7rem;

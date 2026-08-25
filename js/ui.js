@@ -215,6 +215,7 @@ const UI = (() => {
     const remaining = Storage.remainingRewardedAds('hint');
     btn.disabled = remaining <= 0;
     remainingEl.textContent = I18N.t('store.ads_remaining', { n: Math.max(0, remaining), cap: Storage.rewardedAdCap('hint') });
+    document.getElementById('store-hint-ad-dot').classList.toggle('hidden', remaining <= 0);
     updateNotifyDots();
 
     const section = document.getElementById('store-remove-ads-section');
@@ -686,11 +687,13 @@ const UI = (() => {
 
     const freeAvailable = Storage.isWheelFreeSpinAvailable();
     freeBtn.disabled = !freeAvailable;
-    freeBtn.textContent = I18N.t(freeAvailable ? 'wheel.spin_free' : 'wheel.spin_free_done');
+    document.getElementById('wheel-spin-free-label').textContent = I18N.t(freeAvailable ? 'wheel.spin_free' : 'wheel.spin_free_done');
+    document.getElementById('wheel-spin-free-dot').classList.toggle('hidden', !freeAvailable);
 
     const bonusRemaining = Storage.remainingWheelBonusSpins();
     adBtn.classList.toggle('hidden', bonusRemaining <= 0);
     remainingEl.classList.toggle('hidden', bonusRemaining <= 0);
+    document.getElementById('wheel-spin-ad-dot').classList.toggle('hidden', bonusRemaining <= 0);
     if (bonusRemaining > 0) {
       remainingEl.textContent = I18N.t('wheel.bonus_remaining', { n: bonusRemaining, cap: 5 });
     }
@@ -737,11 +740,14 @@ const UI = (() => {
       resultEl.classList.remove('hidden');
       Analytics.logEvent('wheel_spin', { prize_type: prize.type, amount: prize.amount, source });
 
-      freeBtn.disabled = !Storage.isWheelFreeSpinAvailable();
-      freeBtn.textContent = I18N.t(Storage.isWheelFreeSpinAvailable() ? 'wheel.spin_free' : 'wheel.spin_free_done');
+      const freeAvailableNow = Storage.isWheelFreeSpinAvailable();
+      freeBtn.disabled = !freeAvailableNow;
+      document.getElementById('wheel-spin-free-label').textContent = I18N.t(freeAvailableNow ? 'wheel.spin_free' : 'wheel.spin_free_done');
+      document.getElementById('wheel-spin-free-dot').classList.toggle('hidden', !freeAvailableNow);
       const bonusRemaining = Storage.remainingWheelBonusSpins();
       adBtn.disabled = bonusRemaining <= 0;
       adBtn.classList.toggle('hidden', bonusRemaining <= 0);
+      document.getElementById('wheel-spin-ad-dot').classList.toggle('hidden', bonusRemaining <= 0);
       const remainingEl = document.getElementById('wheel-ad-remaining');
       remainingEl.classList.toggle('hidden', bonusRemaining <= 0);
       if (bonusRemaining > 0) remainingEl.textContent = I18N.t('wheel.bonus_remaining', { n: bonusRemaining, cap: 5 });
@@ -1850,6 +1856,7 @@ const UI = (() => {
         Analytics.logEvent('continue_ad_used', {});
         document.getElementById('modal-fail').classList.add('hidden');
         Game.continueAfterFail();
+        alert(I18N.t('fail.continue_ad_success'));
       }, () => alert(I18N.t('store.ad_failed')));
     });
 
@@ -1906,6 +1913,7 @@ const UI = (() => {
         Analytics.logEvent('hint_ad_used', {});
         Storage.addHints(1);
         buildStoreScreen();
+        alert(I18N.t('store.hint_ad_success'));
       }, () => alert(I18N.t('store.ad_failed')));
     });
 
