@@ -816,6 +816,49 @@ const UI = (() => {
     wheelCountdownTimer = setInterval(tickWheelCountdown, 1000);
   }
 
+  // Shared by btn-pause's own click and the app-backgrounding hook below -
+  // freezes the score/best-time clock (game.js's pause()/resume()) and pauses
+  // music, same as tapping Pause manually.
+  function openPauseModal() {
+    document.getElementById('pause-lvl').textContent = Storage.get('currentLevel');
+    document.getElementById('modal-pause').classList.remove('hidden');
+    Game.pause();
+    Sound.pauseMusic();
+  }
+
+  // Reported directly (test47.mp4): an incoming phone call or the screen
+  // simply locking mid-level didn't pause anything - the level clock kept
+  // running and music kept going once the OS gave the WebView focus back,
+  // instead of landing on the same pause modal a manual pause tap would.
+  // Both cases fire the exact same OS-level background/foreground signal
+  // Sound.js already listens to for silencing music (document.visibilitychange
+  // / Capacitor's appStateChange) - reuse it here to also open the real pause
+  // modal, so a call/lock is indistinguishable from tapping Pause: the player
+  // has to explicitly tap "เล่นต่อ" (btn-resume) to get moving again, same as
+  // any other pause. Deliberately does nothing on the return-to-foreground
+  // half - staying paused until an explicit resume tap is the whole point.
+  let wasBackgroundedForPause = false;
+  function handleBackgroundForPause() {
+    if (wasBackgroundedForPause) return;
+    wasBackgroundedForPause = true;
+    const inLevel = document.getElementById('screen-game').classList.contains('active');
+    const anyModalOpen = document.querySelector('.modal-overlay:not(.hidden)');
+    if (inLevel && !anyModalOpen) openPauseModal();
+  }
+  function handleForegroundForPause() {
+    wasBackgroundedForPause = false;
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) handleBackgroundForPause();
+    else handleForegroundForPause();
+  });
+  if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.App) {
+    Capacitor.Plugins.App.addListener('appStateChange', ({ isActive }) => {
+      if (isActive) handleForegroundForPause();
+      else handleBackgroundForPause();
+    });
+  }
+
   function formatTime(sec) {
     const s = Math.max(0, Math.round(sec));
     return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
@@ -1664,18 +1707,7 @@ const UI = (() => {
       AppUpdate.completeUpdate();
     });
 
-    document.getElementById('btn-pause').addEventListener('click', () => {
-      document.getElementById('pause-lvl').textContent = Storage.get('currentLevel');
-      document.getElementById('modal-pause').classList.remove('hidden');
-      // Freezes the score/best-time clock for as long as this modal is up (see
-      // game.js's pause()/resume()) - previously the timer kept running while
-      // paused, quietly costing the player their time bonus for however long
-      // they left the modal open.
-      Game.pause();
-      // pauseMusic() (not stopMusic()) - preserves playback position so
-      // resuming continues the same track instead of restarting it from 0:00.
-      Sound.pauseMusic();
-    });
+    document.getElementById('btn-pause').addEventListener('click', openPauseModal);
     document.getElementById('btn-resume').addEventListener('click', () => {
       document.getElementById('modal-pause').classList.add('hidden');
       Game.resume();

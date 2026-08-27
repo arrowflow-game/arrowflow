@@ -354,12 +354,21 @@ const Sound = (() => {
   // idempotent handlers (guarded by isBackgrounded) so whichever fires first
   // on a given platform wins and the other is just a no-op, rather than
   // risking a double-pause/double-resume race between the two APIs.
-  let wasMusicPlaying = false;
+  //
+  // Deliberately does NOT auto-resume music on returning to the foreground
+  // (2026-08-27, test47.mp4: a phone call or the screen simply locking
+  // mid-level should act exactly like tapping Pause, including needing an
+  // explicit "เล่นต่อ" tap to get going again - not quietly resuming the
+  // instant the OS hands focus back). ui.js's own background/foreground
+  // listener now drives the real pause modal for that case, whose btn-resume
+  // handler already calls resumeMusic() itself. Every other music-pausing
+  // context (Store/Skins/Wheel) already requires its own explicit close/back
+  // tap to resume too, so this only removes the one case that used to skip
+  // that requirement.
   let isBackgrounded = false;
   function handleAppBackground() {
     if (isBackgrounded) return;
     isBackgrounded = true;
-    wasMusicPlaying = musicPlaying;
     pauseMusic();
     if (ctx && ctx.state === 'running') ctx.suspend();
   }
@@ -367,7 +376,6 @@ const Sound = (() => {
     if (!isBackgrounded) return;
     isBackgrounded = false;
     if (ctx && ctx.state === 'suspended') ctx.resume();
-    if (wasMusicPlaying) resumeMusic();
   }
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) handleAppBackground();
