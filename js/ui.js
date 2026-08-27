@@ -837,12 +837,30 @@ const UI = (() => {
   // has to explicitly tap "เล่นต่อ" (btn-resume) to get moving again, same as
   // any other pause. Deliberately does nothing on the return-to-foreground
   // half - staying paused until an explicit resume tap is the whole point.
+  // adInProgress: set for the duration of any Ads.showRewardedAd()/
+  // showInterstitial() call (see watchRewardedAd() and btn-next below) - a
+  // real background event (e.g. a phone call) during an ad already gets
+  // music/context handling from Sound.js's own listener, and the ad-flow
+  // code already decides for itself whether to resume music once the ad
+  // resolves. Auto-opening the pause modal on top of that would leave it
+  // showing the level BEFORE the ad's own callback proceeds (a reward grant
+  // or Game.loadLevel()) hides every modal again without the player ever
+  // tapping "เล่นต่อ" - the exact silent-resume this feature exists to
+  // prevent, just relocated instead of fixed.
+  let adInProgress = false;
   let wasBackgroundedForPause = false;
   function handleBackgroundForPause() {
     if (wasBackgroundedForPause) return;
     wasBackgroundedForPause = true;
+    if (adInProgress) return;
     const inLevel = document.getElementById('screen-game').classList.contains('active');
-    const anyModalOpen = document.querySelector('.modal-overlay:not(.hidden)');
+    // .modal-overlay covers Pause/Fail/Win/Wheel/Store etc.; .tutorial-overlay
+    // covers both Tutorial.js's level-1 coach-marks and the skin-unlock one
+    // (js/tutorial.js always removes its overlay on dismiss, so this reads
+    // as "not currently showing" the same way .hidden does for real modals) -
+    // opening the pause modal underneath either would render it invisible
+    // (both use a higher z-index) while still freezing the game clock.
+    const anyModalOpen = document.querySelector('.modal-overlay:not(.hidden)') || document.querySelector('.tutorial-overlay');
     if (inLevel && !anyModalOpen) openPauseModal();
   }
   function handleForegroundForPause() {
@@ -1536,9 +1554,11 @@ const UI = (() => {
     // the modal itself closes, not resume early just because the ad ended.
     const wasPlaying = Sound.isMusicPlaying();
     Sound.pauseMusic();
+    adInProgress = true;
     Ads.showRewardedAd(
-      () => { labelEl.textContent = original; if (wasPlaying) Sound.resumeMusic(); onGranted(); },
+      () => { adInProgress = false; labelEl.textContent = original; if (wasPlaying) Sound.resumeMusic(); onGranted(); },
       () => {
+        adInProgress = false;
         labelEl.textContent = original;
         btn.disabled = false;
         if (wasPlaying) Sound.resumeMusic();
@@ -1805,7 +1825,9 @@ const UI = (() => {
         // consistency/safety).
         const wasPlaying = Sound.isMusicPlaying();
         Sound.pauseMusic();
+        adInProgress = true;
         await new Promise(resolve => Ads.showInterstitial(resolve));
+        adInProgress = false;
         if (wasPlaying) Sound.resumeMusic();
         Storage.recordInterstitialShown();
       }
