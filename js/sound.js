@@ -293,6 +293,14 @@ const Sound = (() => {
     stopFallbackMusic();
   }
 
+  // isMusicPlaying(): lets a caller that's about to pauseMusic() for its own
+  // reason (e.g. ui.js wrapping a rewarded/interstitial ad) remember whether
+  // it should resumeMusic() again afterward, rather than unconditionally
+  // resuming into a context (like the Wheel modal) that wants to stay paused.
+  function isMusicPlaying() {
+    return musicPlaying;
+  }
+
   // pauseMusic/resumeMusic: like stopMusic/startMusic but preserve playback
   // position - for brief mid-level detours (Store/Skins opened from the
   // in-game HUD) that aren't really "leaving the level", so the same track
@@ -384,5 +392,5 @@ const Sound = (() => {
   document.addEventListener('pointerdown', warmUpOnce, { once: true });
   document.addEventListener('touchstart', warmUpOnce, { once: true });
 
-  return { playSlide, playBump, playWin, playFail, playWheelSpin, playWheelWin, startMusic, stopMusic, pauseMusic, resumeMusic, setLevelContext };
+  return { playSlide, playBump, playWin, playFail, playWheelSpin, playWheelWin, startMusic, stopMusic, pauseMusic, resumeMusic, isMusicPlaying, setLevelContext };
 })();

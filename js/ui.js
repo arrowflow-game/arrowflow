@@ -1346,6 +1346,19 @@ const UI = (() => {
     dismissSkinTutorial();
     const overlay = document.createElement('div');
     overlay.className = 'tutorial-overlay';
+    // Reported directly (screenshot: the win-screen's "ปลดล็อคสกินใหม่" button
+    // leading into a Skins screen that "looked grayed out, nothing tappable,
+    // had to go back and re-enter"): .tutorial-overlay is shared with
+    // Tutorial.js's level-1 step tutorial, which deliberately keeps
+    // pointer-events:none so real gameplay taps pass through it - but this
+    // skin coach-mark has no such requirement, and depending on that same
+    // passthrough working perfectly on every WebView to reach the one
+    // highlighted tile underneath is fragile (a miscalculated target rect
+    // or an inconsistent WebView pointer-events quirk leaves the whole
+    // darkened screen looking stuck with no way out). Make this specific
+    // overlay instance capture taps itself and dismiss on ANY of them,
+    // instead of relying on passthrough to the exact target underneath.
+    overlay.style.pointerEvents = 'auto';
     overlay.innerHTML =
       '<div class="tutorial-spotlight" id="skin-tut-spotlight"></div>' +
       '<div class="tutorial-bubble" id="skin-tut-bubble">' +
@@ -1367,12 +1380,12 @@ const UI = (() => {
     bubble.style.transform = 'translateX(-50%)';
     bubble.style.top = Math.min(window.innerHeight - 220, spotBottom + 16) + 'px';
     overlay.querySelector('#skin-tut-gotit').textContent = I18N.t('skins.tutorial_got_it');
-    overlay.querySelector('#skin-tut-gotit').addEventListener('click', dismissSkinTutorial);
+    // Dismiss on a tap anywhere on the overlay (backdrop, spotlight, or the
+    // bubble/button all bubble up here) - selecting the actual skin now
+    // takes a second tap after dismissing, a fine trade for never leaving
+    // the player stuck with no visible way to continue.
+    overlay.addEventListener('click', dismissSkinTutorial);
     skinTutorialEls = { overlay };
-    // Tapping the actual highlighted skin should count as "got it" too - the
-    // click still fires normally (this listener doesn't stopPropagation) so
-    // the real skin-select handler on targetBtn also runs.
-    targetBtn.addEventListener('click', dismissSkinTutorial, { once: true });
   }
 
   // A player who has cleared/unlocked level 300 gets a "จบเกม!" (done) badge
@@ -1469,11 +1482,23 @@ const UI = (() => {
     const labelEl = btn.querySelector('[data-i18n]') || btn;
     const original = labelEl.textContent;
     labelEl.textContent = I18N.t('store.ad_loading');
+    // Reported directly (test43.mp4: watching the out-of-hearts continue-ad):
+    // background music kept playing under the ad's own audio the whole time.
+    // Neither Sound.pauseMusic() nor any app-lifecycle event fires here on
+    // their own - some ad SDKs render as an overlay within the same Activity
+    // rather than a real task switch, so nothing tells Sound to pause. Pause
+    // explicitly and only resume after if music was actually playing before -
+    // e.g. this same function also drives btn-wheel-spin-ad, where openWheel()
+    // already paused music for the whole modal and it must stay paused until
+    // the modal itself closes, not resume early just because the ad ended.
+    const wasPlaying = Sound.isMusicPlaying();
+    Sound.pauseMusic();
     Ads.showRewardedAd(
-      () => { labelEl.textContent = original; onGranted(); },
+      () => { labelEl.textContent = original; if (wasPlaying) Sound.resumeMusic(); onGranted(); },
       () => {
         labelEl.textContent = original;
         btn.disabled = false;
+        if (wasPlaying) Sound.resumeMusic();
         if (onFailed) onFailed();
       }
     );
@@ -1741,7 +1766,15 @@ const UI = (() => {
       }
 
       if (!Storage.isAdsRemoved() && Storage.shouldShowInterstitial()) {
+        // Same music-under-the-ad bug as watchRewardedAd() above, for the
+        // random post-level interstitial - pause before showing, resume only
+        // if it was actually playing (it always should be here, since this
+        // only runs right after a win on screen-game, but same guard for
+        // consistency/safety).
+        const wasPlaying = Sound.isMusicPlaying();
+        Sound.pauseMusic();
         await new Promise(resolve => Ads.showInterstitial(resolve));
+        if (wasPlaying) Sound.resumeMusic();
         Storage.recordInterstitialShown();
       }
 
