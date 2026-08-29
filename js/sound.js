@@ -128,6 +128,10 @@ const Sound = (() => {
   let pendingTrackPath = null; // set by setLevelContext() before music has actually started
   let fadeIntervals = [];
   let usingFallbackSynth = false;
+  // Bumped by pauseMusic()/stopMusic() so an in-flight resumeMusic() recovery
+  // (see below) can tell it's been superseded by a later pause/resume and
+  // must not fight it.
+  let resumeGeneration = 0;
 
   function clearFades() {
     fadeIntervals.forEach(clearInterval);
@@ -285,6 +289,7 @@ const Sound = (() => {
   }
 
   function stopMusic() {
+    resumeGeneration++;
     if (!musicPlaying) return;
     musicPlaying = false;
     clearFades();
@@ -309,6 +314,7 @@ const Sound = (() => {
   // "music restarts every time" going into Store/Skins and back). Real
   // level exits still go through stopMusic/startMusic via showScreen().
   function pauseMusic() {
+    resumeGeneration++;
     if (!musicPlaying) return;
     musicPlaying = false;
     clearFades();
@@ -336,7 +342,42 @@ const Sound = (() => {
       // guard above, silent until the player toggled the music setting
       // off/on. Reported directly: "music stops after watching a rewarded ad,
       // have to toggle music off/on to get it back."
-      currentAudioEl.play().then(() => { musicPlaying = true; }).catch(() => {});
+      // Bug (reported directly: music stays silent forever after 1+ hour
+      // backgrounded, even after tapping "เล่นต่อ" - only fixable by toggling
+      // the music setting off/on): a long enough background period lets the
+      // browser/WebView discard this <audio> element's decoded media, so
+      // .play() rejects. Previously swallowed by a bare .catch(() => {}),
+      // leaving currentAudioEl pointing at a permanently-broken element -
+      // since it's still non-null, every later resumeMusic() call hit this
+      // exact same doomed branch forever. Toggling the music setting only
+      // "fixed" it because stopMusic() nulls currentAudioEl, forcing the
+      // following startMusic() through playTrack()'s fresh-Audio() path.
+      // Reproduce that same recovery here directly, without touching the
+      // music Storage setting or requiring the Settings screen.
+      const staleEl = currentAudioEl;
+      const myGeneration = ++resumeGeneration;
+      let settled = false;
+      const recover = () => {
+        // Superseded by a later pause/stop/resume - don't fight it.
+        if (settled || myGeneration !== resumeGeneration) return;
+        settled = true;
+        releaseAudio(staleEl);
+        if (currentAudioEl === staleEl) currentAudioEl = null;
+        startMusic();
+      };
+      staleEl.play().then(() => {
+        if (settled || myGeneration !== resumeGeneration) return;
+        settled = true;
+        musicPlaying = true;
+      }).catch(recover);
+      // Failsafe (same "never silently swallow" reasoning as iap.js's 20s
+      // purchase timeout, just far shorter since this is inaudible music,
+      // not a charged purchase): play()'s rejection contract is normally
+      // reliable, but this exact function has already been bitten twice by
+      // WebView-specific async edge cases (see the comment above) - don't
+      // bet an indefinite silent-music hang on a promise that might not
+      // settle here either.
+      setTimeout(recover, 1500);
     } else {
       startMusic();
     }
