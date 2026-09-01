@@ -388,3 +388,85 @@ def solve_rounds(paths, unit_grid, graph):
                 remaining -= 1
             progress = True
     return rounds if remaining == 0 else None
+
+
+def find_dependency_pairs(paths, unit_grid, graph):
+    """Lock-Key mechanic (see arrowflow-level-mechanics plan, 2026-08-31): finds
+    which paths' becoming-clearable can be attributed to ONE specific other path's
+    clearance - a clean 1:1 dependency, suitable for a visible padlock+key pairing
+    in the UI. Returns a list of (locked_index, key_index) pairs into `paths`
+    (positional indices, same order the caller already has).
+
+    This does NOT invent any new blocking rule - it just re-runs the exact same
+    round-based clearing simulation solve_rounds()/is_solvable() already use (via
+    exit_ray_clear(), the single source of truth for "can this path's ray exit
+    right now") and asks a more specific question of an already-known-solvable
+    board: for a path that only becomes clearable partway through, was that
+    because of exactly one other path, or a genuine multi-path tangle? Only the
+    former gets tagged - a multi-path dependency has no single path to point a
+    key icon at, so tagging it would show the player a misleading "clear this
+    one" promise. A path that's clearable from round 1 (no dependency at all) is
+    never tagged either - locking is meant to be a deliberate exception, not the
+    norm.
+    """
+    n = len(paths)
+    cleared = [False] * n
+    round_of = [None] * n
+    occupied = set()
+    for cells, _ in paths:
+        occupied.update(cells)
+
+    rounds_order = []
+    remaining = n
+    progress = True
+    r = 0
+    while progress and remaining > 0:
+        progress = False
+        this_round = []
+        for i, (cells, exit_dir) in enumerate(paths):
+            if cleared[i]:
+                continue
+            if exit_ray_clear(*cells[-1], exit_dir, occupied, set(), unit_grid, graph):
+                this_round.append(i)
+        if this_round:
+            r += 1
+            for i in this_round:
+                cleared[i] = True
+                round_of[i] = r
+                occupied -= set(paths[i][0])
+                remaining -= 1
+            rounds_order.append(this_round)
+            progress = True
+
+    if remaining > 0:
+        return []  # unsolvable - shouldn't happen on a board that already passed
+                   # is_solvable(), but this function must never assume that.
+
+    # occupied_before[R] = every path's cells still on the board at the exact
+    # moment round R is about to run (paths cleared in rounds < R already removed).
+    occupied_before = {}
+    occ = set()
+    for cells, _ in paths:
+        occ.update(cells)
+    occupied_before[1] = set(occ)
+    for idx, this_round in enumerate(rounds_order, start=1):
+        for i in this_round:
+            occ -= set(paths[i][0])
+        occupied_before[idx + 1] = set(occ)
+
+    pairs = []
+    for i, (cells, exit_dir) in enumerate(paths):
+        R = round_of[i]
+        if R is None or R <= 1:
+            continue  # open from the very start - nothing to attribute
+        base_occupied = occupied_before[R]
+        # Which strictly-earlier-clearing path(s), if put back on the board, would
+        # re-block this path's exit ray? A clean single cause means exactly one.
+        blockers = [
+            j for j, (kcells, _) in enumerate(paths)
+            if round_of[j] is not None and round_of[j] < R and j != i
+            and not exit_ray_clear(*cells[-1], exit_dir, base_occupied | set(kcells), set(), unit_grid, graph)
+        ]
+        if len(blockers) == 1:
+            pairs.append((i, blockers[0]))
+    return pairs

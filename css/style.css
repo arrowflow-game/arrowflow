@@ -196,6 +196,11 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
    sideways the way the unbounded row used to. */
 .hud-difficulty-badge { background: var(--bg-card); padding: 4px 10px; border-radius: 99px; font-size: 0.65rem; font-weight: 800; color: var(--text-secondary); border: 2px solid transparent; white-space: nowrap; overflow: hidden; flex-shrink: 1; min-width: 0; }
 
+/* Color-Match Combo badge (2026-08-31) - deliberately gold/orange, not the blue
+   --accent used by .hud-arrows-badge, so it never gets confused with the idle-path
+   status color it sits right next to. */
+.hud-combo-badge { background: var(--bg-card); padding: 4px 10px; border-radius: 99px; font-weight: 800; font-size: 0.85rem; color: #ff9500; border: 2px solid #ff9500; flex-shrink: 0; }
+
 /* Milestone levels (every 10th) — aggressive/intense tier treatment */
 .hud-tier-label.milestone {
   background: linear-gradient(135deg, #ff3b30, #ff7a1a);
@@ -273,10 +278,16 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
 #modal-win.campaign-complete .win-emoji { font-size: 4.5rem; }
 .win-stars-row { font-size: 2.5rem; color: #ccc; margin-bottom: 15px; }
 .win-stars-row .wstar.earned { color: var(--star-color); }
-.win-stats-row { display: flex; justify-content: space-around; margin-bottom: 25px; }
-.wstat-lbl { font-size: 0.7rem; font-weight: 800; color: var(--text-secondary); text-transform: uppercase; }
-.wstat-val { font-size: 1.8rem; font-family: var(--font-logo); font-weight: 900; color: var(--accent); }
-.wstat-bonus { font-size: 0.65rem; font-weight: 700; color: var(--star-color); margin-top: 2px; }
+/* Wraps into rows instead of squeezing everything onto one line - up to 6
+   stats (score/time/hints/gems/combo/golden) can all be visible at once on a
+   level with every bonus mechanic active, which badly overlapped in a single
+   flex row on the ~260px-wide win modal (reported 2026-09-01, screenshot
+   showed the score and combo count overlapping). */
+.win-stats-row { display: flex; flex-wrap: wrap; justify-content: center; column-gap: 16px; row-gap: 12px; margin-bottom: 25px; }
+.wstat { flex: 0 0 auto; min-width: 56px; text-align: center; }
+.wstat-lbl { font-size: 0.7rem; font-weight: 800; color: var(--text-secondary); text-transform: uppercase; white-space: nowrap; }
+.wstat-val { font-size: 1.5rem; font-family: var(--font-logo); font-weight: 900; color: var(--accent); white-space: nowrap; }
+.wstat-bonus { font-size: 0.65rem; font-weight: 700; color: var(--star-color); margin-top: 2px; white-space: nowrap; }
 
 .levels-ovr { background: var(--bg-primary); justify-content: flex-start; }
 .levels-panel { width: 100%; max-width: 500px; display: flex; flex-direction: column; height: 100%; }

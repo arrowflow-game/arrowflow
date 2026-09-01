@@ -6,6 +6,16 @@ const Scene3D = (() => {
   let scene, camera, renderer;
   let shapeMesh, backMesh, shapeGroup;
   let currentTier = null;
+  // Color-Match Combo (see arrowflow-level-mechanics plan, 2026-08-31): whether the
+  // small per-path color dot should be drawn at all - off on AWAKENING levels, set by
+  // game.js via setLevelData()'s comboEnabled param, matching state that's otherwise
+  // vestigial (path.color exists on every level already, see getPathColor()'s note).
+  let comboVisualsEnabled = false;
+  // Golden Path Bonus (see arrowflow-level-mechanics plan, 2026-08-31): which path id
+  // (if any) gets the persistent gold glow this level, set by game.js via
+  // setGoldenPath() right after setLevelData(). null = mechanic off/no golden path.
+  let goldenPathId = null;
+  function setGoldenPath(id) { goldenPathId = id; }
   let faceCanvases = [];
   let faceContexts = [];
   let faceTextures = [];
@@ -624,7 +634,24 @@ const Scene3D = (() => {
 
   function getPathColor(path) {
     if (path.status === 'bumped' || path.status === 'bumped_return' || path.wasBlocked) return COLOR_BLOCKED;
-    if (path.status === 'moving' || path.status === 'done') return movingColor();
+    // Moving/exit-shot color matches the path's own combo color when combo
+    // visuals are active (2026-09-01 feedback: the exit flourish always
+    // flashed the fixed status green regardless of the line's own color,
+    // breaking the "same color = same streak" read the whole point of the
+    // full-line recolor was to give). Falls back to the plain status green
+    // otherwise, unchanged from before.
+    if (path.status === 'moving' || path.status === 'done') {
+      if (comboVisualsEnabled && path.color) return path.color;
+      return movingColor();
+    }
+    // Color-Match Combo (see arrowflow-level-mechanics plan, 2026-08-31): idle paths on
+    // combo-enabled levels render in their own `path.color` instead of the flat idle
+    // skin color, replacing the small head-dot marker this used to be - user feedback
+    // (2026-09-01) was that the dot was too small to notice/track against a dense maze,
+    // and the whole line is unmissable by comparison. Still only idle (blocked/moving
+    // keep their own semantic colors, checked above) and still off entirely below
+    // levelNum 51 - see comboVisualsEnabled/comboEnabledForLevel().
+    if (comboVisualsEnabled && path.status === 'idle' && path.color) return path.color;
     const dark = Storage.get('theme') === 'dark';
     const skin = activeSkin();
     const base = skin ? (dark ? skin.colors.path.dark : skin.colors.path.light) : (dark ? COLOR_IDLE_DARK : COLOR_IDLE_LIGHT);
@@ -932,9 +959,15 @@ const Scene3D = (() => {
     dx /= len; dy /= len;
 
     const edge = rayToViewportEdge(s0.x, s0.y, dx, dy);
-    activeShots.push({ x0: s0.x, y0: s0.y, x1: edge.x, y1: edge.y, start: performance.now() });
-    // Phase 2: skin-themed particle burst layered alongside the green
-    // status-color flourish above - never replaces it (see PARTICLE_THEMES).
+    // Matches getPathColor()'s own moving/done branch (see its note) - each
+    // shot remembers its own color at launch time rather than drawExitShots()
+    // reading a single shared movingColor() for every active shot, so two
+    // different-colored combo lines exiting in quick succession each keep
+    // their own trail color instead of both flashing the same fixed green.
+    const shotColor = (comboVisualsEnabled && path.color) ? path.color : movingColor();
+    activeShots.push({ x0: s0.x, y0: s0.y, x1: edge.x, y1: edge.y, start: performance.now(), color: shotColor });
+    // Phase 2: skin-themed particle burst layered alongside the flourish
+    // above - never replaces it (see PARTICLE_THEMES).
     const skin = activeSkin();
     if (skin) spawnBurst(s0.x, s0.y, skin.particleTheme);
   }
@@ -993,10 +1026,10 @@ const Scene3D = (() => {
     const now = performance.now();
     const fadeTail = 150;
     activeShots = activeShots.filter(s => now - s.start < EXIT_SHOT_DURATION_MS + fadeTail);
-    const shotColor = movingColor();
     const skin = activeSkin();
     const lineStyle = skin && skin.lineStyle;
     activeShots.forEach(shot => {
+      const shotColor = shot.color || movingColor();
       const t = Math.min(1, (now - shot.start) / EXIT_SHOT_DURATION_MS);
       const grow = 1 - Math.pow(1 - t, 3); // ease-out
       const cx = shot.x0 + (shot.x1 - shot.x0) * grow;
@@ -1126,7 +1159,7 @@ const Scene3D = (() => {
     shapeGroup.add(shapeMesh);
   }
 
-  function setLevelData(shape, unitGrid, paths, tier, isMilestone, skinVariant) {
+  function setLevelData(shape, unitGrid, paths, tier, isMilestone, skinVariant, comboEnabled) {
     rebuildGeometry(shape, unitGrid);
     highlightPathId = null;
     highlightedFaceIndices = [];
@@ -1137,6 +1170,7 @@ const Scene3D = (() => {
     // PREVIOUS level's tier/variant.
     currentTier = tier || currentTier;
     currentSkinVariant = skinVariant || 'normal';
+    comboVisualsEnabled = !!comboEnabled;
     updateFrame(paths, true);
     setSceneMood(currentTier, isMilestone);
   }
@@ -1164,6 +1198,21 @@ const Scene3D = (() => {
       const hp = paths.find(p => p.id === highlightPathId);
       if (hp) hp.segments.forEach(s => facesToRedraw.add(segFaceKey(s)));
     }
+    // Golden Path's glow needs the same "always include these faces in any redraw"
+    // treatment as the hint highlight above, so its per-frame pulse (driven by the
+    // main animate() loop below) can redraw ONLY its own faces instead of the whole
+    // shape - see setGoldenPath()'s note.
+    if (goldenPathId !== null) {
+      const gp = paths.find(p => p.id === goldenPathId);
+      if (gp) gp.segments.forEach(s => facesToRedraw.add(segFaceKey(s)));
+    }
+    // Lock-Key padlocks get the same standing-glow "always include these faces"
+    // treatment (see drawLockIcon()'s idle pulse, 2026-09-01) so their subtle
+    // at-rest animation actually animates instead of freezing at whatever phase
+    // it happened to be drawn on the last full redraw.
+    paths.forEach(p => {
+      if (p.locked) p.segments.forEach(s => facesToRedraw.add(segFaceKey(s)));
+    });
 
     facesToRedraw.forEach(key => {
       const i = faceIndexByKey[key];
@@ -1247,7 +1296,8 @@ const Scene3D = (() => {
         // lines, reported directly with a screenshot).
         if (!p.cleared && p.status !== 'moving' && p.segments.some(s => segFaceKey(s) === key)) {
           const highlighted = p.id === highlightPathId && performance.now() < highlightUntil;
-          drawPathOnFace(ctx, p, key, highlighted);
+          const isGolden = p.id === goldenPathId;
+          drawPathOnFace(ctx, p, key, highlighted, isGolden);
         }
       });
       faceTextures[i].needsUpdate = true;
@@ -1311,13 +1361,32 @@ const Scene3D = (() => {
   // Cells are always square (every exposed face's canvas is a uniform
   // unitGrid x unitGrid square - see rebuildGeometry()), so cellSize is just
   // the constant regardless of which face.
-  function drawPathOnFace(ctx, path, faceKey, highlighted) {
+  function drawPathOnFace(ctx, path, faceKey, highlighted, isGolden) {
     const cellSize = PX_PER_CELL;
     const offset = path.progress || 0;
 
     const L = path.segments.length - 1;
     const startD = offset;
     const endD = L + offset;
+
+    // Golden Path Bonus glow (see arrowflow-level-mechanics plan, 2026-08-31) - drawn
+    // FIRST, under the hint's magenta pulse (if both happen to apply at once) and
+    // under the normal path stroke, so it always reads as a glow behind/around the
+    // line rather than replacing it. Gold/orange never collides with the idle/moving/
+    // blocked status palette (blue/green/red) or the magenta hint pulse. Visible from
+    // the instant the level loads (unlike the hint highlight, which is only shown
+    // on-demand) - that persistence is the whole point of "spot it yourself."
+    if (isGolden) {
+      const pulse = 0.55 + 0.35 * Math.sin(performance.now() / 220);
+      ctx.shadowColor = '#FFC700';
+      ctx.shadowBlur = cellSize * 0.7;
+      ctx.strokeStyle = `rgba(255,199,0,${pulse})`;
+      ctx.lineWidth = cellSize * 0.55;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      strokePath(ctx, path, faceKey, cellSize, startD, endD, L);
+      ctx.shadowBlur = 0;
+    }
 
     if (highlighted) {
       // Magenta doesn't collide with any of the semantic path colors (idle
@@ -1375,7 +1444,60 @@ const Scene3D = (() => {
       } else {
         drawStyledArrowHead(ctx, headPt.x, headPt.y, dir, cellSize * 0.5, color, lineStyle, performance.now());
       }
+      // Lock-Key padlock icon (see arrowflow-level-mechanics plan, 2026-08-31) -
+      // shown for as long as `locked` is true (game.js clears the flag the instant
+      // the key path finishes clearing, see animateLogic()'s 'done' branch), with a
+      // brief red flash while status is 'locked_shake' (a denied tap) so the denial
+      // reads as "not yet allowed", distinct from the normal bump-and-turn-red
+      // status color (locked paths never actually turn red/wasBlocked).
+      if (path.locked) {
+        drawLockIcon(ctx, headPt.x, headPt.y, dir, cellSize, path.status === 'locked_shake');
+      }
     }
+  }
+
+  function drawLockIcon(ctx, x, y, dir, cellSize, flashing) {
+    // Offset perpendicular to the exit direction so it never sits on top of the
+    // arrowhead itself.
+    const off = cellSize * 0.4;
+    let dx = 0, dy = 0;
+    if (dir === 'up' || dir === 'down') dx = -off;
+    else dy = -off;
+    const px = x + dx, py = y + dy;
+    ctx.save();
+    // Solid backing disc (2026-09-01: user feedback that the bare emoji was too
+    // small/hard to spot against a dense maze) - gives it contrast against
+    // whatever busy line art is directly underneath, in either theme, and grows
+    // the icon's effective footprint without the glyph itself becoming blurry.
+    // Sized up a second time the same day after the Color-Match Combo change
+    // (small dot -> full-line color) made the board a lot more visually loud,
+    // so the lock needed more presence to still read as the most important
+    // marker on a busy face, not less.
+    const dark = Storage.get('theme') === 'dark';
+    ctx.beginPath();
+    ctx.arc(px, py, cellSize * 0.44, 0, Math.PI * 2);
+    ctx.fillStyle = dark ? 'rgba(20,20,30,0.9)' : 'rgba(255,255,255,0.95)';
+    ctx.fill();
+    ctx.lineWidth = cellSize * 0.07;
+    ctx.strokeStyle = '#FF9500';
+    ctx.stroke();
+    ctx.font = `${Math.round(cellSize * 0.75)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    // A soft standing glow at rest (not just during a denied-tap flash) so the
+    // padlock reads as "active/important" even before the player has tried it -
+    // flashing red replaces it with a sharper, faster pulse on denial.
+    if (flashing) {
+      const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 40);
+      ctx.shadowColor = '#FF3B30';
+      ctx.shadowBlur = cellSize * (0.3 + 0.3 * pulse);
+    } else {
+      const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 500);
+      ctx.shadowColor = '#FF9500';
+      ctx.shadowBlur = cellSize * (0.15 + 0.15 * pulse);
+    }
+    ctx.fillText('🔒', px, py);
+    ctx.restore();
   }
 
   // Same distance-walking logic as strokePath() below but collects raw
@@ -2159,6 +2281,19 @@ const Scene3D = (() => {
         updateFrame(currentPaths);
       }
     }
+    // Golden Path's glow pulses continuously for the whole level (no expiry, unlike
+    // the hint highlight above) - updateFrame() with no dirtyFaces arg only redraws
+    // whatever it auto-includes (the highlighted path's faces, and now the golden
+    // path's, see updateFrame()'s own note), never the whole shape, so this stays
+    // cheap on dense many-face LABYRINTH/ASCENSION boards.
+    if (goldenPathId) {
+      updateFrame(currentPaths);
+    }
+    // Locked padlocks' standing glow (see updateFrame()'s note) needs the same
+    // continuous per-frame redraw as the golden glow above.
+    if (currentPaths.some(p => p.locked)) {
+      updateFrame(currentPaths);
+    }
     if (!isDragging && (Math.abs(velX) > INERTIA_STOP_EPS || Math.abs(velY) > INERTIA_STOP_EPS)) {
       applyDragRotation(velX, velY);
       velX *= INERTIA_FRICTION;
@@ -2357,5 +2492,5 @@ const Scene3D = (() => {
     }
   }
 
-  return { init, setLevelData, updateFrame, setOnArrowTap, setOnGesture, highlightPath, shootExitArrow, refreshMoodForTheme, renderSkinPreviewFrame };
+  return { init, setLevelData, updateFrame, setOnArrowTap, setOnGesture, highlightPath, shootExitArrow, refreshMoodForTheme, renderSkinPreviewFrame, setGoldenPath };
 })();

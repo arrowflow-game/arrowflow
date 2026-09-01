@@ -311,7 +311,7 @@ const UI = (() => {
   }
 
   function updateHUD(payload) {
-    const { level, tier, isMilestone, difficulty, remaining, hints, lives, livesMax, canUndo } = payload;
+    const { level, tier, isMilestone, difficulty, remaining, hints, lives, livesMax, canUndo, combo } = payload;
 
     document.getElementById('hud-lvl-num').textContent = level;
     const tierEl = document.getElementById('hud-tier');
@@ -346,6 +346,17 @@ const UI = (() => {
 
     const undoBtn = document.getElementById('btn-undo');
     if (undoBtn) undoBtn.disabled = !canUndo;
+
+    // Color-Match Combo badge - hidden entirely below a 2-streak (a single clear isn't
+    // really a "combo" yet, see game.js's computeScore comment), and on levels where
+    // the mechanic is off (game.js never reports combo>1 there since it's never
+    // incremented past 1 - see comboEnabledForLevel()).
+    const comboBadge = document.getElementById('hud-combo-badge');
+    if (comboBadge) {
+      comboBadge.classList.toggle('hidden', !(combo > 1));
+      const comboCountEl = document.getElementById('hud-combo-count');
+      if (comboCountEl) comboCountEl.textContent = combo || 0;
+    }
 
     updateRemoveAdsHud();
     updateNotifyDots();
@@ -882,7 +893,7 @@ const UI = (() => {
     return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
   }
 
-  function showWin(levelNum, hints, stars, score, elapsedSec, mode, isCampaignFinale, newlyUnlockedSkin, gemsEarned, gemsBonusType, hintsBonus) {
+  function showWin(levelNum, hints, stars, score, elapsedSec, mode, isCampaignFinale, newlyUnlockedSkin, gemsEarned, gemsBonusType, hintsBonus, comboBest, goldenBonusAwarded) {
     const winModal = document.getElementById('modal-win');
     const skinBtn = document.getElementById('win-new-skin');
     if (skinBtn) {
@@ -943,6 +954,19 @@ const UI = (() => {
     }
     const scoreEl = document.getElementById('ws-score');
     if (scoreEl) scoreEl.textContent = score;
+    const comboRowEl = document.getElementById('ws-combo-row');
+    const comboValEl = document.getElementById('ws-combo');
+    // Same "not really a combo below 2" threshold as the live HUD badge above.
+    if (comboRowEl && comboValEl) {
+      comboRowEl.classList.toggle('hidden', !(comboBest > 1));
+      if (comboBest > 1) comboValEl.textContent = 'x' + comboBest;
+    }
+    const goldenRowEl = document.getElementById('ws-golden-row');
+    const goldenValEl = document.getElementById('ws-golden');
+    if (goldenRowEl && goldenValEl) {
+      goldenRowEl.classList.toggle('hidden', !(goldenBonusAwarded > 0));
+      if (goldenBonusAwarded > 0) goldenValEl.textContent = '+' + goldenBonusAwarded;
+    }
     const timeEl = document.getElementById('ws-time');
     if (timeEl) timeEl.textContent = formatTime(elapsedSec);
     const starEls = document.querySelectorAll('#win-stars-row .wstar');
@@ -2108,5 +2132,11 @@ const UI = (() => {
     }, 100);
   }
 
-  return { showScreen, applyTheme, applySound, applyMusic, applyVibration, updateMenu, updateHUD, showWin, showFail, hideAllModals, wireEvents, runSplash, buildStatsScreen, buildRankingScreen, promptNicknameIfNeeded };
+  // Golden Path Bonus (see arrowflow-level-mechanics plan, 2026-08-31) - reuses the
+  // existing non-blocking app-toast, no new UI chrome needed for the in-level moment.
+  function showGoldenBonusToast(bonus) {
+    showToast(I18N.t('golden.claimed', { n: bonus }));
+  }
+
+  return { showScreen, applyTheme, applySound, applyMusic, applyVibration, updateMenu, updateHUD, showWin, showFail, hideAllModals, wireEvents, runSplash, buildStatsScreen, buildRankingScreen, promptNicknameIfNeeded, showGoldenBonusToast };
 })();

@@ -80,6 +80,16 @@ const Sound = (() => {
     });
   }
 
+  // Lock-Key mechanic (2026-08-31) - deliberately NOT playBump()'s harsh sawtooth
+  // (that reads as "wrong guess, you lost a heart"; a locked tap costs nothing and
+  // is expected, not a mistake) - a soft two-note "not yet" tick instead.
+  function playLockedDeny() {
+    if (!sfxEnabled() || isBackgrounded) return;
+    const c = getCtx();
+    tone(340, 340, 0.08, 'sine', c.currentTime, 0.12);
+    tone(260, 260, 0.1, 'sine', c.currentTime + 0.09, 0.12);
+  }
+
   function playFail() {
     if (!sfxEnabled() || isBackgrounded) return;
     const c = getCtx();
@@ -441,5 +451,5 @@ const Sound = (() => {
   document.addEventListener('pointerdown', warmUpOnce, { once: true });
   document.addEventListener('touchstart', warmUpOnce, { once: true });
 
-  return { playSlide, playBump, playWin, playFail, playWheelSpin, playWheelWin, startMusic, stopMusic, pauseMusic, resumeMusic, isMusicPlaying, setLevelContext };
+  return { playSlide, playBump, playLockedDeny, playWin, playFail, playWheelSpin, playWheelWin, startMusic, stopMusic, pauseMusic, resumeMusic, isMusicPlaying, setLevelContext };
 })();

@@ -19,7 +19,7 @@ import random
 import sys
 import time
 
-from generate_level import try_generate, fill_to_saturation, is_solvable, solve_rounds, COLORS
+from generate_level import try_generate, fill_to_saturation, is_solvable, solve_rounds, find_dependency_pairs, COLORS
 from polycube import PolycubeGraph
 
 # v8 (2026-08-16, same day): both denser AND more visibly "fused" than v7.
@@ -206,13 +206,19 @@ def pick_shape(level_id, tier, rng, shape_try=0):
     # (a real, observed bug: level 29 got a 2-cube/10-face shape asked to
     # hold 70 paths - ~97% fill, practically unsolvable, which is what was
     # actually stalling generation, not "some shapes are just unlucky").
-    # +/-1 jitter around the interpolated target keeps some per-level
-    # variety without reintroducing that mismatch.
+    # Jitter around the interpolated target keeps some per-level variety without
+    # reintroducing that mismatch - widened from +/-1 to +/-2 (2026-08-31, see
+    # arrowflow-level-mechanics plan's "shape variety" tuning) after a direct report
+    # that non-milestone levels all felt too visually similar in size within a tier.
+    # Still clamped to the tier's own (lo,hi) range below, so this can never push a
+    # level's shape outside what was already probed/verified safe for that tier - it
+    # just uses more of that already-safe range per level instead of staying
+    # clustered tight around the middle.
     span = tier['end'] - tier['start']
     frac = (level_id - tier['start']) / span if span else 0.0
     lo, hi = tier['n_cubes']
     target = lerp_int(lo, hi, frac)
-    n = max(lo, min(hi, target + rng.randint(-1, 1)))
+    n = max(lo, min(hi, target + rng.randint(-2, 2)))
     return random_polycube(n, rng)
 
 
@@ -247,6 +253,29 @@ def tier_for(level_id):
         if t['start'] <= level_id <= t['end']:
             return t
     raise ValueError(level_id)
+
+
+# Lock-Key mechanic (see arrowflow-level-mechanics plan, 2026-08-31) - how many
+# locked/key pairs (out of whatever find_dependency_pairs() actually finds - never
+# forced) to tag per level. Deliberately starts 5 levels AFTER Golden Path (56) and
+# 10 after Combo (51), same staggered-rollout reasoning as those two: a first-time
+# MOMENTUM player never gets two new coach-marks in the same level. This directly
+# targets the level-62 "feels flat" complaint that started this whole feature set -
+# 62 already has both Combo and Golden Path active by the time Lock-Key also kicks
+# in at 61.
+def lock_key_range_for(level_id, tier):
+    if tier['name'] == 'AWAKENING':
+        return (0, 0)
+    if tier['name'] == 'MOMENTUM':
+        # 1-2 raised to 2-4 on 2026-09-01 (user feedback that the mechanic
+        # unlocked "too easily" at level 62 - too few pairs to feel like a real
+        # constraint at the tier that first introduces it) - still bounded by
+        # however many honest 1:1 dependencies find_dependency_pairs() actually
+        # finds; never padded with fakes.
+        return (0, 0) if level_id < 61 else (2, 4)
+    if tier['name'] in ('CASCADE', 'VORTEX'):
+        return (2, 3)
+    return (3, 5)  # LABYRINTH, ASCENSION
 
 
 def lerp_int(lo, hi, frac):
@@ -409,7 +438,14 @@ def generate_one_dense(level_id, tier, shape_attempts=4):
     return paths, difficulty, shape, unit_grid
 
 
-def build_level(level_id, tier, paths, difficulty, shape, unit_grid):
+def build_level(level_id, tier, paths, difficulty, shape, unit_grid, lock_key_pairs=None):
+    """lock_key_pairs: optional list of (locked_index, key_index) positional pairs
+    into `paths` (see find_dependency_pairs()) - each becomes a `locked`/`keyPathId`
+    field on the locked path's output object, referencing the key path's real "pN"
+    id string. None/empty = no lock-key pairs this level (AWAKENING and most of
+    early MOMENTUM), matching every pre-existing level's shape exactly."""
+    locked_by_index = dict(lock_key_pairs or [])
+
     segs_out = []
     for i, (cells, exit_dir) in enumerate(paths):
         segs = []
@@ -419,14 +455,18 @@ def build_level(level_id, tier, paths, difficulty, shape, unit_grid):
             if j == len(cells) - 1:
                 seg["isHead"] = True
             segs.append(seg)
-        segs_out.append({
+        path_out = {
             "id": f"p{i + 1}",
             "color": COLORS[i % len(COLORS)],
             "exitDir": exit_dir,
             "status": "idle",
             "progress": 0,
             "segments": segs,
-        })
+        }
+        if i in locked_by_index:
+            path_out["locked"] = True
+            path_out["keyPathId"] = f"p{locked_by_index[i] + 1}"
+        segs_out.append(path_out)
 
     num_paths = len(paths)
     return {
@@ -476,14 +516,34 @@ def main():
         if paths is None:
             print(f"// LEVEL {level_id} FAILED to generate", file=sys.stderr)
             continue
-        levels.append(build_level(level_id, tier, paths, difficulty, shape, unit_grid))
+
+        graph = PolycubeGraph(shape)
+
+        # Lock-Key mechanic: find every clean 1:1 dependency this board already has
+        # (an additive discovery over an already-solvable board, not a new
+        # constraint - see find_dependency_pairs()'s own docstring), then randomly
+        # sample down to this tier's target count so early levels within a tier
+        # aren't padlocked all over. Never pads with a fake pair if fewer clean
+        # dependencies exist than the target - see lock_key_range_for().
+        lo, hi = lock_key_range_for(level_id, tier)
+        chosen_pairs = []
+        if hi > 0:
+            all_pairs = find_dependency_pairs(paths, unit_grid, graph)
+            lk_rng = random.Random(level_id * 104729 + 3)  # distinct salt from every other RNG this file uses
+            target_n = lk_rng.randint(lo, hi)
+            if len(all_pairs) > target_n:
+                chosen_pairs = lk_rng.sample(all_pairs, target_n)
+            else:
+                chosen_pairs = all_pairs
+
+        levels.append(build_level(level_id, tier, paths, difficulty, shape, unit_grid, chosen_pairs))
         target = lerp_int(tier['base_paths'][0], tier['base_paths'][1],
                            (level_id - tier['start']) / max(1, tier['end'] - tier['start']))
-        sr = solve_rounds(paths, unit_grid, PolycubeGraph(shape))
-        total_cells = len(PolycubeGraph(shape).faces) * unit_grid * unit_grid
+        sr = solve_rounds(paths, unit_grid, graph)
+        total_cells = len(graph.faces) * unit_grid * unit_grid
         fill = 100.0 * sum(len(c) for c, _ in paths) / total_cells if total_cells else 0.0
         print(f"// generated level {level_id}/300 ({tier['name']}, {len(paths)} paths, base_target~{target}, "
-              f"{difficulty}, solve_rounds={sr}, fill={fill:.1f}%)", file=sys.stderr)
+              f"{difficulty}, solve_rounds={sr}, fill={fill:.1f}%, lock_key_pairs={len(chosen_pairs)})", file=sys.stderr)
 
     levels.sort(key=lambda l: l['id'])
     print("const LEVELS = " + json.dumps(levels, separators=(',', ':')) + ";")

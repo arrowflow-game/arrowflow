@@ -103,9 +103,120 @@ const Tutorial = (() => {
       maybeStart(data);
       return;
     }
+    if (name === 'combo-first') {
+      showOneShotCoach({
+        flagKey: 'comboTutorialSeen',
+        icon: '🔥',
+        titleKey: 'tutorial.combo.title',
+        textKey: 'tutorial.combo.text',
+        getRect: () => {
+          const el = document.getElementById('hud-combo-badge');
+          const r = el.getBoundingClientRect();
+          return { left: r.left - 8, top: r.top - 8, width: r.width + 16, height: r.height + 16 };
+        }
+      });
+      return;
+    }
+    if (name === 'locked-tap') {
+      // Fired every time a still-locked path is tapped (see game.js's handlePathTap)
+      // - showOneShotCoach() itself no-ops instantly if lockKeyTutorialSeen is
+      // already true, so it's cheap to just always call this rather than tracking a
+      // separate "have I shown it yet" flag here too. The key path is already
+      // highlighted by game.js's own Scene3D.highlightPath() call for this same
+      // event, independent of whether the coach-mark shows - re-highlight it a
+      // little longer here on the FIRST-ever encounter specifically, so a brand new
+      // player has time to actually read the popup and then still see which path it
+      // was pointing at.
+      if (!Storage.get('lockKeyTutorialSeen')) {
+        Scene3D.highlightPath(data.keyPathId, false);
+        showOneShotCoach({
+          flagKey: 'lockKeyTutorialSeen',
+          icon: '🔒',
+          titleKey: 'tutorial.lockkey.title',
+          textKey: 'tutorial.lockkey.text',
+          getRect: () => centerRect(280, 0.42)
+        });
+      }
+      return;
+    }
+    if (name === 'golden-available') {
+      // Unlike the combo coach-mark, the golden glow is already visible in the 3D
+      // scene the instant the level loads (see game.js's applyLevelState / scene.js's
+      // persistent per-frame glow) - a small delay lets that first frame actually
+      // paint before spotlighting anything, matching the level-1 tutorial's own
+      // "let the HUD/scene finish loading in" pattern (see maybeStart() below).
+      setTimeout(() => {
+        showOneShotCoach({
+          flagKey: 'goldenTutorialSeen',
+          icon: '⭐',
+          titleKey: 'tutorial.golden.title',
+          textKey: 'tutorial.golden.text',
+          getRect: () => centerRect(280, 0.42)
+        });
+      }, 350);
+      return;
+    }
     if (!active) return;
     const step = STEPS[stepIndex];
     if (step.mode === 'event' && step.waitEvents.includes(name)) advanceStep();
+  }
+
+  // Lightweight one-shot coach-mark for mechanics that unlock mid-campaign (combo/
+  // golden/lock-key - see arrowflow-level-mechanics plan, 2026-08-31), reusing the
+  // same spotlight+bubble CSS as the level-1 STEPS tutorial above but as a single,
+  // non-blocking dismissable popup rather than a multi-step forced sequence - these
+  // mechanics don't need to teach a new physical ACTION (tap/rotate/zoom), just what
+  // a new HUD element means, so one "got it" tap is enough.
+  let oneShotActive = false;
+  function showOneShotCoach(opts) {
+    if (Storage.get(opts.flagKey)) return;
+    if (active || oneShotActive) return; // never stack on top of the level-1 tutorial or another coach-mark
+    oneShotActive = true;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'tutorial-overlay';
+    overlay.innerHTML =
+      '<div class="tutorial-spotlight' + (opts.circle ? ' circle' : '') + '"></div>' +
+      '<div class="tutorial-bubble">' +
+        '<div class="tutorial-icon"></div>' +
+        '<h3></h3><p></p>' +
+        '<button class="btn btn-primary btn-sm"></button>' +
+      '</div>';
+    document.body.appendChild(overlay);
+
+    const spotlight = overlay.querySelector('.tutorial-spotlight');
+    const bubble = overlay.querySelector('.tutorial-bubble');
+    overlay.querySelector('.tutorial-icon').textContent = opts.icon;
+    overlay.querySelector('h3').textContent = I18N.t(opts.titleKey);
+    overlay.querySelector('p').textContent = I18N.t(opts.textKey);
+    const btn = overlay.querySelector('button');
+    btn.textContent = I18N.t('tutorial.got_it');
+
+    function position() {
+      const r = opts.getRect();
+      spotlight.style.left = r.left + 'px';
+      spotlight.style.top = r.top + 'px';
+      spotlight.style.width = r.width + 'px';
+      spotlight.style.height = r.height + 'px';
+      const bubbleH = bubble.offsetHeight || 160;
+      const spotCenterY = r.top + r.height / 2;
+      const top = spotCenterY > window.innerHeight / 2
+        ? Math.max(16, r.top - bubbleH - 20)
+        : Math.min(window.innerHeight - bubbleH - 16, r.top + r.height + 20);
+      bubble.style.top = top + 'px';
+      bubble.style.left = '50%';
+      bubble.style.transform = 'translateX(-50%)';
+    }
+    position();
+
+    const resizeHandler = () => position();
+    window.addEventListener('resize', resizeHandler);
+    btn.addEventListener('click', () => {
+      Storage.set(opts.flagKey, true);
+      window.removeEventListener('resize', resizeHandler);
+      overlay.remove();
+      oneShotActive = false;
+    });
   }
 
   function handleGesture(type, amount) {

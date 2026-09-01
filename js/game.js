@@ -4,6 +4,9 @@
 
 const Game = (() => {
   const LIVES_MAX = 3;
+  // Golden Path Bonus flat score award (see computeScore()'s note on the ~500-900
+  // typical score range this needs to feel proportionate against).
+  const GOLDEN_BONUS = 250;
 
   let state = {
     mode: 'campaign', // 'campaign' | 'daily' | 'remix'
@@ -21,7 +24,25 @@ const Game = (() => {
     canUndo: false,
     startTime: 0,
     pausedMs: 0,
-    pauseStartedAt: null
+    pauseStartedAt: null,
+    // Color-Match Combo (see arrowflow-level-mechanics plan, 2026-08-31): consecutive
+    // successful taps on same-colored paths build a combo streak, reset by a blocked
+    // tap or a different color. Off entirely on AWAKENING (levelNum<=50) - see
+    // comboEnabledForLevel().
+    combo: 0,
+    comboBest: 0,
+    lastClearedColor: null,
+    // Golden Path Bonus (see arrowflow-level-mechanics plan, 2026-08-31): one path per
+    // level, deterministically picked from the paths that are open right at level
+    // start, gives a big bonus if cleared within the first goldenTapWindow taps. Off
+    // entirely below levelNum 56 - see goldenEnabledForLevel(). Window tightened to 1
+    // (must be the player's very first tap of the level) on 2026-09-01 - user feedback
+    // that 3 taps made it trivial to just glance at the glow and grab it for free,
+    // undermining the "spot it and act fast" challenge it was meant to be.
+    goldenPathId: null,
+    goldenClaimed: false,
+    goldenBonusAwarded: 0,
+    goldenTapWindow: 1
   };
 
   let animationFrameId = null;
@@ -36,6 +57,46 @@ const Game = (() => {
   function fireEvent(name, data) { if (onEventCallback) onEventCallback(name, data); }
 
   function isMilestoneLevel(n) { return typeof n === 'number' && n % 10 === 0; }
+
+  // Color-Match Combo is off entirely on AWAKENING (campaign levels 1-50, the pure
+  // onboarding tier - see arrowflow_tutorial memory) so a first-time player only ever
+  // learns one new idea at a time. Daily/Remix levels are always past-AWAKENING
+  // difficulty (see arrowflow_daily_remix_i18n memory - Daily sits between MOMENTUM/
+  // CASCADE, Remix cycles ASCENSION boards), so combo is always on for them.
+  function comboEnabledForLevel() {
+    if (state.mode !== 'campaign') return true;
+    return typeof state.levelNum === 'number' && state.levelNum > 50;
+  }
+
+  // Golden Path activates 5 levels after Combo (56 vs 51) so a first-time MOMENTUM
+  // player learns one new idea at a time instead of two coach-marks back to back -
+  // see the plan's "การอยู่ร่วมกันของ 3 กลไก" section.
+  function goldenEnabledForLevel() {
+    if (state.mode !== 'campaign') return true;
+    return typeof state.levelNum === 'number' && state.levelNum >= 56;
+  }
+
+  // Small deterministic string hash (djb2-ish) - same level id always picks the same
+  // golden path, so Daily's "levelNum" (a date-keyed string like 'daily-2026-08-31')
+  // and Remix's ('remix-3') both work as well as a plain campaign number.
+  function hashStringToInt(str) {
+    let h = 0;
+    for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
+    return Math.abs(h);
+  }
+
+  // Picks the golden path from whatever's ACTUALLY clearable right at level start
+  // (reuses findBlocker() - the same "can this path exit right now" check hints use)
+  // so the promised bonus is always reachable, never a path buried behind others.
+  // Also excludes any already-`locked` path (Lock-Key mechanic, not yet built this
+  // session, but paths may carry that flag once it ships) - a golden path must never
+  // require a mechanic ITSELF gates behind clearing something else first.
+  function pickGoldenPath() {
+    const openPaths = state.paths.filter(p => !p.cleared && p.status === 'idle' && !p.locked && !findBlocker(p).blockedBy);
+    if (!openPaths.length) return null;
+    const idx = hashStringToInt(String(state.levelNum)) % openPaths.length;
+    return openPaths[idx].id;
+  }
 
   // Which cosmetic color-intensity variant (see Scene3D's VARIANT_RECIPES)
   // applies to a given campaign level - 'epic' (every 100th) is a
@@ -74,12 +135,29 @@ const Game = (() => {
       canUndo: false,
       startTime: Date.now(),
       pausedMs: 0,
-      pauseStartedAt: null
+      pauseStartedAt: null,
+      combo: 0,
+      comboBest: 0,
+      lastClearedColor: null,
+      goldenPathId: null,
+      goldenClaimed: false,
+      goldenBonusAwarded: 0,
+      goldenTapWindow: 1
     };
+
+    // Picked AFTER state.paths/state.graph/state.levelData are all set above, since
+    // pickGoldenPath() -> findBlocker() reads all three.
+    if (goldenEnabledForLevel()) state.goldenPathId = pickGoldenPath();
 
     const skinVariant = extra.skinVariant || 'normal';
     const isMilestone = skinVariant === 'milestone' || skinVariant === 'epic';
-    Scene3D.setLevelData(data.shape, data.unitGrid, state.paths, extra.sceneTier || data.tier, isMilestone, skinVariant);
+    // setGoldenPath() BEFORE setLevelData() deliberately - setLevelData() does its own
+    // synchronous full-shape redraw internally, and that redraw must already see the
+    // NEW level's goldenPathId (or null), not the previous level's stale id (which
+    // could otherwise false-match a same-named path id, e.g. "p3", in the new level
+    // and paint a stray glow that never gets cleaned up on levels where golden is off).
+    Scene3D.setGoldenPath(state.goldenPathId);
+    Scene3D.setLevelData(data.shape, data.unitGrid, state.paths, extra.sceneTier || data.tier, isMilestone, skinVariant, comboEnabledForLevel());
     Sound.setLevelContext(mode, isMilestone);
     UI.hideAllModals();
     UI.updateHUD(buildHudPayload());
@@ -87,6 +165,10 @@ const Game = (() => {
     if (animationFrameId) cancelAnimationFrame(animationFrameId);
     animateLogic();
     fireEvent('level-loaded', state.levelNum);
+    // Golden Path's glow is visible from the moment the level loads (unlike the combo
+    // badge, which only appears once a combo starts) - see the plan for why the
+    // tutorial coach-mark timing differs between the two mechanics.
+    if (state.goldenPathId) fireEvent('golden-available', state.goldenPathId);
   }
 
   function loadLevel(n) {
@@ -125,7 +207,8 @@ const Game = (() => {
       hints: Storage.getHintsTotal(),
       lives: state.lives,
       livesMax: LIVES_MAX,
-      canUndo: state.canUndo
+      canUndo: state.canUndo,
+      combo: state.combo || 0
     };
   }
 
@@ -250,6 +333,26 @@ const Game = (() => {
   }
 
   function handlePathTap(path) {
+    // Lock-Key: checked BEFORE the normal findBlocker() ray-cast, since a locked
+    // path's own geometry may already be perfectly clear (locking is a separate,
+    // explicitly telegraphed rule layered on top, not a geometric block) - see the
+    // plan's design decision: unlike a hidden geometric bump, this is NOT a wrong
+    // guess (the padlock icon already told the player), so it costs no heart and
+    // never turns the path red/wasBlocked. `path.locked` is cleared the instant its
+    // key path finishes clearing (see animateLogic()'s 'done' branch below), so a
+    // stale locked flag can never survive past that point.
+    if (path.locked) {
+      path.status = 'locked_shake';
+      path.progress = 0;
+      Sound.playLockedDeny();
+      Haptics.bump();
+      UI.updateHUD(buildHudPayload());
+      const keyPath = state.paths.find(p => p.id === path.keyPathId);
+      if (keyPath) Scene3D.highlightPath(keyPath.id);
+      fireEvent('locked-tap', path);
+      return;
+    }
+
     const { blockedBy, blockDist } = findBlocker(path);
 
     if (blockedBy) {
@@ -263,6 +366,8 @@ const Game = (() => {
 
       state.lives = Math.max(0, state.lives - 1);
       if (state.lives <= 0) state.failed = true;
+      // A wrong guess breaks the combo streak - see Color-Match Combo note on `state`.
+      if (comboEnabledForLevel()) { state.combo = 0; state.lastClearedColor = null; }
       Sound.playBump();
       Haptics.bump();
       UI.updateHUD(buildHudPayload());
@@ -278,6 +383,29 @@ const Game = (() => {
     state.lastMovePathId = path.id;
     state.canUndo = false; // becomes undoable once the slide finishes, see animateLogic
 
+    // Color-Match Combo: consecutive clears of the SAME path.color extend the streak,
+    // any other color restarts it at 1 (this tap still "counts" as the new streak's
+    // first link, it just doesn't chain off the previous color).
+    let comboJustStarted = false;
+    if (comboEnabledForLevel()) {
+      state.combo = (path.color && path.color === state.lastClearedColor) ? state.combo + 1 : 1;
+      state.lastClearedColor = path.color || null;
+      if (state.combo > state.comboBest) state.comboBest = state.combo;
+      comboJustStarted = state.combo === 2;
+    }
+
+    // Golden Path Bonus: claiming happens at most once per level (goldenClaimed
+    // guards re-triggering on a later tap of the same path after an undo->retap), and
+    // only within the first goldenTapWindow taps - state.moves was just incremented
+    // above, so this check is inclusive of exactly that many taps (moves<=3 means
+    // taps 1, 2, 3).
+    let goldenJustClaimed = false;
+    if (state.goldenPathId && path.id === state.goldenPathId && !state.goldenClaimed && state.moves <= state.goldenTapWindow) {
+      state.goldenClaimed = true;
+      state.goldenBonusAwarded = GOLDEN_BONUS;
+      goldenJustClaimed = true;
+    }
+
     // A 'moving' path is drawn as instantly gone (see scene.js's updateFrame) rather
     // than progressively slid off - redraw its faces right now so the line vanishes
     // on this exact frame, in sync with the exit-shot flourish that's about to fire.
@@ -291,6 +419,11 @@ const Game = (() => {
     Scene3D.shootExitArrow(path);
     Sound.playSlide();
     UI.updateHUD(buildHudPayload());
+    // Fired only after UI.updateHUD() above, so the combo badge is already visible
+    // in the DOM by the time tutorial.js tries to spotlight it - see
+    // comboJustStarted's own comment.
+    if (comboJustStarted) fireEvent('combo-first', path);
+    if (goldenJustClaimed) UI.showGoldenBonusToast(GOLDEN_BONUS);
     fireEvent('tap-success', path);
   }
 
@@ -298,7 +431,7 @@ const Game = (() => {
   // "the first path that can exit right now", but only useHint() should
   // spend a hint/touch Storage.
   function findOpenPath() {
-    return state.paths.find(p => !p.cleared && p.status === 'idle' && !findBlocker(p).blockedBy);
+    return state.paths.find(p => !p.cleared && p.status === 'idle' && !p.locked && !findBlocker(p).blockedBy);
   }
 
   function useHint() {
@@ -338,6 +471,24 @@ const Game = (() => {
     state.canUndo = false;
     state.lastMovePathId = null;
 
+    // Golden Path Bonus rollback: undoing the exact tap that claimed it must reverse
+    // the claim too, or re-tapping it again afterward would silently double-award
+    // (goldenClaimed's guard would otherwise think it was already claimed forever).
+    if (path.id === state.goldenPathId && state.goldenClaimed) {
+      state.goldenClaimed = false;
+      state.goldenBonusAwarded = 0;
+    }
+
+    // Lock-Key rollback: if this path being cleared is what unlocked some other
+    // path(s), undoing it must re-lock those too - otherwise a player could tap the
+    // key, let it unlock a dependent, undo the key tap, and keep the dependent
+    // permanently unlocked despite its key no longer actually being cleared. Skips
+    // any dependent that's ALREADY been tapped itself (cleared or mid-slide) - that
+    // one would need its own separate undo, not something this single undo can
+    // retroactively fix.
+    const toRelock = state.paths.filter(op => op.keyPathId === path.id && !op.cleared && op.status !== 'moving');
+    toRelock.forEach(op => { op.locked = true; });
+
     Scene3D.updateFrame(state.paths, true);
     UI.updateHUD(buildHudPayload());
   }
@@ -363,6 +514,19 @@ const Game = (() => {
     const dirtyFaces = new Set();
 
     state.paths.forEach(p => {
+      if (p.status === 'locked_shake') {
+        // Short-lived, unlike bumped/bumped_return - just enough ticks for scene.js
+        // to draw a brief denial flash on the padlock icon, then back to idle. Never
+        // touches lives/wasBlocked (see handlePathTap()'s locked branch).
+        p.progress += 1;
+        needsUpdate = true;
+        p.segments.forEach(s => dirtyFaces.add(segFaceKey(s)));
+        if (p.progress > 10) {
+          p.progress = 0;
+          p.status = 'idle';
+        }
+        return;
+      }
       if (p.status === 'bumped' || p.status === 'bumped_return') {
         // Capture before this tick's status flip, so the final frame where a
         // path finishes (bumped_return -> idle) still redraws. Only the faces
@@ -399,6 +563,14 @@ const Game = (() => {
           p.cleared = true;
           state.clearedCount++;
           if (p.id === state.lastMovePathId) state.canUndo = true;
+          // Lock-Key: unlock every path whose key was THIS path, the instant it
+          // finishes clearing - not lazily on their next tap attempt, so the
+          // padlock icon disappears from the scene right away too.
+          const unlocked = state.paths.filter(op => op.locked && op.keyPathId === p.id);
+          if (unlocked.length) {
+            unlocked.forEach(op => { op.locked = false; });
+            Scene3D.updateFrame(state.paths, true);
+          }
           UI.updateHUD(buildHudPayload());
           if (state.clearedCount >= state.paths.length) {
             // Re-check at fire time: an undo in the meantime could have
@@ -456,7 +628,13 @@ const Game = (() => {
     const timeBonus = Math.max(0, Math.round((parTime - elapsedSec) * 20));
     const heartsBonus = state.lives * 100;
     const starBonus = (state.stars || 0) * 200;
-    return 500 + timeBonus + heartsBonus + starBonus;
+    // Color-Match Combo bonus: rewards the longest same-color streak reached this run,
+    // not the final streak (so a big combo still pays off even if the player breaks it
+    // right after, e.g. on the level's last, differently-colored path). comboBest=1 is
+    // just a single clear with no chain, so only the streak LENGTH BEYOND 1 counts.
+    const comboBonus = Math.max(0, (state.comboBest || 0) - 1) * 15;
+    const goldenBonus = state.goldenBonusAwarded || 0;
+    return 500 + timeBonus + heartsBonus + starBonus + comboBonus + goldenBonus;
   }
 
   function onWin() {
@@ -511,7 +689,7 @@ const Game = (() => {
       hints_used: state.hintsUsed, time_sec: Math.round(elapsedSec)
     });
     if (isCampaignFinale) Analytics.logEvent('campaign_complete', {});
-    UI.showWin(state.levelNum, state.hintsUsed, stars, score, elapsedSec, state.mode, isCampaignFinale, newlyUnlockedSkin, gemsEarned, gemsBonusType, hintsBonus);
+    UI.showWin(state.levelNum, state.hintsUsed, stars, score, elapsedSec, state.mode, isCampaignFinale, newlyUnlockedSkin, gemsEarned, gemsBonusType, hintsBonus, state.comboBest || 0, state.goldenBonusAwarded || 0);
     // In-app rating prompt (js/rating.js) - levels-completed trigger. Only from a
     // real campaign win (not daily/remix, which don't count toward it either -
     // see storage.js's shouldPromptRating()). Delayed so it never fights the win
@@ -538,6 +716,12 @@ const Game = (() => {
     getMode: () => state.mode,
     getRemixIndex: () => state.remixIndex,
     getHudPayload: () => state.levelData ? buildHudPayload() : null,
-    getFirstOpenPathId
+    getFirstOpenPathId,
+    isComboEnabled: comboEnabledForLevel,
+    // Read-only debug/test getters (no side effects, same spirit as getFirstOpenPathId
+    // above) - not used by any real gameplay UI, only automated smoke tests.
+    getGoldenPathId: () => state.goldenPathId,
+    getGoldenClaimed: () => state.goldenClaimed,
+    getLockedPaths: () => state.paths.filter(p => p.locked).map(p => ({ id: p.id, keyPathId: p.keyPathId }))
   };
 })();

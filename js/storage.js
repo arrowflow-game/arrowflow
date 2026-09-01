@@ -15,6 +15,11 @@
     adsRemovedUntil: 0, adsRemovedForever: false,
     levelsSinceInterstitial: 0, nextInterstitialThreshold: 0,
     selectedSkin: null, skinTutorialSeen: false,
+    // New-mechanic coach-marks (see arrowflow-level-mechanics plan, 2026-08-31) -
+    // each shown once ever, the first time its mechanic is actually encountered in
+    // real play (not gated to level 1 like tutorialSeen, since these mechanics only
+    // start at MOMENTUM). comboTutorialSeen: first entry to a combo-enabled level.
+    comboTutorialSeen: false, goldenTutorialSeen: false, lockKeyTutorialSeen: false,
     // One-time educational alert shown right after the player's first-ever
     // successful non-consumable real-money purchase (skin/bundle/remove-ads-
     // forever) - explains that re-tapping the same buy button after a
@@ -51,9 +56,12 @@
 
   // Each rewarded-ad "kind" gets its own independent daily cap - hint-ads were
   // raised to 5/day (2026-08-25) to feel more generous alongside the new daily
-  // wheel below; the fail-screen continue-ad intentionally stays scarcer at 3/day
-  // so it doesn't cheapen the stakes of running out of hearts.
-  const DAILY_AD_CAPS = { hint: 5, continue: 3 };
+  // wheel below; the fail-screen continue-ad was originally kept scarcer at
+  // 3/day so it wouldn't cheapen the stakes of running out of hearts, but
+  // raised to match hint's 5/day on 2026-09-01 per explicit product decision
+  // (still opt-in via the fail screen's button, never forced/randomized -
+  // that was considered and rejected as worse UX than just raising the cap).
+  const DAILY_AD_CAPS = { hint: 5, continue: 5 };
   const WHEEL_BONUS_SPIN_DAILY_CAP = 5;
 
   function rollInterstitialThreshold() {
