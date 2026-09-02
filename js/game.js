@@ -678,7 +678,17 @@ const Game = (() => {
     if (elapsedSec <= parTime * RemoteConfig.get('star_pace_fast_multiplier')) paceStars = 3;
     else if (elapsedSec <= parTime * RemoteConfig.get('star_pace_ok_multiplier')) paceStars = 2;
 
-    state.stars = Math.min(accuracyStars, paceStars);
+    // Both forms are load-bearing and must stay in sync: state.stars is read by
+    // computeScore() below (via its starBonus), while every reward/analytics/UI
+    // call further down takes the local. The 2026-09-01 star redesign set only
+    // state.stars and left those five call sites referencing a bare `stars` that
+    // no longer existed anywhere - a ReferenceError thrown on EVERY win, in every
+    // mode. Because onWin() is invoked from inside a setTimeout, the throw never
+    // reached the animation loop: the paths all cleared normally and then simply
+    // nothing happened, with no error visible in the game itself. Reported as
+    // "level 1 finished but the level won't end".
+    const stars = Math.min(accuracyStars, paceStars);
+    state.stars = stars;
 
     const score = computeScore(elapsedSec);
     const isCampaignFinale = state.mode === 'campaign' && state.levelNum === 300;

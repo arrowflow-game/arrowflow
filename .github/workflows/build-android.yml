@@ -35,6 +35,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Fails the build on an undefined-variable reference. This exact class of bug
+      # shipped three times and always looked like "nothing happens when you tap" -
+      # most recently `stars` in game.js's onWin(), which made finishing any level
+      # impossible in a release that had already passed a manual audit.
+      - name: Lint (no-undef tripwire)
+        run: npm run lint
+
       - name: Build web assets + sync Capacitor
         run: npm run cap:sync
 

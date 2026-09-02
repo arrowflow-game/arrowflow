@@ -4,6 +4,7 @@
   "private": true,
   "description": "ArrowFlow - 3D Brain Puzzle",
   "scripts": {
+    "lint": "eslint js functions --max-warnings 20",
     "build": "node scripts/build-www.js",
     "cap:sync": "npm run build && npx cap sync android",
     "postinstall": "patch-package"
@@ -24,6 +25,7 @@
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",
+    "eslint": "^9.15.0",
     "patch-package": "^8.0.1"
   }
 }
