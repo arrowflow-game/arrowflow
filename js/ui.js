@@ -911,6 +911,28 @@ const UI = (() => {
   // tapping "เล่นต่อ" - the exact silent-resume this feature exists to
   // prevent, just relocated instead of fixed.
   let adInProgress = false;
+  let adWatchdogTimer = null;
+  // An ad in flight is the one thing allowed to suppress both the
+  // background-pause modal and the music-resume-on-return, so a callback that
+  // never arrives - a failed load, a dropped network, an SDK that swallows its
+  // own completion - would silently disable both for the rest of the session:
+  // from then on a phone call would not pause the level and music would not come
+  // back. Found exactly that way, by an automated sweep that tapped a "watch ad"
+  // button whose ad never resolved. Same "never bet on a third-party callback
+  // settling" reasoning as iap.js's purchase fail-safe timer.
+  //
+  // Generous enough to outlast any real rewarded ad including its reward screen;
+  // firing late is harmless, since by then the ad flow has finished either way.
+  const AD_WATCHDOG_MS = 90000;
+  function beginAd() {
+    adInProgress = true;
+    clearTimeout(adWatchdogTimer);
+    adWatchdogTimer = setTimeout(() => { adInProgress = false; }, AD_WATCHDOG_MS);
+  }
+  function endAd() {
+    adInProgress = false;
+    clearTimeout(adWatchdogTimer);
+  }
   let wasBackgroundedForPause = false;
   // Set when backgrounding froze the level clock WITHOUT showing the pause modal
   // (something was already covering the screen). Nothing would ever tap
@@ -1698,11 +1720,11 @@ const UI = (() => {
     // the modal itself closes, not resume early just because the ad ended.
     const wasPlaying = Sound.isMusicPlaying();
     Sound.pauseMusic();
-    adInProgress = true;
+    beginAd();
     Ads.showRewardedAd(
-      () => { adInProgress = false; labelEl.textContent = original; if (wasPlaying) Sound.resumeMusic(); onGranted(); },
+      () => { endAd(); labelEl.textContent = original; if (wasPlaying) Sound.resumeMusic(); onGranted(); },
       () => {
-        adInProgress = false;
+        endAd();
         labelEl.textContent = original;
         btn.disabled = false;
         if (wasPlaying) Sound.resumeMusic();
@@ -2022,9 +2044,9 @@ const UI = (() => {
         // consistency/safety).
         const wasPlaying = Sound.isMusicPlaying();
         Sound.pauseMusic();
-        adInProgress = true;
+        beginAd();
         await new Promise(resolve => Ads.showInterstitial(resolve));
-        adInProgress = false;
+        endAd();
         if (wasPlaying) Sound.resumeMusic();
         Storage.recordInterstitialShown();
       }
