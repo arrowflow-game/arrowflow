@@ -28,13 +28,23 @@ const Leaderboard = (() => {
         if (typeof firebase === 'undefined') return resolve(false);
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         db = firebase.firestore();
+        // signInAnonymously() used to be called unconditionally, right here.
+        // Firebase restores a persisted session asynchronously, so on a cold
+        // start that raced the restore and often REPLACED a signed-in Google
+        // user with a brand-new anonymous one - silently unlinking cloud save
+        // (js/cloudsave.js) on app restart and orphaning that account's
+        // saves/{uid} document. onAuthStateChanged's first callback is the
+        // authoritative answer to "is there a session?": sign in anonymously
+        // only when it says there is none (which fires the callback again with
+        // the new user).
         firebase.auth().onAuthStateChanged(user => {
           if (user) {
             uid = user.uid;
             resolve(true);
+          } else {
+            firebase.auth().signInAnonymously().catch(() => resolve(false));
           }
         });
-        firebase.auth().signInAnonymously().catch(() => resolve(false));
         // Don't hang forever if auth never responds (offline, provider disabled, etc).
         setTimeout(() => resolve(!!uid), 6000);
       } catch {

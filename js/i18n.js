@@ -504,7 +504,32 @@ const I18N = (() => {
     }
   };
 
-  function currentLang() { return Storage.get('lang') || 'en'; }
+  // Which languages this build actually ships strings for (STRINGS above).
+  const SUPPORTED = ['en', 'th'];
+
+  // First run has no stored choice, and `lang` used to default to a hard-coded
+  // 'en' - so a Thai device showed an English game until the player found the
+  // toggle in Settings. Fall back to the device's own language list instead;
+  // a player who has actually picked a language (langExplicit) always wins.
+  function detectLang() {
+    try {
+      const prefs = (navigator.languages && navigator.languages.length)
+        ? navigator.languages : [navigator.language || ''];
+      for (const p of prefs) {
+        const code = String(p).toLowerCase().split('-')[0];
+        if (SUPPORTED.includes(code)) return code;
+      }
+    } catch {}
+    return 'en';
+  }
+
+  function currentLang() {
+    if (Storage.get('langExplicit')) {
+      const stored = Storage.get('lang');
+      if (SUPPORTED.includes(stored)) return stored;
+    }
+    return detectLang();
+  }
 
   function t(key, vars) {
     const lang = currentLang();
@@ -526,8 +551,12 @@ const I18N = (() => {
 
   function setLang(lang) {
     Storage.set('lang', lang);
+    // Marks the choice as the player's own, so device-language detection stops
+    // overriding it - including when they deliberately pick English on a Thai
+    // device, which detection would otherwise undo on the next launch.
+    Storage.set('langExplicit', true);
     applyToDOM();
   }
 
-  return { t, setLang, applyToDOM, currentLang };
+  return { t, setLang, applyToDOM, currentLang, detectLang };
 })();

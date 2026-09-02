@@ -3,7 +3,7 @@
   const TOTAL_LEVELS = 300; // kept in sync with TOTAL_LEVELS in js/ui.js
   const defaults = {
     currentLevel: 1, highestUnlocked: 1, levelData: {}, totalStars: 0, totalScore: 0, hints: 3, paidHints: 0,
-    theme: 'light', sound: true, music: true, vibration: true, colorblindMode: false, tutorialSeen: false, dailyTipSeen: false, lang: 'en',
+    theme: 'light', sound: true, music: true, vibration: true, colorblindMode: false, tutorialSeen: false, dailyTipSeen: false, lang: 'en', langExplicit: false,
     dailyLastCompletedDate: null, dailyStreak: 0,
     remixHighest: 0, remixBestScoreByLevel: {},
     continueAdsUsedToday: 0, continueAdsDate: null,
@@ -345,7 +345,7 @@
       // sessionCount/ratingPromptShown ride along too - "reset progress" clears campaign
       // state, not this device's usage history, and re-asking for a rating right after a
       // reset would be an annoying non-sequitur for a player who already answered once.
-      const keep = { theme: _state.theme, sound: _state.sound, music: _state.music, vibration: _state.vibration, lang: _state.lang, adsRemovedUntil: _state.adsRemovedUntil, adsRemovedForever: _state.adsRemovedForever, ownedIapSkins: _state.ownedIapSkins, paidGems: _state.paidGems, paidHints: _state.paidHints, sessionCount: _state.sessionCount, ratingPromptShown: _state.ratingPromptShown, pendingVerifications: _state.pendingVerifications };
+      const keep = { theme: _state.theme, sound: _state.sound, music: _state.music, vibration: _state.vibration, lang: _state.lang, langExplicit: _state.langExplicit, adsRemovedUntil: _state.adsRemovedUntil, adsRemovedForever: _state.adsRemovedForever, ownedIapSkins: _state.ownedIapSkins, paidGems: _state.paidGems, paidHints: _state.paidHints, sessionCount: _state.sessionCount, ratingPromptShown: _state.ratingPromptShown, pendingVerifications: _state.pendingVerifications };
       _state = { ...defaults, ...keep };
       save(_state);
     },

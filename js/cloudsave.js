@@ -25,8 +25,19 @@ const CloudSave = (() => {
     'hints', 'paidHints', 'gems', 'paidGems',
     'ownedGemSkins', 'ownedIapSkins', 'ownedStreakSkins', 'selectedSkin',
     'dailyStreak', 'dailyLastCompletedDate', 'remixHighest', 'remixBestScoreByLevel',
-    'adsRemovedUntil', 'adsRemovedForever', 'nickname'
+    'adsRemovedUntil', 'adsRemovedForever', 'nickname',
+    // Synced so reinstalling can't re-farm the one-time link reward - the flag
+    // has to travel with the account, not the device.
+    'googleLinkRewardGiven'
   ];
+
+  // Fields backed by real money. A restore replaces local state with the
+  // cloud's, which would DESTROY anything bought on this device before signing
+  // in (paid gems/hints are consumables - Play Billing can't re-grant them like
+  // it does non-consumables). These merge instead of being overwritten.
+  const MERGE_MAX = ['paidGems', 'paidHints', 'adsRemovedUntil'];
+  const MERGE_UNION = ['ownedIapSkins'];
+  const MERGE_OR = ['adsRemovedForever'];
 
   // One-time reward for linking a Google account (see storage.js's
   // googleLinkRewardGiven flag) - small enough not to be worth chasing by
@@ -35,6 +46,22 @@ const CloudSave = (() => {
   const LINK_REWARD_HINTS = 2;
 
   const PUSH_DEBOUNCE_MS = 5000;
+  // @capacitor-firebase/authentication's signInWithGoogle can never settle at
+  // all: on a device whose Google account is in a bad-credential state, Play
+  // services' Credential Manager returns neither a result nor an error, so the
+  // plugin's promise stays pending and ui.js's button sits disabled on "..."
+  // for the rest of the session. Observed on the test tablet (logcat:
+  // "GetToken failed ... BadAuthentication" / "Long live credential not
+  // available"). Nothing here can fix the account, but it must not hang.
+  const SIGNIN_TIMEOUT_MS = 60000;
+
+  function withTimeout(promise, ms) {
+    let timer = null;
+    return Promise.race([
+      promise.finally(() => clearTimeout(timer)),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('signin_timeout')), ms); })
+    ]);
+  }
   let pushTimer = null;
   let linked = false; // mirrors firebase.auth().currentUser?.isAnonymous === false
 
@@ -52,6 +79,22 @@ const CloudSave = (() => {
   // between "nothing" and "nothing" wrapped in a modal.
   function isFreshLocalState() {
     return Storage.get('highestUnlocked') === 1 && Storage.get('totalScore') === 0 && Storage.get('gems') === 0;
+  }
+
+  // Firestore hands object fields back in ITS key order, not the order they
+  // went up in: levelData round-trips as {score, moves, completed, stars, time}
+  // where Storage holds {stars, moves, score, time, completed}. A plain
+  // JSON.stringify comparison therefore never matched, so checkForRestore()
+  // reported a conflict on every single launch for anyone who had finished even
+  // one level - the "your cloud save differs" modal, forever, over nothing.
+  // Sorting keys at every depth makes the comparison order-insensitive; array
+  // order is left alone, since for arrays it IS meaningful.
+  function stableStringify(v) {
+    if (Array.isArray(v)) return '[' + v.map(stableStringify).join(',') + ']';
+    if (v && typeof v === 'object') {
+      return '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + stableStringify(v[k])).join(',') + '}';
+    }
+    return JSON.stringify(v === undefined ? null : v);
   }
 
   function snapshotFromStorage() {
@@ -74,7 +117,7 @@ const CloudSave = (() => {
     const plugin = nativePlugin();
     if (!plugin) return { ok: false };
     try {
-      const result = await plugin.signInWithGoogle();
+      const result = await withTimeout(plugin.signInWithGoogle(), SIGNIN_TIMEOUT_MS);
       const idToken = result && result.credential && result.credential.idToken;
       if (!idToken) return { ok: false };
       const accessToken = result.credential.accessToken;
@@ -96,8 +139,16 @@ const CloudSave = (() => {
       }
 
       linked = true;
+      // Freshness MUST be sampled before the reward is granted: the reward adds
+      // gems, and isFreshLocalState() reads gems === 0. Granting first made
+      // every genuinely fresh reinstall look like a conflict, so the one case
+      // this whole feature exists for - reinstall, sign in, get your save back
+      // silently - showed a "which do you want to keep?" modal instead.
+      const wasFresh = isFreshLocalState();
+      const conflict = await checkForRestore(wasFresh);
+      // Granted after the restore so a restored cloud flag (or a restored gem
+      // balance) is what decides, not the pre-restore local state.
       maybeGrantLinkReward();
-      const conflict = await checkForRestore();
       return { ok: true, conflict };
     } catch (e) {
       console.warn('[CloudSave] signInWithGoogle failed', e);
@@ -113,6 +164,17 @@ const CloudSave = (() => {
     try {
       if (typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length) {
         await firebase.auth().signOut();
+      }
+    } catch {}
+    // Without this the app is left with no Firebase session at all: signOut()
+    // clears currentUser, but Leaderboard.ensureInit() caches its promise
+    // forever and never signs in again, so score submissions silently fail and
+    // a second sign-in attempt throws on a null currentUser - both until the
+    // app is restarted. Minting a fresh anonymous session restores the exact
+    // state a never-linked player is in.
+    try {
+      if (typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length) {
+        await firebase.auth().signInAnonymously();
       }
     } catch {}
     linked = false;
@@ -140,7 +202,7 @@ const CloudSave = (() => {
   // Returns the cloud snapshot if there's a real conflict for ui.js to resolve,
   // or null if there's nothing to do (no cloud doc yet, already restored
   // silently, or local already matches cloud).
-  async function checkForRestore() {
+  async function checkForRestore(freshOverride) {
     if (!linked || typeof firebase === 'undefined') return null;
     try {
       const uid = firebase.auth().currentUser && firebase.auth().currentUser.uid;
@@ -149,13 +211,20 @@ const CloudSave = (() => {
       if (!snap.exists) return null;
       const cloud = snap.data();
 
-      if (isFreshLocalState()) {
+      const fresh = (freshOverride === undefined) ? isFreshLocalState() : freshOverride;
+      if (fresh) {
         applyCloudSnapshot(cloud);
         return null;
       }
 
       const local = snapshotFromStorage();
-      const identical = SYNCED_FIELDS.every(k => JSON.stringify(local[k] ?? null) === JSON.stringify(cloud[k] ?? null));
+      // A field the cloud doc simply doesn't carry (written by an older build,
+      // before that field was added to SYNCED_FIELDS) is not a difference - it's
+      // an absence. Counting it as one would show every already-linked player a
+      // conflict modal the first time they launched a version that synced one
+      // more field.
+      const identical = SYNCED_FIELDS.every(k =>
+        !(k in cloud) || stableStringify(local[k] ?? null) === stableStringify(cloud[k] ?? null));
       return identical ? null : cloud;
     } catch (e) {
       console.warn('[CloudSave] checkForRestore failed', e);
@@ -169,7 +238,17 @@ const CloudSave = (() => {
   // to patch already-running screens/HUD in place.
   function applyCloudSnapshot(cloud) {
     SYNCED_FIELDS.forEach(k => {
-      if (cloud[k] !== undefined) Storage.set(k, cloud[k]);
+      if (cloud[k] === undefined) return;
+      const local = Storage.get(k);
+      let value = cloud[k];
+      if (MERGE_MAX.includes(k)) {
+        value = Math.max(Number(local) || 0, Number(cloud[k]) || 0);
+      } else if (MERGE_UNION.includes(k)) {
+        value = [...new Set([...(Array.isArray(local) ? local : []), ...(Array.isArray(cloud[k]) ? cloud[k] : [])])];
+      } else if (MERGE_OR.includes(k)) {
+        value = !!local || !!cloud[k];
+      }
+      Storage.set(k, value);
     });
     location.reload();
   }
