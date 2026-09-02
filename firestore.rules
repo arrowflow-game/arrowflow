@@ -74,10 +74,25 @@ service cloud.firestore {
     // exhaustively validating every field's shape (levelData/ownedGemSkins/etc. are
     // maps/arrays whose contents only this client ever reads back).
     match /saves/{uid} {
-      allow read, write: if request.auth != null
+      // Read and write MUST be separate rules here. `request.resource` exists only
+      // on a write - on a read it is null, so folding the field checks below into a
+      // combined `allow read, write` made every read throw a null-value error, which
+      // Firestore denies (rules fail closed). That would have silently broken the
+      // one thing cloud save exists for: checkForRestore() could never read the doc
+      // back after a reinstall, so a restore would always come up empty.
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if request.auth != null
         && request.auth.uid == uid
-        && request.resource.data.nickname is string
-        && request.resource.data.nickname.size() <= 20
+        // Nickname is optional here, unlike players/{uid} above where it is the
+        // leaderboard's display name and must exist. Setting one is genuinely
+        // skippable (the nickname prompt has a Skip button), and resetAll() drops
+        // it entirely, so cloudsave.js's snapshot sends null for it in both cases -
+        // an `is string` check alone silently denied every write from any player
+        // who had never named themselves, i.e. cloud save quietly not working at
+        // all for them.
+        && (!('nickname' in request.resource.data)
+            || request.resource.data.nickname == null
+            || (request.resource.data.nickname is string && request.resource.data.nickname.size() <= 20))
         && request.resource.data.currentLevel is int
         && request.resource.data.currentLevel >= 1
         && request.resource.data.currentLevel <= 300
@@ -91,6 +106,16 @@ service cloud.firestore {
         && request.resource.data.paidGems is int && request.resource.data.paidGems >= 0
         && request.resource.data.hints is int && request.resource.data.hints >= 0
         && request.resource.data.paidHints is int && request.resource.data.paidHints >= 0;
+    }
+
+    // Purchase-verification ledger (2026-09-02) - one doc per Google Play purchase
+    // token, written ONLY by the verifyPurchase Cloud Function (functions/index.js)
+    // through the Admin SDK, which bypasses these rules entirely. Clients have no
+    // business reading or writing it: it exists so a genuine purchase receipt
+    // can't be replayed by a second account, and a client that could edit it
+    // could defeat exactly that check.
+    match /verifiedPurchases/{purchaseToken} {
+      allow read, write: if false;
     }
   }
 }

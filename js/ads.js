@@ -23,6 +23,10 @@ const Ads = (() => {
   let initialized = false;
   let adReady = false;
   let interstitialReady = false;
+  // Google's UMP consent decision (canRequestAds/privacyOptionsRequirementStatus) -
+  // see requestConsent() below. Kept so ui.js's Settings "Privacy Options" row can
+  // decide whether to show itself without this module exposing the raw plugin.
+  let privacyOptionsRequired = false;
 
   function isNative() {
     return typeof Capacitor !== 'undefined' && !!Capacitor.isNativePlatform && Capacitor.isNativePlatform();
@@ -32,9 +36,53 @@ const Ads = (() => {
     return Capacitor.Plugins && Capacitor.Plugins.AdMob;
   }
 
+  // GDPR/UK/US-states ad consent (Google's UMP SDK, already bundled in
+  // @capacitor-community/admob - see consent/ in its type defs). Required by
+  // AdMob policy before requesting ads from a user in a region where consent
+  // applies (EEA/UK primarily) - requestConsentInfo() itself determines whether
+  // that's the case for this device/IP, so this runs unconditionally rather than
+  // trying to geo-detect ourselves. showConsentForm() only actually shows UI when
+  // isConsentFormAvailable && status===REQUIRED; everywhere else (most non-EEA
+  // devices) this resolves near-instantly with canRequestAds already true.
+  //
+  // Needs the AdMob console's own "Privacy & messaging" GDPR message configured
+  // for this app first (console.admob.com > Privacy & messaging) - without that,
+  // requestConsentInfo() reports no form available and canRequestAds stays as
+  // Google's own default for the user's region, same as not having this code at
+  // all, so this is safe to ship either way.
+  async function requestConsent() {
+    if (!isNative()) return true;
+    try {
+      const plugin = admob();
+      let info = await plugin.requestConsentInfo();
+      if (info.isConsentFormAvailable && info.status === 'REQUIRED') {
+        info = await plugin.showConsentForm();
+      }
+      privacyOptionsRequired = info.privacyOptionsRequirementStatus === 'REQUIRED';
+      return info.canRequestAds !== false;
+    } catch {
+      // Best-effort, same philosophy as the rest of this module - a UMP failure
+      // (e.g. no network on first launch) must never be the reason ads/IAP-adjacent
+      // features stop working. Falls back to allowing requests, matching what
+      // would happen if this consent step didn't exist at all.
+      return true;
+    }
+  }
+
+  function isPrivacyOptionsRequired() {
+    return privacyOptionsRequired;
+  }
+
+  async function showPrivacyOptions() {
+    if (!isNative()) return;
+    try { await admob().showPrivacyOptionsForm(); } catch {}
+  }
+
   async function init() {
     if (!isNative() || initialized) return;
     try {
+      const canRequestAds = await requestConsent();
+      if (!canRequestAds) return; // consent declined/pending - don't init the ad SDK at all
       await admob().initialize({ initializeForTesting: true });
       initialized = true;
       await prepare();
@@ -142,5 +190,5 @@ const Ads = (() => {
     }
   }
 
-  return { init, showRewardedAd, showInterstitial, isNative };
+  return { init, showRewardedAd, showInterstitial, isNative, isPrivacyOptionsRequired, showPrivacyOptions };
 })();

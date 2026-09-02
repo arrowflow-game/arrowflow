@@ -34,11 +34,25 @@ document.addEventListener('DOMContentLoaded', () => {
   // as soon as they're first rendered.
   Iap.init();
 
-  // Cloud save (native only, no-op on web/not-yet-linked) - if a Google session
-  // is already active from a previous launch, silently resolves any restore
-  // conflict the same way a fresh sign-in would (see js/cloudsave.js). Doesn't
-  // block the rest of startup - fires the conflict modal whenever it resolves.
-  CloudSave.init().then(conflict => { if (conflict) UI.openCloudSaveConflict(conflict); });
+  // Re-arm the local reminder notifications for the new day (native only).
+  // Deliberately passes no allowPrompt, so a player who hasn't granted
+  // permission yet is never prompted at cold start - see ensurePermission().
+  Notifications.refresh();
+
+  // Remote Config (js/remoteconfig.js) - applies its shipped defaults
+  // synchronously, then swaps in whatever last launch fetched. Cloud save is
+  // chained behind it rather than started in parallel because its kill switch
+  // has to be readable BEFORE the sign-in flow could act on a stale session;
+  // everything else RC tunes is read later, at the moment it's used. Neither
+  // call blocks the rest of startup below.
+  RemoteConfig.init().then(() => {
+    if (RemoteConfig.get('feature_cloud_save_enabled') === false) return;
+    // Cloud save (native only, no-op on web/not-yet-linked) - if a Google session
+    // is already active from a previous launch, silently resolves any restore
+    // conflict the same way a fresh sign-in would (see js/cloudsave.js). Fires
+    // the conflict modal whenever it resolves.
+    return CloudSave.init().then(conflict => { if (conflict) UI.openCloudSaveConflict(conflict); });
+  });
 
   // Init UI
   I18N.applyToDOM();

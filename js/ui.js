@@ -34,6 +34,13 @@ const UI = (() => {
     Storage.set('vibration', enabled);
   }
 
+  // Colorblind-friendly path labels (js/scene.js's drawColorblindMarks) - just a
+  // Storage flag, scene.js's per-frame render loop reads it live so no redraw
+  // trigger is needed here.
+  function applyColorblindMode(enabled) {
+    Storage.set('colorblindMode', enabled);
+  }
+
   function setSwitch(id, on) {
     const el = document.getElementById(id);
     if (!el) return;
@@ -45,6 +52,7 @@ const UI = (() => {
     setSwitch('toggle-music', Storage.get('music') !== false);
     setSwitch('toggle-sfx', Storage.get('sound') !== false);
     setSwitch('toggle-vibration', Storage.get('vibration') !== false);
+    setSwitch('toggle-colorblind', Storage.get('colorblindMode') === true);
     const isEn = I18N.currentLang() === 'en';
     setSwitch('toggle-lang', isEn);
     const langLabel = document.getElementById('lang-label');
@@ -52,6 +60,10 @@ const UI = (() => {
     const nickBtn = document.getElementById('btn-edit-nickname');
     if (nickBtn) nickBtn.textContent = Leaderboard.getNickname() || I18N.t('settings.nickname_btn');
     syncGoogleAccountUI();
+    // AdMob/UMP consent (js/ads.js) - only shown for players Google's consent
+    // form actually applies to (mainly EEA/UK); everyone else never sees this row.
+    const privacyRow = document.getElementById('settings-row-privacy');
+    if (privacyRow) privacyRow.classList.toggle('hidden', !Ads.isPrivacyOptionsRequired());
   }
 
   // Reflects CloudSave's current link state in the Settings row - shared by
@@ -61,6 +73,14 @@ const UI = (() => {
     const label = document.getElementById('google-account-label');
     const btn = document.getElementById('btn-google-signin');
     if (!label || !btn) return;
+    // Remote kill switch (js/remoteconfig.js) - cloud save is the newest and
+    // least device-tested system here, and hiding its only entry point is a far
+    // better first response to a report of lost progress than a release that
+    // takes days to reach anyone. Hiding the row does NOT sign an already-linked
+    // player out: their existing session and its syncing keep working, they just
+    // can't start a new link while the switch is off.
+    const row = document.getElementById('settings-row-google');
+    if (row) row.classList.toggle('hidden', RemoteConfig.get('feature_cloud_save_enabled') === false);
     const linked = CloudSave.isGoogleLinked();
     label.textContent = linked ? I18N.t('settings.google_signed_in') : I18N.t('settings.google_account');
     btn.textContent = linked ? I18N.t('settings.google_signout_btn') : I18N.t('settings.google_signin_btn');
@@ -176,7 +196,7 @@ const UI = (() => {
     const promoBtn = document.getElementById('btn-bundle-promo');
     if (promoBtn) {
       const ownedIapSkins = new Set(Storage.get('ownedIapSkins') || []);
-      const allOwned = bundleSkinIds('all').every(id => ownedIapSkins.has(id));
+      const allOwned = Skins.bundleIds('all').every(id => ownedIapSkins.has(id));
       promoBtn.classList.toggle('hidden', !Iap.isNative() || allOwned);
     }
   }
@@ -306,11 +326,11 @@ const UI = (() => {
       bundlesSection.classList.remove('hidden');
       const ownedIapSkins = new Set(Storage.get('ownedIapSkins') || []);
       const statusEl = document.getElementById('store-bundle-status');
-      const allOwned = bundleSkinIds('all').every(id => ownedIapSkins.has(id));
+      const allOwned = Skins.bundleIds('all').every(id => ownedIapSkins.has(id));
       statusEl.textContent = allOwned ? I18N.t('store.bundle_owned_all') : '';
       BUNDLE_KEYS.forEach(key => {
         const bbtn = document.getElementById('btn-bundle-' + key);
-        const remaining = bundleSkinIds(key).filter(id => !ownedIapSkins.has(id)).length;
+        const remaining = Skins.bundleIds(key).filter(id => !ownedIapSkins.has(id)).length;
         if (remaining === 0) { bbtn.classList.add('hidden'); return; }
         bbtn.classList.remove('hidden');
         bbtn.disabled = false;
@@ -415,16 +435,6 @@ const UI = (() => {
   const BUNDLE_FALLBACK_PRICES = { streak: '$4.99', royale: '$4.99', all: '$14.99' };
   function bundlePriceLabel(bundleKey) {
     return Iap.bundlePriceLabel(bundleKey) || BUNDLE_FALLBACK_PRICES[bundleKey];
-  }
-
-  // Which skin ids belong to each bundle - the single place this membership
-  // is defined, since js/iap.js can't reference Skins.ALL at its own parse
-  // time (script load order, see its SKIN_BUNDLES comment).
-  function bundleSkinIds(bundleKey) {
-    if (bundleKey === 'streak') return Skins.ALL.filter(s => s.unlock.type === 'streak').map(s => s.id);
-    if (bundleKey === 'royale') return Skins.ALL.filter(s => s.unlock.type === 'iap').map(s => s.id);
-    if (bundleKey === 'all') return Skins.ALL.filter(s => s.id !== 'default').map(s => s.id);
-    return [];
   }
 
   // HUD badge: a single status/CTA pill. Not-yet-removed -> tappable shortcut into
@@ -546,7 +556,7 @@ const UI = (() => {
     btn.disabled = true;
     Iap.purchaseBundle(bundleKey,
       () => {
-        bundleSkinIds(bundleKey).forEach(id => Storage.grantIapSkin(id));
+        Skins.bundleIds(bundleKey).forEach(id => Storage.grantIapSkin(id));
         Analytics.logEvent('skin_bundle_purchased', { bundle: bundleKey });
         buildStoreScreen();
         buildSkinsScreen();
@@ -760,7 +770,13 @@ const UI = (() => {
     Sound.playWheelSpin();
 
     setTimeout(() => {
-      if (source === 'free') Storage.useWheelFreeSpin();
+      if (source === 'free') {
+        Storage.useWheelFreeSpin();
+        // Same "ask at a moment the reminder obviously pays off" reasoning as
+        // game.js's Daily Challenge completion - they just used today's free
+        // spin, so tomorrow's is worth a nudge (true = prompting allowed).
+        Notifications.refresh(true);
+      }
       if (prize.type === 'gems') Storage.addGems(prize.amount);
       else Storage.addHints(prize.amount);
       refreshGemsDisplay();
@@ -809,7 +825,18 @@ const UI = (() => {
   // state (menu/HUD render, wheel modal build, hint-ad watched) so it never
   // shows stale.
   function updateNotifyDots() {
-    const wheelHasReward = Storage.isWheelFreeSpinAvailable() || Storage.remainingWheelBonusSpins() > 0;
+    // Remote kill switch (js/remoteconfig.js). Hides both entry points into the
+    // wheel rather than disabling them - a visibly dead button invites taps and
+    // then bug reports. Runs here because updateNotifyDots() is already called
+    // from every menu/HUD render, so the switch takes effect on the same beat as
+    // everything else about these buttons.
+    const wheelEnabled = RemoteConfig.get('feature_daily_wheel_enabled') !== false;
+    ['btn-wheel', 'btn-hud-wheel'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.toggle('hidden', !wheelEnabled);
+    });
+
+    const wheelHasReward = wheelEnabled && (Storage.isWheelFreeSpinAvailable() || Storage.remainingWheelBonusSpins() > 0);
     ['wheel-notify-dot', 'hud-wheel-notify-dot'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.classList.toggle('hidden', !wheelHasReward);
@@ -885,6 +912,10 @@ const UI = (() => {
   // prevent, just relocated instead of fixed.
   let adInProgress = false;
   let wasBackgroundedForPause = false;
+  // Set when backgrounding froze the level clock WITHOUT showing the pause modal
+  // (something was already covering the screen). Nothing would ever tap
+  // btn-resume in that case, so the foreground handler has to unfreeze it.
+  let clockFrozenSilently = false;
   function handleBackgroundForPause() {
     if (wasBackgroundedForPause) return;
     wasBackgroundedForPause = true;
@@ -897,10 +928,53 @@ const UI = (() => {
     // opening the pause modal underneath either would render it invisible
     // (both use a higher z-index) while still freezing the game clock.
     const anyModalOpen = document.querySelector('.modal-overlay:not(.hidden)') || document.querySelector('.tutorial-overlay');
-    if (inLevel && !anyModalOpen) openPauseModal();
+    if (!inLevel) return;
+    if (!anyModalOpen) { openPauseModal(); return; }
+    // A covering modal only means the pause modal can't be SHOWN - it doesn't
+    // mean the level clock should keep running. An incoming call (from the
+    // dialer or any app - LINE, Messenger, a game invite) that arrived while
+    // Settings or a tutorial coach-mark happened to be open used to leave the
+    // clock ticking for the whole call, quietly costing the player their pace
+    // stars and best time for something entirely outside the game. Freeze it
+    // here and let handleForegroundForPause() unfreeze it on the way back.
+    Game.pause();
+    clockFrozenSilently = true;
   }
   function handleForegroundForPause() {
     wasBackgroundedForPause = false;
+
+    // Counterpart to the silent freeze above - the pause modal never appeared,
+    // so there is no "เล่นต่อ" tap coming to unfreeze the clock.
+    if (clockFrozenSilently) {
+      clockFrozenSilently = false;
+      Game.resume();
+    }
+
+    // Sound.js silences music on EVERY backgrounding, but only the pause modal
+    // asks the player to tap "เล่นต่อ" to get it back - and handleBackgroundForPause
+    // above deliberately skips opening that modal whenever something is already
+    // covering the screen. So backgrounding while a tutorial coach-mark, the
+    // Settings modal, the fail modal, the leaderboard - anything but Pause - was
+    // showing left music paused with nothing anywhere that would ever resume it,
+    // and the player finished the level in silence. That is the recurring
+    // "switched apps and the music never came back" report: each round of fixes
+    // added resumeMusic() to one more button, and the next modal added
+    // reintroduced it.
+    //
+    // Fixed at the source instead: on returning to the foreground, restore music
+    // if this context is one where music belongs. Excluded, deliberately:
+    //   - the pause modal, which owns the explicit-resume rule (test47.mp4 - a
+    //     phone call must behave exactly like tapping Pause);
+    //   - the Wheel, which pauses music for its own sound effects;
+    //   - an ad in flight, whose own callback decides whether to resume;
+    //   - anything outside screen-game (Store/Skins/menu), where music is
+    //     supposed to be stopped and showScreen() restores it on the way back.
+    // resumeMusic() no-ops when music is already playing, so the per-button
+    // calls elsewhere stay harmless.
+    const gameActive = document.getElementById('screen-game').classList.contains('active');
+    const pauseOpen = !document.getElementById('modal-pause').classList.contains('hidden');
+    const wheelOpen = !document.getElementById('modal-wheel').classList.contains('hidden');
+    if (gameActive && !pauseOpen && !wheelOpen && !adInProgress) Sound.resumeMusic();
   }
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) handleBackgroundForPause();
@@ -937,6 +1011,27 @@ const UI = (() => {
         skinBtn.onclick = null;
       }
     }
+    // Share-my-score (2026-09-02) - offered on the win screen because that's
+    // the one moment the player has something they're actually pleased about.
+    // Hidden rather than disabled where nothing could handle a share (desktop
+    // browser with no clipboard access), and hidden for the Daily Challenge /
+    // REMIX, whose "level number" is an internal index that would mean nothing
+    // to whoever receives the message.
+    const shareBtn = document.getElementById('btn-share-score');
+    if (shareBtn) {
+      const shareable = typeof levelNum === 'number' && mode !== 'daily' && mode !== 'remix' && Share.isAvailable();
+      shareBtn.classList.toggle('hidden', !shareable);
+      shareBtn.onclick = !shareable ? null : async () => {
+        shareBtn.disabled = true;
+        const result = await Share.shareScore(levelNum, score, stars);
+        shareBtn.disabled = false;
+        // 'copied' is the desktop fallback - say so, since no share sheet
+        // appeared and otherwise the tap would look like it did nothing.
+        if (result === 'copied') alert(I18N.t('share.copied'));
+        if (result) Analytics.logEvent('score_shared', { level: levelNum, stars });
+      };
+    }
+
     winModal.classList.remove('hidden');
     winModal.classList.toggle('campaign-complete', !!isCampaignFinale);
     const titleEl = document.getElementById('win-title');
@@ -1818,6 +1913,10 @@ const UI = (() => {
       showScreen('screen-game');
     });
 
+    document.getElementById('btn-privacy-options').addEventListener('click', () => {
+      Ads.showPrivacyOptions();
+    });
+
     document.getElementById('btn-open-reset').addEventListener('click', () => {
       document.getElementById('modal-settings').classList.add('hidden');
       document.getElementById('modal-reset-confirm').classList.remove('hidden');
@@ -2020,6 +2119,11 @@ const UI = (() => {
 
     document.getElementById('toggle-sfx').addEventListener('click', () => {
       applySound(Storage.get('sound') === false);
+      syncSettingsUI();
+    });
+
+    document.getElementById('toggle-colorblind').addEventListener('click', () => {
+      applyColorblindMode(Storage.get('colorblindMode') !== true);
       syncSettingsUI();
     });
 

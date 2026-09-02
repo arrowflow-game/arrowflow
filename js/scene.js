@@ -117,6 +117,72 @@ const Scene3D = (() => {
   const COLOR_MOVING = '#2ecc71';
   const COLOR_BLOCKED = '#ff3b30';
 
+  // Colorblind-friendly path labels (2026-09-02) - the level generator's 12-hex
+  // COLORS palette (tools/generate_level.py) is far too many simultaneous colors
+  // for anyone with color vision deficiency to reliably tell apart (or even for
+  // most people past ~8-10), and this game's core mechanic - telling paths apart,
+  // and the Color-Match Combo's "is this the same color as the last one" check -
+  // depends entirely on color today. Rather than trying to invent 12 visually
+  // distinct abstract shapes at a few pixels' size (unreliable at that scale),
+  // this stamps a small badge with an unambiguous character along each path's
+  // full length, keyed to the level data's literal hex string so it survives
+  // any future palette edits without needing to stay in index-order sync with
+  // the Python generator. Off by default (Storage's colorblindMode toggle,
+  // Settings screen) - zero cost for players who don't need it.
+  const COLOR_LABELS = (() => {
+    const palette = ['#FF3366', '#1a7fe8', '#33CC66', '#FFB300', '#9933FF', '#00E5FF',
+                      '#FF7A00', '#E040FB', '#00BFA5', '#C0CA33', '#3D5AFE', '#D50000'];
+    const chars = '123456789ABC'.split('');
+    const map = {};
+    palette.forEach((hex, i) => { map[hex.toLowerCase()] = chars[i]; });
+    return map;
+  })();
+
+  function colorLabelFor(hex) {
+    return hex ? COLOR_LABELS[hex.toLowerCase()] || null : null;
+  }
+
+  // Stamps colorLabelFor(path.color)'s character at roughly one-per-cell
+  // intervals along every polyline, using path's own fixed identity color
+  // (not the transient status color drawn on top of it - see getPathColor) so
+  // the label stays the same character while a path flashes red/green for
+  // blocked/moving, letting the player still track "which color is this"
+  // through those transient states.
+  function drawColorblindMarks(ctx, polylines, cellSize, path) {
+    const label = colorLabelFor(path.color);
+    if (!label) return;
+    const spacing = cellSize;
+    const r = cellSize * 0.16;
+    ctx.save();
+    ctx.font = `bold ${Math.round(cellSize * 0.22)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    polylines.forEach(poly => {
+      let distToNext = spacing * 0.5; // offset from cell edges/the arrowhead
+      for (let i = 1; i < poly.length; i++) {
+        const a = poly[i - 1], b = poly[i];
+        const segLen = Math.hypot(b.x - a.x, b.y - a.y);
+        while (distToNext <= segLen) {
+          const t = segLen > 0 ? distToNext / segLen : 0;
+          const x = a.x + (b.x - a.x) * t;
+          const y = a.y + (b.y - a.y) * t;
+          ctx.beginPath();
+          ctx.arc(x, y, r, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(255,255,255,0.88)';
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          ctx.fillStyle = '#111';
+          ctx.fillText(label, x, y + 0.5);
+          distToNext += spacing;
+        }
+        distToNext -= segLen;
+      }
+    });
+    ctx.restore();
+  }
+
   // Per-tier scene background mood - escalates from a calm/neutral tone at the
   // start of the campaign toward a warm, intense tone at ASCENSION (the final,
   // hardest tier), plus pseudo-tiers for DAILY and REMIX (post-300 endless) modes.
@@ -1425,6 +1491,8 @@ const Scene3D = (() => {
     } else {
       drawStyledPath(ctx, polylines, cellSize, color, lineStyle, path.id + ':' + faceKey, performance.now());
     }
+
+    if (Storage.get('colorblindMode')) drawColorblindMarks(ctx, polylines, cellSize, path);
 
     if (headPt) {
       let dir = path.exitDir;

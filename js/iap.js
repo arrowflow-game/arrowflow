@@ -132,6 +132,32 @@ const Iap = (() => {
   // below to recognize which returned purchases are safe to auto-consume.
   const CONSUMABLE_PRODUCT_IDS = new Set([...Object.values(HINT_PACKS), ...Object.values(GEM_PACKS)].map(e => e.productId));
 
+  // --- Server-side purchase verification (2026-09-02) ---------------------
+  // Every branch below that grants an entitlement now also asks the backend
+  // (functions/index.js) whether Google agrees the purchase is real. The
+  // grant itself is NOT gated on that answer: the player already went through
+  // the purchase sheet, and making them wait on - or lose a purchase to - a
+  // network round trip would punish paying customers to inconvenience
+  // cheaters. Instead we grant immediately and reconcile after, revoking only
+  // on a confident "invalid" and retrying anything inconclusive on a later
+  // app start (see sweepPendingVerifications()).
+  const VERIFY_URL = 'https://us-central1-arrowflow-8d6a8.cloudfunctions.net/verifyPurchase';
+
+  // Reverse index: productId -> how to undo that product's grant. Built from
+  // the tables above so it can't drift out of sync with them. Skin bundles are
+  // resolved through Skins.bundleIds() at revoke time rather than baked in
+  // here, since js/skins.js isn't loaded yet at this file's parse time (same
+  // load-order constraint the SKIN_BUNDLES comment describes).
+  const REVOKE_BY_PRODUCT = (() => {
+    const map = {};
+    Object.values(ADS_TIERS).forEach(t => { map[t.productId] = { kind: 'ads', days: t.days }; });
+    Object.values(HINT_PACKS).forEach(p => { map[p.productId] = { kind: 'hints', amount: p.hints }; });
+    Object.values(GEM_PACKS).forEach(p => { map[p.productId] = { kind: 'gems', amount: p.gems }; });
+    Object.entries(SKINS_IAP).forEach(([skinId, e]) => { map[e.productId] = { kind: 'skin', skinId }; });
+    Object.entries(SKIN_BUNDLES).forEach(([bundleKey, e]) => { map[e.productId] = { kind: 'bundle', bundleKey }; });
+    return map;
+  })();
+
   const cachedPriceLabels = {}; // productId -> localized price string
 
   function isNative() {
@@ -162,6 +188,7 @@ const Iap = (() => {
       // Best-effort - the purchase functions below still work without cached prices.
     }
     sweepStuckConsumables();
+    sweepPendingVerifications();
   }
 
   // Self-healing: consumable purchases (hint/gem packs) are supposed to be
@@ -200,6 +227,104 @@ const Iap = (() => {
       }
     } catch {
       // Best-effort - no sweep this launch is fine, next app start retries.
+    }
+  }
+
+  // Asks the backend to check this purchase token against Google Play.
+  // Resolves to 'valid' | 'invalid' | 'unknown'. 'unknown' covers everything
+  // that isn't a verdict about the player - offline, function not deployed,
+  // Firebase session not ready, our own 503 - and is always treated as "keep
+  // the purchase, ask again later", never as grounds to take anything away.
+  async function verifyOnServer(productId, purchaseToken) {
+    try {
+      // The backend identifies the player by their Firebase ID token, so the
+      // auth session has to exist before we can ask anything. Reuses
+      // Leaderboard's own init (rather than signing in a second time) since
+      // that's the single session this whole app authenticates with - it's
+      // also what makes the token a stable identity across a Google link,
+      // which is what the replay check on the server keys off.
+      const ready = await Leaderboard.ensureInit();
+      if (!ready || typeof firebase === 'undefined' || !firebase.apps || !firebase.apps.length) return 'unknown';
+      const user = firebase.auth().currentUser;
+      if (!user) return 'unknown';
+      const idToken = await user.getIdToken();
+      const res = await fetch(VERIFY_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ productId, purchaseToken })
+      });
+      if (!res.ok) return 'unknown';
+      const data = await res.json();
+      return data.status === 'valid' ? 'valid' : data.status === 'invalid' ? 'invalid' : 'unknown';
+    } catch {
+      return 'unknown';
+    }
+  }
+
+  // Undoes the entitlement a rejected productId had granted. Best-effort by
+  // design: some of it may already have been spent (gems, hints), and
+  // Storage's revoke* mutators clamp at zero rather than going negative -
+  // under-collecting is a far better failure than corrupting a balance.
+  function revokeEntitlement(productId) {
+    const r = REVOKE_BY_PRODUCT[productId];
+    if (!r) return;
+    if (r.kind === 'ads') Storage.revokeAdsRemoved(r.days);
+    else if (r.kind === 'hints') Storage.revokePaidHints(r.amount);
+    else if (r.kind === 'gems') Storage.revokePaidGems(r.amount);
+    else if (r.kind === 'skin') Storage.revokeIapSkins([r.skinId]);
+    else if (r.kind === 'bundle') Storage.revokeIapSkins(Skins.bundleIds(r.bundleKey));
+  }
+
+  // Runs verification for one granted purchase and acts on the verdict, and
+  // returns that verdict for the sweep's benefit. Never awaited by the purchase
+  // flow itself - the player's UI has already moved on by then.
+  async function reconcilePurchase(productId, purchaseToken) {
+    const verdict = await verifyOnServer(productId, purchaseToken);
+    if (verdict === 'valid') {
+      Storage.removePendingVerification(purchaseToken);
+      return verdict;
+    }
+    if (verdict === 'unknown') {
+      // Queue (idempotently) for a retry on a future app start.
+      Storage.addPendingVerification(productId, purchaseToken);
+      return verdict;
+    }
+    // Confident rejection: forged token, refunded/cancelled order, or a real
+    // receipt already claimed by a different account.
+    Storage.removePendingVerification(purchaseToken);
+    revokeEntitlement(productId);
+    try { Analytics.logEvent('purchase_verification_failed', { product: productId }); } catch {}
+    // Reload rather than trying to repaint whatever screen happens to be open:
+    // a revoke can touch skins, currencies and the ads state at once, and this
+    // path is rare enough (a real customer should never see it) that
+    // correctness of what's on screen matters more than smoothness.
+    try { alert(I18N.t('iap.purchase_invalid')); } catch {}
+    location.reload();
+  }
+
+  // A purchase we still can't get an answer about after this long is given up
+  // on - kept, not revoked. The realistic reason for hitting this isn't a
+  // month-long outage, it's the backend never having been deployed at all
+  // (functions/README.md's setup is deliberately deferrable), and retrying such
+  // a purchase forever would only mean a growing queue of requests that are
+  // known in advance to fail.
+  const PENDING_VERIFICATION_TTL_MS = 30 * 86400000;
+
+  // Retries every purchase left unresolved by an earlier launch. Fire-and-forget
+  // from init(), sequential rather than parallel so a long backlog can't fire a
+  // burst of requests at the function on a cold start.
+  async function sweepPendingVerifications() {
+    if (!isNative()) return;
+    for (const p of Storage.getPendingVerifications()) {
+      if (Date.now() - (p.firstSeen || 0) > PENDING_VERIFICATION_TTL_MS) {
+        Storage.removePendingVerification(p.purchaseToken);
+        continue;
+      }
+      const verdict = await reconcilePurchase(p.productId, p.purchaseToken);
+      // One inconclusive answer means the backend is unreachable right now, so
+      // every remaining entry would answer the same way - stop instead of
+      // walking the whole queue to collect identical failures.
+      if (verdict === 'unknown') return;
     }
   }
 
@@ -271,19 +396,28 @@ const Iap = (() => {
       if (onFailed) onFailed();
     }, 20000);
     try {
-      await plugin().purchaseProduct({
+      const tx = await plugin().purchaseProduct({
         productIdentifier: entry.productId,
         productType: 'inapp',
         isConsumable
       });
       clearTimeout(failSafeTimer);
       onGranted(entry);
+      // After the grant, never before it - see the VERIFY_URL comment block.
+      // On Android the plugin reports Play Billing's purchaseToken as
+      // transactionId (NativePurchasesPlugin.handlePurchase puts
+      // getPurchaseToken() in that field); without one there's nothing the
+      // server could check, so the purchase simply stays unverified.
+      const token = tx && (tx.transactionId || tx.purchaseToken);
+      if (token) reconcilePurchase(entry.productId, token);
     } catch (err) {
       clearTimeout(failSafeTimer);
       if (!isConsumable && isAlreadyOwnedError(err)) {
         // Already genuinely owned by this account - treat exactly like a
         // fresh successful purchase (same grant path, no re-charge since
-        // Google itself didn't charge anything here either).
+        // Google itself didn't charge anything here either). Nothing to
+        // verify: Play Billing itself is the one asserting ownership here,
+        // and it hands back no token with the rejection anyway.
         onGranted(entry);
         return;
       }
@@ -310,9 +444,11 @@ const Iap = (() => {
           if (!failedAlready) { failedAlready = true; if (onFailed) onFailed(); }
         }, 15000);
         plugin().purchaseProduct({ productIdentifier: entry.productId, productType: 'inapp', isConsumable })
-          .then(() => {
+          .then((tx) => {
             clearTimeout(retryFailSafe);
             onGranted(entry);
+            const token = tx && (tx.transactionId || tx.purchaseToken);
+            if (token) reconcilePurchase(entry.productId, token);
           })
           .catch(() => {
             clearTimeout(retryFailSafe);

@@ -216,5 +216,17 @@ const Skins = (() => {
     return false;
   }
 
-  return { ALL, getById, isUnlockedFor };
+  // Which skin ids each SKIN_BUNDLES key (js/iap.js) covers. Lives here rather
+  // than in ui.js (where it started) or iap.js because BOTH now need it - ui.js
+  // to grant a bundle purchase, iap.js to undo one the server rejects - and a
+  // membership list that disagrees between the grant and the revoke would leave
+  // skins permanently stranded as owned.
+  function bundleIds(bundleKey) {
+    if (bundleKey === 'streak') return ALL.filter(s => s.unlock.type === 'streak').map(s => s.id);
+    if (bundleKey === 'royale') return ALL.filter(s => s.unlock.type === 'iap').map(s => s.id);
+    if (bundleKey === 'all') return ALL.filter(s => s.id !== 'default').map(s => s.id);
+    return [];
+  }
+
+  return { ALL, getById, isUnlockedFor, bundleIds };
 })();

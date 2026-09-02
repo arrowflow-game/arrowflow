@@ -295,10 +295,14 @@
           <button id="toggle-vibration" class="switch" role="switch" aria-checked="true" aria-label="Toggle vibration"><span class="switch-knob"></span></button>
         </div>
         <div class="settings-row">
+          <span class="settings-label" data-i18n="settings.colorblind">👁️ โหมดช่วยแยกสี</span>
+          <button id="toggle-colorblind" class="switch" role="switch" aria-checked="false" aria-label="Toggle colorblind-friendly mode"><span class="switch-knob"></span></button>
+        </div>
+        <div class="settings-row">
           <span class="settings-label" id="lang-label" data-i18n="settings.language">🌐 Language</span>
           <button id="toggle-lang" class="switch" role="switch" aria-checked="false" aria-label="Toggle language"><span class="switch-knob"></span></button>
         </div>
-        <div class="settings-row">
+        <div class="settings-row" id="settings-row-google">
           <span class="settings-label" id="google-account-label" data-i18n="settings.google_account">🔗 บัญชี Google</span>
           <button id="btn-google-signin" class="btn btn-outline btn-sm" data-i18n="settings.google_signin_btn">เชื่อมต่อ</button>
         </div>
@@ -313,6 +317,10 @@
         <div class="settings-row">
           <span class="settings-label" data-i18n="settings.skins">🎨 สกิน</span>
           <button id="btn-settings-skins" class="btn btn-outline btn-sm" data-i18n="settings.skins_btn">เปลี่ยนสกิน</button>
+        </div>
+        <div id="settings-row-privacy" class="settings-row hidden">
+          <span class="settings-label" data-i18n="settings.privacy">🔒 ความเป็นส่วนตัว</span>
+          <button id="btn-privacy-options" class="btn btn-outline btn-sm" data-i18n="settings.privacy_btn">ตัวเลือกโฆษณา</button>
         </div>
         <div class="settings-row">
           <span class="settings-label" data-i18n="settings.reset">🗑️ ล้างข้อมูล</span>
@@ -401,6 +409,9 @@
       <div class="modal-btns">
         <button id="btn-next"   class="btn btn-primary btn-lg" data-i18n="win.next">NEXT LEVEL →</button>
         <button id="btn-view-leaderboard" class="btn btn-outline" data-i18n="win.leaderboard">🏆 ดูอันดับ</button>
+        <!-- Hidden by default; ui.js unhides it only where sharing can actually
+             do something (native share sheet / Web Share / clipboard). -->
+        <button id="btn-share-score" class="btn btn-outline hidden" data-i18n="win.share">📤 แชร์คะแนน</button>
         <button id="btn-replay" class="btn btn-outline" data-i18n="win.replay">↺ Replay</button>
       </div>
     </div>
@@ -492,6 +503,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js" integrity="sha384-I1LYojsZ5RM1cOda44Z2h42Qa6YfsQ1XkXxREnhp4ueYBR/4d1pG1K+NZM537Vsj" crossorigin="anonymous"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js" integrity="sha384-Ke0FJhH7LyRqDxZ0wt+/OXV38yfQVu7g9VPEEGjYmB4RVOY/ta04uecRhsMwT7V3" crossorigin="anonymous"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-analytics-compat.js" integrity="sha384-6Jot2RmoS66/9faJyjQ3J3Oe7wiJuUr+Hgs6+3Yzpi8q532pPlLSgu96BpQTKL6t" crossorigin="anonymous"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-remote-config-compat.js" integrity="sha384-2fe8u0fvm/E7rQBGGGN8kSGxQ8NW21q8S5imiIXPHtSxY41QwDX9JRZYwfBWpvdC" crossorigin="anonymous"></script>
   <script src="js/storage.js"></script>
   <script src="js/i18n.js"></script>
   <script src="js/analytics.js"></script>
@@ -501,6 +513,9 @@
   <script src="js/appUpdate.js"></script>
   <script src="js/leaderboard.js"></script>
   <script src="js/cloudsave.js"></script>
+  <script src="js/notifications.js"></script>
+  <script src="js/share.js"></script>
+  <script src="js/remoteconfig.js"></script>
   <script src="js/sound.js"></script>
   <script src="js/haptics.js"></script>
   <script src="js/levels.js"></script>

@@ -672,8 +672,11 @@ const Game = (() => {
 
     const parTime = state.paths.length * 2.5;
     let paceStars = 1;
-    if (elapsedSec <= parTime * 3) paceStars = 3;
-    else if (elapsedSec <= parTime * 6) paceStars = 2;
+    // Multipliers are Remote-Config tunable (js/remoteconfig.js) so the pacing
+    // can be loosened or tightened against real completion times without a
+    // release; both default to the values this shipped with.
+    if (elapsedSec <= parTime * RemoteConfig.get('star_pace_fast_multiplier')) paceStars = 3;
+    else if (elapsedSec <= parTime * RemoteConfig.get('star_pace_ok_multiplier')) paceStars = 2;
 
     state.stars = Math.min(accuracyStars, paceStars);
 
@@ -691,6 +694,11 @@ const Game = (() => {
         Storage.addHints(2); // bonus hints, only on first completion of the day
         gemsEarned = Storage.awardDailyGems(stars);
         if (gemsEarned > 0) gemsBonusType = 'daily';
+        // First real engagement moment for reminder notifications - the player
+        // just finished a Daily Challenge and now has a streak worth protecting,
+        // so this is where it's worth asking for notification permission (true =
+        // prompting allowed, unlike the silent app-start refresh in main.js).
+        Notifications.refresh(true);
       }
       const newStreak = Storage.get('dailyStreak') || 0;
       newlyUnlockedSkin = Skins.ALL.find(s => s.unlock.type === 'streak' && s.unlock.value > prevStreak && s.unlock.value <= newStreak) || null;

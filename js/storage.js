@@ -3,7 +3,7 @@
   const TOTAL_LEVELS = 300; // kept in sync with TOTAL_LEVELS in js/ui.js
   const defaults = {
     currentLevel: 1, highestUnlocked: 1, levelData: {}, totalStars: 0, totalScore: 0, hints: 3, paidHints: 0,
-    theme: 'light', sound: true, music: true, vibration: true, tutorialSeen: false, dailyTipSeen: false, lang: 'en',
+    theme: 'light', sound: true, music: true, vibration: true, colorblindMode: false, tutorialSeen: false, dailyTipSeen: false, lang: 'en',
     dailyLastCompletedDate: null, dailyStreak: 0,
     remixHighest: 0, remixBestScoreByLevel: {},
     continueAdsUsedToday: 0, continueAdsDate: null,
@@ -47,14 +47,26 @@
     // One-time reward for linking a Google account (js/cloudsave.js), same gate
     // shape as iapRestoreHintShown above - only true once, forever, so signing
     // out and back in on the same account never re-grants it.
-    googleLinkRewardGiven: false
+    googleLinkRewardGiven: false,
+    // Purchases granted locally but not yet confirmed by the server-side
+    // verifier (js/iap.js -> functions/index.js). Entries are
+    // { productId, purchaseToken, firstSeen } and are retried on every app
+    // start until the server answers definitively. Device-and-token specific,
+    // so deliberately NOT in cloudsave.js's SYNCED_FIELDS - a retry belongs to
+    // the device that made the purchase, not to the account.
+    pendingVerifications: []
   };
 
   const RATING_SESSION_THRESHOLD = 5;
   const RATING_LEVELS_THRESHOLD = 5;
 
-  const GEMS_PER_STAR = 5;
-  const GEMS_PER_STAR_MILESTONE = 6;
+  // Tunable at runtime by js/remoteconfig.js via applyTuning() below. `let`, not
+  // `const`, purely for that - the shipped values here remain the defaults and
+  // the only thing this module knows about; Remote Config pushes new numbers IN,
+  // Storage never reaches out for them, so this file keeps having no dependencies
+  // (same arrangement as the _listeners hook cloudsave.js subscribes to).
+  let GEMS_PER_STAR = 5;
+  let GEMS_PER_STAR_MILESTONE = 6;
   function isMilestoneLevel(n) { return typeof n === 'number' && n % 10 === 0; }
   function isEpicLevel(n) { return typeof n === 'number' && n % 100 === 0; }
 
@@ -68,8 +80,13 @@
   const DAILY_AD_CAPS = { hint: 5, continue: 5 };
   const WHEEL_BONUS_SPIN_DAILY_CAP = 5;
 
+  let INTERSTITIAL_MIN_LEVELS = 3;
+  let INTERSTITIAL_MAX_LEVELS = 5;
+
   function rollInterstitialThreshold() {
-    return 3 + Math.floor(Math.random() * 3); // 3, 4, or 5 inclusive
+    const lo = INTERSTITIAL_MIN_LEVELS;
+    const hi = Math.max(lo, INTERSTITIAL_MAX_LEVELS);
+    return lo + Math.floor(Math.random() * (hi - lo + 1)); // inclusive both ends
   }
 
   function localDateStr() {
@@ -99,6 +116,33 @@
   return {
     get: (key) => _state[key],
     set: (key, val) => { _state[key] = val; save(_state); },
+
+    // Remote Config entry point (js/remoteconfig.js). Every field is optional and
+    // each is validated here rather than trusted: this is the one place in the app
+    // where a number arrives from outside the build, and a bad one (a console typo
+    // reaching this far, a 0 ad cap, min > max) would show up later as a confusing
+    // gameplay bug with no obvious link back to its source. Anything that doesn't
+    // pass leaves the shipped default in place.
+    applyTuning(t) {
+      if (!t) return;
+      const num = (v, min, max) => (typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max) ? v : null;
+      const gps = num(t.gemsPerStar, 0, 1000);
+      const gpsm = num(t.gemsPerStarMilestone, 0, 1000);
+      const capH = num(t.adCapHint, 0, 100);
+      const capC = num(t.adCapContinue, 0, 100);
+      const iMin = num(t.interstitialMin, 1, 100);
+      const iMax = num(t.interstitialMax, 1, 100);
+      if (gps !== null) GEMS_PER_STAR = gps;
+      if (gpsm !== null) GEMS_PER_STAR_MILESTONE = gpsm;
+      if (capH !== null) DAILY_AD_CAPS.hint = capH;
+      if (capC !== null) DAILY_AD_CAPS.continue = capC;
+      // Applied as a pair only - a min above the current max (or vice versa)
+      // would otherwise silently pin the interstitial gap to one value.
+      if (iMin !== null && iMax !== null && iMin <= iMax) {
+        INTERSTITIAL_MIN_LEVELS = iMin;
+        INTERSTITIAL_MAX_LEVELS = iMax;
+      }
+    },
     onChange: (fn) => { _listeners.push(fn); },
     completeLevel(levelNum, stars, moves, score, timeSec) {
       const prev = _state.levelData[levelNum];
@@ -188,6 +232,42 @@
       save(_state);
       return true;
     },
+    // --- Server-side purchase verification (2026-09-02, see js/iap.js) ---
+    // The retry queue for purchases the verifier couldn't answer for yet.
+    // addPendingVerification is idempotent per token so a retry that itself
+    // ends "unknown" doesn't stack a duplicate entry every launch.
+    getPendingVerifications: () => [..._state.pendingVerifications],
+    addPendingVerification(productId, purchaseToken) {
+      if (_state.pendingVerifications.some(p => p.purchaseToken === purchaseToken)) return;
+      _state.pendingVerifications = [..._state.pendingVerifications, { productId, purchaseToken, firstSeen: Date.now() }];
+      save(_state);
+    },
+    removePendingVerification(purchaseToken) {
+      _state.pendingVerifications = _state.pendingVerifications.filter(p => p.purchaseToken !== purchaseToken);
+      save(_state);
+    },
+
+    // Revocation mutators, mirroring the grant* ones above one-for-one. Only
+    // ever called after the server has positively identified a purchase as
+    // forged/refunded/replayed - never on a network failure (see js/iap.js).
+    // All of them clamp rather than trusting the amount: some of what was
+    // granted may already have been spent, and a negative balance would be a
+    // worse bug than an under-collected revocation.
+    revokePaidHints: (n) => { _state.paidHints = Math.max(0, _state.paidHints - n); save(_state); },
+    revokePaidGems: (n) => { _state.paidGems = Math.max(0, _state.paidGems - n); save(_state); },
+    revokeIapSkins(skinIds) {
+      const drop = new Set(skinIds);
+      _state.ownedIapSkins = _state.ownedIapSkins.filter(id => !drop.has(id));
+      save(_state);
+    },
+    // days === null revokes the permanent "forever" tier; otherwise the window
+    // shrinks by exactly what that tier had added (grantAdsRemoved's inverse).
+    revokeAdsRemoved(days) {
+      if (days === null) _state.adsRemovedForever = false;
+      else _state.adsRemovedUntil = Math.max(0, _state.adsRemovedUntil - days * 86400000);
+      save(_state);
+    },
+
     grantIapSkin(skinId) {
       if (!_state.ownedIapSkins.includes(skinId)) _state.ownedIapSkins = [..._state.ownedIapSkins, skinId];
       save(_state);
@@ -251,6 +331,9 @@
     // real money already spent: adsRemovedUntil/Forever, ownedIapSkins (includes
     // skins bought with gems where paidGems covered any part of the cost - see
     // spendGems()'s earned-first logic above), paidGems, and paidHints.
+    // `pendingVerifications` rides along too - it's unfinished real-money bookkeeping,
+    // not progress, and dropping it would silently abandon a purchase the server
+    // hasn't ruled on yet.
     // `hints` and `gems` (the EARNED pools) and `ownedGemSkins` (skins funded entirely
     // by earned gems) are NOT kept - those reset to defaults along with campaign
     // progress, same as any other earned-not-paid state.
@@ -262,7 +345,7 @@
       // sessionCount/ratingPromptShown ride along too - "reset progress" clears campaign
       // state, not this device's usage history, and re-asking for a rating right after a
       // reset would be an annoying non-sequitur for a player who already answered once.
-      const keep = { theme: _state.theme, sound: _state.sound, music: _state.music, vibration: _state.vibration, lang: _state.lang, adsRemovedUntil: _state.adsRemovedUntil, adsRemovedForever: _state.adsRemovedForever, ownedIapSkins: _state.ownedIapSkins, paidGems: _state.paidGems, paidHints: _state.paidHints, sessionCount: _state.sessionCount, ratingPromptShown: _state.ratingPromptShown };
+      const keep = { theme: _state.theme, sound: _state.sound, music: _state.music, vibration: _state.vibration, lang: _state.lang, adsRemovedUntil: _state.adsRemovedUntil, adsRemovedForever: _state.adsRemovedForever, ownedIapSkins: _state.ownedIapSkins, paidGems: _state.paidGems, paidHints: _state.paidHints, sessionCount: _state.sessionCount, ratingPromptShown: _state.ratingPromptShown, pendingVerifications: _state.pendingVerifications };
       _state = { ...defaults, ...keep };
       save(_state);
     },
