@@ -1266,6 +1266,39 @@ const Scene3D = (() => {
 
   function segFaceKey(s) { return Polycube.faceKey(s.cube, s.dir); }
 
+  // faceKey -> the paths that have at least one segment on that face.
+  //
+  // Redrawing a face used to scan EVERY path in the level and, for each, rebuild a
+  // face key string for every one of its segments just to decide whether to draw it.
+  // On the densest board (level 262: 144 faces, 337 paths) a full redraw did that
+  // roughly 390,000 times before drawing anything - which is most of why a single
+  // face cost ~8ms on the tablet and a full redraw took 1.2 seconds.
+  //
+  // Which face a path sits on cannot change within a level: segments are fixed level
+  // data, and clearing a path only toggles flags. So this is built once per level and
+  // reused, with the cleared/moving filtering still done per draw. Keyed on the paths
+  // array identity - game.js hands the same array through the whole level and a fresh
+  // one on load, so a stale index is not representable.
+  let pathsByFace = new Map();
+  let pathsByFaceSrc = null;
+  function pathsOnFace(paths, key) {
+    if (paths !== pathsByFaceSrc) {
+      pathsByFace = new Map();
+      paths.forEach(p => {
+        const seen = new Set();
+        p.segments.forEach(s => {
+          const k = segFaceKey(s);
+          if (seen.has(k)) return;
+          seen.add(k);
+          const arr = pathsByFace.get(k);
+          if (arr) arr.push(p); else pathsByFace.set(k, [p]);
+        });
+      });
+      pathsByFaceSrc = paths;
+    }
+    return pathsByFace.get(key) || [];
+  }
+
   // Redrawing + re-uploading every dirty face's texture every animation frame is
   // expensive. Callers that know exactly which faces changed (game.js, mid-
   // animation) pass that set explicitly as a Set of face keys; `true` forces
@@ -1373,14 +1406,17 @@ const Scene3D = (() => {
         ctx.stroke();
       });
 
-      paths.forEach(p => {
+      // Only the paths actually on this face (see pathsOnFace) - iterating every
+      // path in the level here, and re-deriving its face membership per face, was
+      // the dominant cost of a redraw.
+      pathsOnFace(paths, key).forEach(p => {
         // A path that's already committed to exiting ('moving') is drawn as
         // instantly gone from the face, not progressively slid off - see
         // the exit-shot flourish in shootExitArrow()/drawExitShots(), which
         // is now the ONLY visual for a clearing path (previously the two
         // ran concurrently at different speeds and read as two disconnected
         // lines, reported directly with a screenshot).
-        if (!p.cleared && p.status !== 'moving' && p.segments.some(s => segFaceKey(s) === key)) {
+        if (!p.cleared && p.status !== 'moving') {
           const highlighted = p.id === highlightPathId && performance.now() < highlightUntil;
           const isGolden = p.id === goldenPathId;
           drawPathOnFace(ctx, p, key, highlighted, isGolden);
