@@ -10,6 +10,10 @@ const UI = (() => {
   // Same idea for Skins - the menu button and the Settings shortcut (reachable from
   // pause mid-game) both open screen-skins, but need to land back in different places.
   let skinsReturnScreen = 'screen-menu';
+  // Holds the cloud snapshot between showing modal-cloudsave-conflict and the
+  // player actually picking a side - set by openCloudSaveConflict(), read/cleared
+  // by the modal's own two button handlers (wireEvents(), below).
+  let pendingCloudSnapshot = null;
 
   function applySound(enabled) {
     Storage.set('sound', enabled);
@@ -47,6 +51,27 @@ const UI = (() => {
     if (langLabel) langLabel.textContent = I18N.t('settings.language') + ' (' + (isEn ? 'Eng' : 'ไทย') + ')';
     const nickBtn = document.getElementById('btn-edit-nickname');
     if (nickBtn) nickBtn.textContent = Leaderboard.getNickname() || I18N.t('settings.nickname_btn');
+    syncGoogleAccountUI();
+  }
+
+  // Reflects CloudSave's current link state in the Settings row - shared by
+  // syncSettingsUI() (every time Settings opens) and the sign-in/out button
+  // handlers themselves (so the row updates immediately, not just next open).
+  function syncGoogleAccountUI() {
+    const label = document.getElementById('google-account-label');
+    const btn = document.getElementById('btn-google-signin');
+    if (!label || !btn) return;
+    const linked = CloudSave.isGoogleLinked();
+    label.textContent = linked ? I18N.t('settings.google_signed_in') : I18N.t('settings.google_account');
+    btn.textContent = linked ? I18N.t('settings.google_signout_btn') : I18N.t('settings.google_signin_btn');
+  }
+
+  // Shared by the sign-in button's own flow and main.js's startup CloudSave.init()
+  // check (a Google session already active from a previous launch can also surface
+  // a conflict, e.g. this device's data changed on another device meanwhile).
+  function openCloudSaveConflict(snapshot) {
+    pendingCloudSnapshot = snapshot;
+    document.getElementById('modal-cloudsave-conflict').classList.remove('hidden');
   }
 
   function showScreen(id) {
@@ -1801,17 +1826,66 @@ const UI = (() => {
       document.getElementById('modal-reset-confirm').classList.add('hidden');
     });
     document.getElementById('btn-reset-confirm').addEventListener('click', async (e) => {
-      // Sign out of the current anonymous Firebase session FIRST (so a fresh uid
-      // gets minted on next load - see Leaderboard.resetIdentity()), then clear
-      // local save data, then hard-reload so every module (Game/UI/Tutorial/
-      // Leaderboard) re-initializes clean rather than trying to patch live state.
       const btn = e.currentTarget;
       btn.disabled = true;
       btn.textContent = I18N.t('reset.working');
       Analytics.logEvent('progress_reset', {});
-      await Leaderboard.resetIdentity();
-      Storage.resetAll();
+      if (CloudSave.isGoogleLinked()) {
+        // Google-linked identity IS "the account" now - keep it (don't sign out
+        // into a fresh anonymous uid like the branch below). Storage.resetAll()
+        // runs first so pushNow() uploads the ALREADY-reset (purchases-preserved)
+        // state; otherwise the next checkForRestore() (next launch, or another
+        // device signed into the same account) would silently pull the pre-reset
+        // progress right back down, defeating the whole point of resetting.
+        Storage.resetAll();
+        await CloudSave.pushNow();
+      } else {
+        // Sign out of the current anonymous Firebase session FIRST (so a fresh uid
+        // gets minted on next load - see Leaderboard.resetIdentity()), then clear
+        // local save data.
+        await Leaderboard.resetIdentity();
+        Storage.resetAll();
+      }
+      // Hard-reload so every module (Game/UI/Tutorial/Leaderboard/CloudSave)
+      // re-initializes clean rather than trying to patch live state.
       location.reload();
+    });
+
+    document.getElementById('btn-google-signin').addEventListener('click', async (e) => {
+      if (CloudSave.isGoogleLinked()) {
+        await CloudSave.signOutGoogle();
+        syncGoogleAccountUI();
+        return;
+      }
+      const btn = e.currentTarget;
+      const original = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = '...';
+      const { ok, conflict } = await CloudSave.signInWithGoogle();
+      btn.disabled = false;
+      syncGoogleAccountUI();
+      if (!ok) {
+        btn.textContent = original;
+        showToast(I18N.t('cloudsave.signin_failed'));
+        return;
+      }
+      Analytics.logEvent('google_account_linked', {});
+      if (conflict) {
+        document.getElementById('modal-settings').classList.add('hidden');
+        openCloudSaveConflict(conflict);
+      } else if (Storage.get('googleLinkRewardGiven')) {
+        showToast(I18N.t('cloudsave.link_reward'));
+      }
+    });
+    document.getElementById('btn-cloudsave-restore').addEventListener('click', () => {
+      document.getElementById('modal-cloudsave-conflict').classList.add('hidden');
+      if (pendingCloudSnapshot) CloudSave.applyCloudSnapshot(pendingCloudSnapshot);
+      pendingCloudSnapshot = null;
+    });
+    document.getElementById('btn-cloudsave-keep-local').addEventListener('click', () => {
+      document.getElementById('modal-cloudsave-conflict').classList.add('hidden');
+      pendingCloudSnapshot = null;
+      CloudSave.pushNow();
     });
 
     document.getElementById('btn-exit-cancel').addEventListener('click', () => {
@@ -1858,6 +1932,7 @@ const UI = (() => {
 
       if (mode === 'remix') {
         Game.loadRemixLevel(Game.getRemixIndex() + 1);
+        Sound.resumeMusic();
       } else if (mode === 'daily') {
         // Only one puzzle per day - "next" just returns to the menu.
         updateMenu();
@@ -1866,6 +1941,18 @@ const UI = (() => {
         const cur = Game.getLevelNum();
         if (cur >= TOTAL_LEVELS) Game.loadRemixLevel(0); // campaign just finished -> REMIX
         else Game.loadLevel(cur + 1);
+        // Game.loadLevel()/loadRemixLevel() -> Sound.setLevelContext() only
+        // crossfades if music is ALREADY playing (see sound.js) - it never
+        // starts/resumes music on its own. If the win modal was open when the
+        // app got backgrounded (screen-game stays "active" but a modal is
+        // open, so the app-backgrounding pause-modal hook skips it - see
+        // handleBackgroundForPause's anyModalOpen check), Sound.js's own
+        // independent background listener still paused the music underneath,
+        // and nothing here used to resume it - advancing to the next level
+        // left it silent until the player toggled the music setting off/on.
+        // resumeMusic() itself no-ops if music is already playing, so this is
+        // safe to call unconditionally on every advance.
+        Sound.resumeMusic();
       }
     });
 
@@ -1884,6 +1971,7 @@ const UI = (() => {
     document.getElementById('btn-daily-tip-later').addEventListener('click', () => {
       hideAllModals();
       Game.loadLevel(4);
+      Sound.resumeMusic(); // same win-modal-backgrounded gap as btn-next above
     });
 
     document.getElementById('btn-daily').addEventListener('click', () => {
@@ -1994,6 +2082,7 @@ const UI = (() => {
         Analytics.logEvent('continue_ad_used', {});
         document.getElementById('modal-fail').classList.add('hidden');
         Game.continueAfterFail();
+        Sound.resumeMusic(); // same win-modal-backgrounded gap as btn-next above
         showToast(I18N.t('fail.continue_ad_success'));
       }, () => alert(I18N.t('store.ad_failed')));
     });
@@ -2138,5 +2227,5 @@ const UI = (() => {
     showToast(I18N.t('golden.claimed', { n: bonus }));
   }
 
-  return { showScreen, applyTheme, applySound, applyMusic, applyVibration, updateMenu, updateHUD, showWin, showFail, hideAllModals, wireEvents, runSplash, buildStatsScreen, buildRankingScreen, promptNicknameIfNeeded, showGoldenBonusToast };
+  return { showScreen, applyTheme, applySound, applyMusic, applyVibration, updateMenu, updateHUD, showWin, showFail, hideAllModals, wireEvents, runSplash, buildStatsScreen, buildRankingScreen, promptNicknameIfNeeded, showGoldenBonusToast, openCloudSaveConflict };
 })();

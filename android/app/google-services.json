@@ -1,0 +1,55 @@
+{
+  "project_info": {
+    "project_number": "968667057133",
+    "project_id": "arrowflow-8d6a8",
+    "storage_bucket": "arrowflow-8d6a8.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:968667057133:android:051d8166bdf71d47d8f5e4",
+        "android_client_info": {
+          "package_name": "com.arrowflowgame.puzzle"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "968667057133-1tv5375sksl6d0vupbvnk1jmert3avd9.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.arrowflowgame.puzzle",
+            "certificate_hash": "0560f25a751892837932a44c72c2ec88fdc431bf"
+          }
+        },
+        {
+          "client_id": "968667057133-e8a6f1lrfeebu89brdl94n9s9jc7j8n8.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.arrowflowgame.puzzle",
+            "certificate_hash": "29c6d7839b3501b3d561195e2f7251f2a9ef127e"
+          }
+        },
+        {
+          "client_id": "968667057133-ml8cjbe102stjir5b9ns7edmbb08e9q7.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCLmevsVTFvrqerbZ8vwMvqmuPa_h9CiOA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "968667057133-ml8cjbe102stjir5b9ns7edmbb08e9q7.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

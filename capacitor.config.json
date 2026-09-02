@@ -8,6 +8,10 @@
   "plugins": {
     "StatusBar": {
       "overlaysWebView": false
+    },
+    "FirebaseAuthentication": {
+      "skipNativeAuth": true,
+      "providers": ["google.com"]
     }
   }
 }

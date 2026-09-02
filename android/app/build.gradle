@@ -32,6 +32,23 @@ android {
                 storeType "PKCS12"
             }
         }
+        // Fixed, committed debug keystore (2026-09-02, added for Google Sign-In setup -
+        // see the cloud-save plan). Without this, Gradle's own auto-generated debug
+        // keystore is used instead - fine for a local machine, but CI's ubuntu-latest
+        // runner is ephemeral and has no debug.keystore of its own, so every CI-built
+        // debug APK used to get a BRAND NEW random signing key with a different SHA-1
+        // fingerprint. Google Sign-In's OAuth client is registered against one specific
+        // SHA-1, so debug builds would only work the one time that exact fingerprint
+        // happened to be registered - explicitly pointing at this checked-in keystore
+        // keeps every debug build (local or CI) signed identically. Debug-only signing
+        // (well-known fixed alias/passwords, same convention Android Studio itself uses
+        // for its own auto-generated debug.keystore) - never used for release uploads.
+        debug {
+            storeFile file("debug.keystore")
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }
     }
     buildTypes {
         release {
@@ -40,6 +57,9 @@ android {
             if (System.getenv("ANDROID_KEYSTORE_PATH")) {
                 signingConfig signingConfigs.release
             }
+        }
+        debug {
+            signingConfig signingConfigs.debug
         }
     }
 }

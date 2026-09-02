@@ -64,5 +64,33 @@ service cloud.firestore {
         // has had zero documents ever written since the 2026-08-19 collection wipe.
         && (resource == null || request.resource.data.score > resource.data.score);
     }
+
+    // Cloud save (2026-09-02) - one doc per Google-linked player, restoring progress
+    // on reinstall (see js/cloudsave.js). Unlike players/{uid} and levelBests/{levelId}
+    // above, this data is never read by anyone but its own owner (no leaderboard-style
+    // public read), so a malformed value here can only ever corrupt that same player's
+    // own restore, not another player's view - bounds below cover the handful of
+    // fields worth sanity-checking (mirroring players/{uid}'s style) rather than
+    // exhaustively validating every field's shape (levelData/ownedGemSkins/etc. are
+    // maps/arrays whose contents only this client ever reads back).
+    match /saves/{uid} {
+      allow read, write: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.data.nickname is string
+        && request.resource.data.nickname.size() <= 20
+        && request.resource.data.currentLevel is int
+        && request.resource.data.currentLevel >= 1
+        && request.resource.data.currentLevel <= 300
+        && request.resource.data.highestUnlocked is int
+        && request.resource.data.highestUnlocked >= 1
+        && request.resource.data.highestUnlocked <= 300
+        && request.resource.data.totalScore is int
+        && request.resource.data.totalScore >= 0
+        && request.resource.data.totalScore <= request.resource.data.highestUnlocked * 25650
+        && request.resource.data.gems is int && request.resource.data.gems >= 0
+        && request.resource.data.paidGems is int && request.resource.data.paidGems >= 0
+        && request.resource.data.hints is int && request.resource.data.hints >= 0
+        && request.resource.data.paidHints is int && request.resource.data.paidHints >= 0;
+    }
   }
 }

@@ -20,3 +20,14 @@ android/captures/
 *.jks
 *.keystore
 *.p12
+# Local copy of the real release-signing keystore + password (source for the
+# ANDROID_KEYSTORE_BASE64 GitHub secret) - *.p12 above already covered the keystore
+# file itself, but not keystore-password.txt/upload-keystore.b64/the PEM exports
+# sitting alongside it in this folder. Found unignored (2026-09-02) while pulling this
+# release keystore's SHA-1 for Google Sign-In setup - a broad `git add -A`/`git add .`
+# would have committed the plaintext signing password to the repo.
+/keystore/
+# Exception: android/app/debug.keystore is deliberately committed (fixed, non-secret,
+# well-known debug-only credentials) so every CI/local debug build shares one stable
+# signing fingerprint - see android/app/build.gradle's signingConfigs.debug comment.
+!android/app/debug.keystore

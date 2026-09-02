@@ -299,6 +299,10 @@
           <button id="toggle-lang" class="switch" role="switch" aria-checked="false" aria-label="Toggle language"><span class="switch-knob"></span></button>
         </div>
         <div class="settings-row">
+          <span class="settings-label" id="google-account-label" data-i18n="settings.google_account">🔗 บัญชี Google</span>
+          <button id="btn-google-signin" class="btn btn-outline btn-sm" data-i18n="settings.google_signin_btn">เชื่อมต่อ</button>
+        </div>
+        <div class="settings-row">
           <span class="settings-label" data-i18n="settings.nickname">👋 ชื่อผู้เล่น</span>
           <button id="btn-edit-nickname" class="btn btn-outline btn-sm" data-i18n="settings.nickname_btn">ตั้งชื่อ</button>
         </div>
@@ -329,6 +333,20 @@
       <div class="modal-btns">
         <button id="btn-reset-confirm" class="btn btn-primary reset-danger-btn" data-i18n="reset.confirm">ล้างข้อมูลและเริ่มใหม่</button>
         <button id="btn-reset-cancel" class="btn btn-outline" data-i18n="reset.cancel">ยกเลิก</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CLOUD SAVE CONFLICT MODAL - shown when a Google-linked account's cloud
+       save differs from real local progress (not a fresh install, which
+       restores silently instead - see js/cloudsave.js's checkForRestore()). -->
+  <div id="modal-cloudsave-conflict" class="modal-overlay hidden" data-back-close="btn-cloudsave-keep-local">
+    <div class="modal-box">
+      <h2 class="modal-title" data-i18n="cloudsave.conflict_title">☁️ พบข้อมูลเดิม</h2>
+      <p class="modal-sub" data-i18n="cloudsave.conflict_warning">บัญชี Google นี้มีข้อมูลเกมที่บันทึกไว้ ซึ่งต่างจากข้อมูลในเครื่องนี้ ต้องการกู้คืนข้อมูลเดิม หรือเก็บข้อมูลในเครื่องนี้ไว้ (ข้อมูลอีกฝั่งจะถูกแทนที่)</p>
+      <div class="modal-btns">
+        <button id="btn-cloudsave-restore" class="btn btn-primary" data-i18n="cloudsave.restore">กู้คืนข้อมูลเดิม</button>
+        <button id="btn-cloudsave-keep-local" class="btn btn-outline" data-i18n="cloudsave.keep_local">เก็บข้อมูลเครื่องนี้ไว้</button>
       </div>
     </div>
   </div>
@@ -482,6 +500,7 @@
   <script src="js/rating.js"></script>
   <script src="js/appUpdate.js"></script>
   <script src="js/leaderboard.js"></script>
+  <script src="js/cloudsave.js"></script>
   <script src="js/sound.js"></script>
   <script src="js/haptics.js"></script>
   <script src="js/levels.js"></script>

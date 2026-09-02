@@ -34,6 +34,12 @@ document.addEventListener('DOMContentLoaded', () => {
   // as soon as they're first rendered.
   Iap.init();
 
+  // Cloud save (native only, no-op on web/not-yet-linked) - if a Google session
+  // is already active from a previous launch, silently resolves any restore
+  // conflict the same way a fresh sign-in would (see js/cloudsave.js). Doesn't
+  // block the rest of startup - fires the conflict modal whenever it resolves.
+  CloudSave.init().then(conflict => { if (conflict) UI.openCloudSaveConflict(conflict); });
+
   // Init UI
   I18N.applyToDOM();
   UI.applyTheme(Storage.get('theme'));

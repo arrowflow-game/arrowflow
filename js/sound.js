@@ -90,6 +90,19 @@ const Sound = (() => {
     tone(260, 260, 0.1, 'sine', c.currentTime + 0.09, 0.12);
   }
 
+  // Color-Match Combo (2026-09-02) - a quick upward "ding" per chained clear, pitch
+  // rising with the streak (capped so a long combo doesn't eventually screech) so a
+  // longer chain reads as more exciting than the last, distinct from playSlide()'s
+  // neutral per-tap sound. comboCount is state.combo (2, 3, 4...) - only ever called
+  // for comboCount >= 2, see game.js's onArrowTap.
+  function playCombo(comboCount) {
+    if (!sfxEnabled() || isBackgrounded) return;
+    const c = getCtx();
+    const step = Math.min(comboCount - 2, 6); // caps the pitch climb at combo 8+
+    const freq = 660 * Math.pow(1.06, step);
+    tone(freq, freq * 1.3, 0.1, 'sine', c.currentTime, 0.14);
+  }
+
   function playFail() {
     if (!sfxEnabled() || isBackgrounded) return;
     const c = getCtx();
@@ -451,5 +464,5 @@ const Sound = (() => {
   document.addEventListener('pointerdown', warmUpOnce, { once: true });
   document.addEventListener('touchstart', warmUpOnce, { once: true });
 
-  return { playSlide, playBump, playLockedDeny, playWin, playFail, playWheelSpin, playWheelWin, startMusic, stopMusic, pauseMusic, resumeMusic, isMusicPlaying, setLevelContext };
+  return { playSlide, playBump, playLockedDeny, playWin, playFail, playCombo, playWheelSpin, playWheelWin, startMusic, stopMusic, pauseMusic, resumeMusic, isMusicPlaying, setLevelContext };
 })();

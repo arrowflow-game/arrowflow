@@ -43,7 +43,11 @@
     // launch (see markSessionOpened()); ratingPromptShown is a one-time gate so
     // this app only ever calls the native review dialog once per player, ever.
     // See shouldPromptRating() below for the actual trigger conditions.
-    sessionCount: 0, ratingPromptShown: false
+    sessionCount: 0, ratingPromptShown: false,
+    // One-time reward for linking a Google account (js/cloudsave.js), same gate
+    // shape as iapRestoreHintShown above - only true once, forever, so signing
+    // out and back in on the same account never re-grants it.
+    googleLinkRewardGiven: false
   };
 
   const RATING_SESSION_THRESHOLD = 5;
@@ -77,13 +81,25 @@
     try { const raw = localStorage.getItem(KEY); return raw ? { ...defaults, ...JSON.parse(raw) } : { ...defaults }; }
     catch { return { ...defaults }; }
   }
-  function save(data) { try { localStorage.setItem(KEY, JSON.stringify(data)); } catch {} }
+  // Single choke point every mutator below already funnels through - piggybacking
+  // a change-listener list here (rather than having js/cloudsave.js poll or having
+  // every mutator call out individually) means cloud-sync coverage is automatic for
+  // any future Storage mutator too, same "one place, not every call site" pattern
+  // used elsewhere in this codebase (e.g. sound.js's tone()/releaseAudio()).
+  // Storage itself stays dependency-free - cloudsave.js subscribes in, Storage never
+  // imports it, so there's no import cycle between the two.
+  const _listeners = [];
+  function save(data) {
+    try { localStorage.setItem(KEY, JSON.stringify(data)); } catch {}
+    _listeners.forEach(fn => { try { fn(); } catch {} });
+  }
 
   let _state = load();
 
   return {
     get: (key) => _state[key],
     set: (key, val) => { _state[key] = val; save(_state); },
+    onChange: (fn) => { _listeners.push(fn); },
     completeLevel(levelNum, stars, moves, score, timeSec) {
       const prev = _state.levelData[levelNum];
       const prevStars = prev ? prev.stars : 0;

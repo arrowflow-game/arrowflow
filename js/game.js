@@ -392,6 +392,14 @@ const Game = (() => {
       state.lastClearedColor = path.color || null;
       if (state.combo > state.comboBest) state.comboBest = state.combo;
       comboJustStarted = state.combo === 2;
+      // Feedback for every chained clear (2026-09-02, reported directly: combo had
+      // no sound/vibration at all, only the silent HUD badge) - not on combo===1
+      // (that's just a normal clear that happens to start a new streak, nothing to
+      // celebrate yet).
+      if (state.combo > 1) {
+        Sound.playCombo(state.combo);
+        Haptics.combo();
+      }
     }
 
     // Golden Path Bonus: claiming happens at most once per level (goldenClaimed
@@ -640,12 +648,35 @@ const Game = (() => {
   function onWin() {
     state.won = true;
     state.canUndo = false;
-    let stars = 1;
-    if (state.moves <= state.levelData.parMoves) stars = 3;
-    else if (state.moves <= state.levelData.maxMoves) stars = 2;
-    state.stars = stars;
-
     const elapsedSec = (Date.now() - state.startTime - totalPausedMs()) / 1000;
+
+    // Star rating (2026-09-01 redesign): the old parMoves/maxMoves thresholds
+    // compared against state.moves, but state.moves only counts SUCCESSFUL
+    // clears (see the wrong-tap branch above, which increments lives lost
+    // instead) - so moves always equalled exactly the level's path count on
+    // any win, making moves <= parMoves trivially true every single time.
+    // Reported directly: every level ever won gave 3 stars, no exceptions.
+    // Replaced with two independent criteria, final stars = the WORSE of the
+    // two (a clean run that took forever, or a fast run full of mistakes,
+    // should both fall short of 3 stars):
+    //  - accuracy: LIVES_MAX - state.lives = misses this run (max survivable
+    //    misses is LIVES_MAX-1, so this only ever lands on 0/1/2 misses).
+    //  - pace: elapsedSec (pause time excluded via totalPausedMs(), same as
+    //    computeScore()'s time bonus below) against the same parTime basis
+    //    already used for scoring, loosened 3x/6x since parTime's 2.5s/path
+    //    assumes instant taps with no time to actually look at the cube.
+    const missCount = LIVES_MAX - state.lives;
+    let accuracyStars = 1;
+    if (missCount <= 0) accuracyStars = 3;
+    else if (missCount <= 1) accuracyStars = 2;
+
+    const parTime = state.paths.length * 2.5;
+    let paceStars = 1;
+    if (elapsedSec <= parTime * 3) paceStars = 3;
+    else if (elapsedSec <= parTime * 6) paceStars = 2;
+
+    state.stars = Math.min(accuracyStars, paceStars);
+
     const score = computeScore(elapsedSec);
     const isCampaignFinale = state.mode === 'campaign' && state.levelNum === 300;
 

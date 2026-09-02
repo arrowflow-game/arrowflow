@@ -22,6 +22,10 @@ const Haptics = (() => {
 
   function bump() { fire(60); }
   function win() { fire([40, 30, 40, 30, 90]); }
+  // Color-Match Combo (2026-09-02): a single short, light pulse per chained clear -
+  // deliberately shorter/lighter than bump() (that one signals "wrong guess", this
+  // one signals "nice, keep going") so the two never feel interchangeable.
+  function combo() { fire(25); }
 
-  return { bump, win, supported };
+  return { bump, win, combo, supported };
 })();
