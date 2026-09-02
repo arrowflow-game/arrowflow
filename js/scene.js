@@ -44,8 +44,21 @@ const Scene3D = (() => {
   // which still looks like a holographic sheet, just not a moving one. Self-tuning
   // by construction: a faster device keeps the animation on more levels than a slow
   // one, and no board is ever hard-coded as "too big".
-  const HOLO_SYNC_BUDGET_MS = 120;
+  // Deliberately measured as the length of the FRAME the tick lands in, not the time
+  // updateFrame() itself takes. Most of the cost is not JavaScript: marking every face
+  // texture dirty makes Three.js re-upload all of them to the GPU inside the next
+  // renderer.render(), so on level 262 updateFrame reported 173ms while the frame the
+  // player actually saw was 1090ms. Timing the function alone would have let boards
+  // that stall for half a second look comfortably within budget.
+  const HOLO_SYNC_BUDGET_MS = 60;
   let holoSyncTooSlow = false;
+  let holoTickPendingCheck = false;
+  let prevFrameMs = 0;
+  // Once a board of a given size has been seen to blow the budget, every board at
+  // least that large is assumed to blow it too, instead of each one paying its own
+  // one-off stall to find out. Learned per session, so it adapts to the device
+  // rather than hard-coding a face count that would be wrong on other hardware.
+  let holoMaxSafeFaces = Infinity;
 
   // Golden Path's glow and the Lock-Key padlocks' glow are STANDING, not animated
   // (2026-09-02). They used to breathe via Math.sin(performance.now()), which meant
@@ -1268,9 +1281,10 @@ const Scene3D = (() => {
 
   function setLevelData(shape, unitGrid, paths, tier, isMilestone, skinVariant, comboEnabled) {
     rebuildGeometry(shape, unitGrid);
-    // Re-arm the holo rainbow for the new board - see holoSyncTooSlow's note. A
-    // board this device couldn't animate says nothing about the next one.
-    holoSyncTooSlow = false;
+    // Re-arm the holo rainbow for the new board, unless it is at least as large as
+    // one already known to stall this device - see holoMaxSafeFaces' note.
+    holoSyncTooSlow = (currentGraph ? currentGraph.faces.length : 0) > holoMaxSafeFaces;
+    holoTickPendingCheck = false;
     highlightPathId = null;
     highlightedFaceIndices = [];
     // currentTier/currentSkinVariant must be set BEFORE updateFrame() below -
@@ -2405,14 +2419,26 @@ const Scene3D = (() => {
     // first one of each level is timed against HOLO_SYNC_BUDGET_MS and the rainbow
     // stops advancing for the rest of the level if it blew the budget - see that
     // constant's note for the measurements.
+    // Judge the PREVIOUS tick by how long the frame it landed in actually took -
+    // the GPU texture re-upload it triggers happens during that frame's render, well
+    // after updateFrame() has returned. See HOLO_SYNC_BUDGET_MS.
+    const frameDelta = prevFrameMs ? nowMs - prevFrameMs : 0;
+    prevFrameMs = nowMs;
+    if (holoTickPendingCheck) {
+      holoTickPendingCheck = false;
+      if (frameDelta > HOLO_SYNC_BUDGET_MS) {
+        holoSyncTooSlow = true;
+        const faces = currentGraph ? currentGraph.faces.length : 0;
+        if (faces) holoMaxSafeFaces = Math.min(holoMaxSafeFaces, faces - 1);
+      }
+    }
     if (!holoSyncTooSlow && nowMs - lastHoloSyncTickMs >= HOLO_SYNC_INTERVAL_MS) {
       lastHoloSyncTickMs = nowMs;
       holoSyncMs = nowMs;
       const skin = activeSkin();
       if (skin && skin.material === 'holo' && currentGraph) {
-        const t0 = performance.now();
         updateFrame(currentPaths, true);
-        if (performance.now() - t0 > HOLO_SYNC_BUDGET_MS) holoSyncTooSlow = true;
+        holoTickPendingCheck = true;
       }
     }
     if (moodTo && scene.background) {
