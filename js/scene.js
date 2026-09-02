@@ -29,6 +29,24 @@ const Scene3D = (() => {
   let lastHoloSyncTickMs = 0;
   const HOLO_SYNC_INTERVAL_MS = 10000;
 
+  // The 'holo' material (the premium skins' animated rainbow) is the one material
+  // that has to be re-rendered on a timer, because every face must advance its phase
+  // together - so its tick redraws the WHOLE board. That is affordable on a small
+  // shape and not remotely affordable on a large one: measured on the tablet, one
+  // tick froze the game for 461ms on level 61 (78 faces), 589ms on 120, and 1093ms
+  // on 262 (144 faces) - every ten seconds, for the whole level. A full redraw is
+  // intrinsically expensive (it issues ~63,000 lineTo calls on the densest board;
+  // that is the drawing itself, not overhead that can be indexed away).
+  //
+  // So the rainbow is allowed to animate only where it can do so without stalling:
+  // the first tick of a level is timed, and if it costs more than this budget the
+  // rainbow simply stops advancing for that level and stays at its current phase -
+  // which still looks like a holographic sheet, just not a moving one. Self-tuning
+  // by construction: a faster device keeps the animation on more levels than a slow
+  // one, and no board is ever hard-coded as "too big".
+  const HOLO_SYNC_BUDGET_MS = 120;
+  let holoSyncTooSlow = false;
+
   // Golden Path's glow and the Lock-Key padlocks' glow are STANDING, not animated
   // (2026-09-02). They used to breathe via Math.sin(performance.now()), which meant
   // repainting their faces continuously - and a face repaint is expensive: the whole
@@ -1250,6 +1268,9 @@ const Scene3D = (() => {
 
   function setLevelData(shape, unitGrid, paths, tier, isMilestone, skinVariant, comboEnabled) {
     rebuildGeometry(shape, unitGrid);
+    // Re-arm the holo rainbow for the new board - see holoSyncTooSlow's note. A
+    // board this device couldn't animate says nothing about the next one.
+    holoSyncTooSlow = false;
     highlightPathId = null;
     highlightedFaceIndices = [];
     // currentTier/currentSkinVariant must be set BEFORE updateFrame() below -
@@ -2380,11 +2401,19 @@ const Scene3D = (() => {
     // screen always agreeing on the current phase, instead of active/bumped paths
     // racing ahead of idle ones.
     const nowMs = performance.now();
-    if (nowMs - lastHoloSyncTickMs >= HOLO_SYNC_INTERVAL_MS) {
+    // The redraw this tick performs is only affordable on smaller boards, so the
+    // first one of each level is timed against HOLO_SYNC_BUDGET_MS and the rainbow
+    // stops advancing for the rest of the level if it blew the budget - see that
+    // constant's note for the measurements.
+    if (!holoSyncTooSlow && nowMs - lastHoloSyncTickMs >= HOLO_SYNC_INTERVAL_MS) {
       lastHoloSyncTickMs = nowMs;
       holoSyncMs = nowMs;
       const skin = activeSkin();
-      if (skin && skin.material === 'holo' && currentGraph) updateFrame(currentPaths, true);
+      if (skin && skin.material === 'holo' && currentGraph) {
+        const t0 = performance.now();
+        updateFrame(currentPaths, true);
+        if (performance.now() - t0 > HOLO_SYNC_BUDGET_MS) holoSyncTooSlow = true;
+      }
     }
     if (moodTo && scene.background) {
       const t = Math.min(1, (performance.now() - moodStart) / MOOD_TRANSITION_MS);
