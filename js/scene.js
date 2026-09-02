@@ -29,26 +29,28 @@ const Scene3D = (() => {
   let lastHoloSyncTickMs = 0;
   const HOLO_SYNC_INTERVAL_MS = 10000;
 
-  // How often the two standing "breathing" glows - Golden Path's and the Lock-Key
-  // padlocks' - are allowed to repaint. They used to redraw on EVERY animation
-  // frame, and a redraw is not cheap: each affected face gets its whole 2D canvas
-  // repainted (material pattern, mascot, borders, every path line on it) and then
-  // re-uploaded to the GPU as a texture. Measured on the web build, a level with
-  // just three locked paths ran at 34fps / 29ms per frame against 60fps / 16.7ms
-  // on an otherwise comparable level with none - and Lock-Key appears from level 61
-  // to 300, so this was most of the game. Reported directly as the game feeling
-  // progressively heavier.
+  // Golden Path's glow and the Lock-Key padlocks' glow are STANDING, not animated
+  // (2026-09-02). They used to breathe via Math.sin(performance.now()), which meant
+  // repainting their faces continuously - and a face repaint is expensive: the whole
+  // 2D canvas is redrawn (material pattern, mascot, borders, and every path line on
+  // that face) and then re-uploaded to the GPU as a texture.
   //
-  // 100ms (10 pulses/sec) is far below what a slow glow needs to look smooth,
-  // while cutting these repaints to a sixth. Same reasoning as HOLO_SYNC_INTERVAL_MS
-  // above: decorative animation does not have to run at the render frame rate.
-  const GLOW_PULSE_INTERVAL_MS = 100;
-  let lastGlowPulseMs = 0;
-  // Cached in updateFrame() (which runs whenever paths change) so animate() doesn't
-  // rescan every path, every frame, just to find out whether any lock still exists -
-  // on a 485-path board that scan is itself per-frame work for a value that only
-  // changes when a key is cleared.
-  let hasLockedPaths = false;
+  // Measured, because the cost was much larger than it looks. On the web build a
+  // level with three locked paths ran 34fps / 29ms per frame against 60fps / 16.7ms
+  // on a comparable level with none. On the tablet, one pulse repainted 4-5 faces and
+  // cost ~47ms - so even throttled to 10 pulses/sec it left a visible hitch ten times
+  // a second. Lock-Key runs from level 61 to 300, i.e. most of the campaign, which is
+  // why it was reported as the game feeling progressively heavier the further in you got.
+  //
+  // Both effects are just a sine on a shadow blur / stroke alpha, so pinning them at
+  // the midpoint of their old range looks essentially identical in any given frame -
+  // what is lost is a slow breathing motion on a small icon and a line that was
+  // already unmistakably gold. That is a much better trade than a 47ms stall ten
+  // times a second. The denied-tap flash (drawLockIcon's `flashing` branch) is NOT
+  // affected: it is driven by game.js's own locked_shake ticks, which dirty the
+  // padlock's faces themselves, so it still animates at full rate.
+  const GOLDEN_GLOW_ALPHA = 0.725; // was 0.55 + 0.35 * sin(t/220)
+  const LOCK_GLOW_BLUR_FACTOR = 0.225; // was 0.15 + 0.15 * sin(t/500), x cellSize
 
   // Per-cell texture resolution - every exposed face in the polycube system
   // (see [[arrowflow_level_roadmap]] v7) is a uniform unitGrid x unitGrid
@@ -1285,31 +1287,15 @@ const Scene3D = (() => {
       const hp = paths.find(p => p.id === highlightPathId);
       if (hp) hp.segments.forEach(s => facesToRedraw.add(segFaceKey(s)));
     }
-    // Golden Path's glow needs the same "always include these faces in any redraw"
-    // treatment as the hint highlight above, so its per-frame pulse (driven by the
-    // main animate() loop below) can redraw ONLY its own faces instead of the whole
-    // shape - see setGoldenPath()'s note.
-    if (goldenPathId !== null) {
-      const gp = paths.find(p => p.id === goldenPathId);
-      if (gp) gp.segments.forEach(s => facesToRedraw.add(segFaceKey(s)));
-    }
+    // The Golden Path and the padlocks used to be force-added to every redraw so
+    // their per-frame pulse had faces to repaint. Both are standing effects now
+    // (see GOLDEN_GLOW_ALPHA), so they no longer need any face dirtied on their
+    // behalf - drawPathOnFace paints them whenever their face is repainted for a
+    // real reason, and nothing else has to happen in between.
     // Lock-Key padlocks get the same standing-glow "always include these faces"
     // treatment (see drawLockIcon()'s idle pulse, 2026-09-01) so their subtle
     // at-rest animation actually animates instead of freezing at whatever phase
     // it happened to be drawn on the last full redraw.
-    // Only the face holding the padlock needs repainting for its idle pulse - the
-    // icon is drawn once, at the path's head (see drawPathOnFace's `if (path.locked)`
-    // branch), not along the line. This used to add EVERY face a locked path crossed,
-    // which on a dense board meant repainting a dozen-plus faces to animate three
-    // small icons, and a face repaint redraws every path line on it.
-    hasLockedPaths = false;
-    paths.forEach(p => {
-      if (!p.locked) return;
-      hasLockedPaths = true;
-      const head = p.segments.find(s => s.isHead) || p.segments[p.segments.length - 1];
-      if (head) facesToRedraw.add(segFaceKey(head));
-    });
-
     // Hoisted out of the per-face loop below: both are constant for the whole pass,
     // and activeSkin() does a lookup through Skins.ALL on every call - on a full
     // redraw of a 90-face board that was 90 identical lookups per repaint.
@@ -1477,10 +1463,9 @@ const Scene3D = (() => {
     // the instant the level loads (unlike the hint highlight, which is only shown
     // on-demand) - that persistence is the whole point of "spot it yourself."
     if (isGolden) {
-      const pulse = 0.55 + 0.35 * Math.sin(performance.now() / 220);
       ctx.shadowColor = '#FFC700';
       ctx.shadowBlur = cellSize * 0.7;
-      ctx.strokeStyle = `rgba(255,199,0,${pulse})`;
+      ctx.strokeStyle = `rgba(255,199,0,${GOLDEN_GLOW_ALPHA})`;
       ctx.lineWidth = cellSize * 0.55;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
@@ -1594,9 +1579,8 @@ const Scene3D = (() => {
       ctx.shadowColor = '#FF3B30';
       ctx.shadowBlur = cellSize * (0.3 + 0.3 * pulse);
     } else {
-      const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 500);
       ctx.shadowColor = '#FF9500';
-      ctx.shadowBlur = cellSize * (0.15 + 0.15 * pulse);
+      ctx.shadowBlur = cellSize * LOCK_GLOW_BLUR_FACTOR;
     }
     ctx.fillText('🔒', px, py);
     ctx.restore();
@@ -2383,16 +2367,9 @@ const Scene3D = (() => {
         updateFrame(currentPaths);
       }
     }
-    // Golden Path's glow and the Lock-Key padlocks' glow both pulse continuously for
-    // the whole level (no expiry, unlike the hint highlight above). Throttled to
-    // GLOW_PULSE_INTERVAL_MS and merged into ONE call - they were previously two
-    // separate per-frame updateFrame() calls, so a level with both mechanics active
-    // paid for two full repaint passes every single frame. See
-    // GLOW_PULSE_INTERVAL_MS's note for the measurements.
-    if ((goldenPathId || hasLockedPaths) && nowMs - lastGlowPulseMs >= GLOW_PULSE_INTERVAL_MS) {
-      lastGlowPulseMs = nowMs;
-      updateFrame(currentPaths);
-    }
+    // No per-frame redraw for the Golden Path / padlock glows any more - they are
+    // standing effects now, drawn at a fixed intensity whenever their face is
+    // repainted for some other reason. See GOLDEN_GLOW_ALPHA's note for why.
     if (!isDragging && (Math.abs(velX) > INERTIA_STOP_EPS || Math.abs(velY) > INERTIA_STOP_EPS)) {
       applyDragRotation(velX, velY);
       velX *= INERTIA_FRICTION;
