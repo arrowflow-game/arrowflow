@@ -29,18 +29,31 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Fail loudly and early rather than running a credential-less export that
-      # would "succeed" with zero documents.
+      # Never run a credential-less export: it would "succeed" with zero
+      # documents and look like a working backup. How loudly that is reported
+      # depends on who asked - a daily red X before setup is finished would just
+      # train everyone to ignore this workflow, but someone who pressed Run
+      # deserves to be told immediately why nothing happened.
       - name: Check the service-account secret is configured
+        id: creds
         env:
           KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: |
-          if [ -z "$KEY" ]; then
-            echo "::error::FIREBASE_SERVICE_ACCOUNT is not set - see docs/firestore-backup.md"
-            exit 1
+          if [ -n "$KEY" ]; then
+            echo "ready=true" >> $GITHUB_OUTPUT
+          else
+            echo "ready=false" >> $GITHUB_OUTPUT
+            echo "### Firestore backup skipped" >> $GITHUB_STEP_SUMMARY
+            echo "FIREBASE_SERVICE_ACCOUNT is not set - see docs/firestore-backup.md" >> $GITHUB_STEP_SUMMARY
+            if [ "${{ github.event_name }}" != "schedule" ]; then
+              echo "::error::FIREBASE_SERVICE_ACCOUNT is not set - see docs/firestore-backup.md"
+              exit 1
+            fi
+            echo "::warning::FIREBASE_SERVICE_ACCOUNT is not set - skipping until it is configured"
           fi
 
       - name: Export every collection
+        if: steps.creds.outputs.ready == 'true'
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: npm run backup
@@ -48,6 +61,7 @@ jobs:
       # 90 days is the maximum GitHub retains, and is far longer than the window
       # in which anyone would notice data loss and come looking.
       - name: Upload the backup
+        if: steps.creds.outputs.ready == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: firestore-backup-${{ github.run_number }}
@@ -55,6 +69,7 @@ jobs:
           retention-days: 90
 
       - name: Summary
+        if: steps.creds.outputs.ready == 'true'
         run: |
           echo "### Firestore backup" >> $GITHUB_STEP_SUMMARY
           cat backups/*/manifest.json >> $GITHUB_STEP_SUMMARY
