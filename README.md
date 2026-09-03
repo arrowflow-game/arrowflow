@@ -36,7 +36,7 @@ cd android && ./gradlew assembleDebug
 
 Or let GitHub Actions do it:
 
-- **`build-android.yml`** — runs on every push to `main`: lint → e2e smoke test → debug APK artifact.
+- **`build-android.yml`** — runs on every push to `main`: lint → security-rules tests → backup-exporter test → e2e smoke test → debug APK artifact.
 - **`release-android.yml`** — manual (`workflow_dispatch`) only: produces the signed AAB for Play. `versionCode` comes from the run number, so **each track needs its own run** (Play requires a strictly increasing `versionCode` per upload).
 
 ```bash
@@ -48,11 +48,14 @@ gh run download <run-id>
 
 ```bash
 npm run lint                                  # ESLint, no-undef as a tripwire
+npm run test:rules                            # firestore.rules against the emulator
+npm run test:backup                           # the Firestore exporter
 python -m http.server 8000 &                  # in another terminal
 python tools/e2e_smoke_test.py                # drives the real page in headless Chromium
 ```
 
-Both run in CI on every push. There are no unit tests: the modules assume browser globals (`document`, `localStorage`, `firebase`), so driving the real page is the honest way to verify this codebase.
+All four run in CI on every push. The emulator ones need a **JDK 21 or newer** —
+on this machine, `JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"`. There are no unit tests: the modules assume browser globals (`document`, `localStorage`, `firebase`), so driving the real page is the honest way to verify this codebase.
 
 To drive the **real app on a connected Android device** over the Chrome DevTools Protocol (by far the fastest loop — change, install, measure, no manual play), see `docs/device-testing.md`.
 
@@ -81,7 +84,12 @@ Firebase project `arrowflow-8d6a8`, using the compat SDK from a CDN with SRI (no
 ```bash
 npx firebase deploy --only firestore:rules
 npx firebase deploy --only functions       # requires the Blaze plan
+npm run backup                             # export every collection to JSON
 ```
+
+The project is on the Spark plan, so Firestore's own managed backups aren't
+available — `.github/workflows/backup-firestore.yml` exports the collections
+daily instead. See `docs/firestore-backup.md` for the one-time secret it needs.
 
 `functions/` holds server-side purchase verification (see `functions/README.md` for the console setup it needs). Remote Config carries three feature kill switches and eight tuning numbers — see `js/remoteconfig.js`.
 
@@ -96,10 +104,11 @@ js/                   game modules (IIFE per file)
   storage.js          localStorage, the single source of player state
   cloudsave.js        Google Sign-In + Firestore backup
   levels.js           GENERATED - do not edit
-tools/                Python level generators + e2e smoke test
+tools/                level generators, e2e smoke test, rules + backup tests
 scripts/build-www.js  assembles www/ for the Capacitor build
 android/              Capacitor Android wrap
 functions/            Firebase Cloud Functions (purchase verification)
+docs/                 device testing, Firestore backup, launch kit
 privacy.html          served by GitHub Pages, linked from the Play listing
 delete-account.html   public account-deletion route (Play requirement)
 ```
