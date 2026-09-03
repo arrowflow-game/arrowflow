@@ -41,7 +41,15 @@ def fresh_page(browser, width=390, height=844, lang=None):
     page.goto(URL)
     page.evaluate("localStorage.clear()")
     if lang:
-        page.evaluate(f"localStorage.setItem('arrowflow3d_save', JSON.stringify({{lang: '{lang}'}}))")
+        # langExplicit mirrors what picking a language in Settings does. Without
+        # it, I18N.currentLang() falls back to detecting the BROWSER's language
+        # (2026-09-03), which in CI is en-US - so a `lang='th'` page would have
+        # quietly rendered English and the Thai-specific checks below would have
+        # passed while testing nothing.
+        page.evaluate(
+            "localStorage.setItem('arrowflow3d_save', JSON.stringify("
+            f"{{lang: '{lang}', langExplicit: true}}))"
+        )
     page.reload()
     page.wait_for_timeout(1200)
     if page.is_visible("#modal-nickname"):
@@ -103,14 +111,19 @@ def test_hint(page):
 # AdMob SDK path; that only runs on-device inside the native app.
 @check("Fail-screen continue-ad grants a life and enforces the daily cap")
 def test_fail_continue_ad(page):
-    for i in range(3):
+    # Read the cap instead of hardcoding it: it was raised 3 -> 5 in the
+    # 2026-09-01 balance pass and is Remote-Config tunable, so a literal here
+    # only guarantees this test rots again the next time it moves.
+    cap = page.evaluate("Storage.remainingRewardedAds('continue')")
+    assert cap > 0, "expected some continue-ads available on a fresh save"
+    for i in range(cap):
         page.evaluate("UI.showFail()")
         page.wait_for_timeout(150)
-        assert page.is_visible("#btn-fail-continue-ad"), f"continue-ad button should still be visible on use {i+1}/3"
+        assert page.is_visible("#btn-fail-continue-ad"), f"continue-ad button should still be visible on use {i+1}/{cap}"
         page.click("#btn-fail-continue-ad")
         page.wait_for_timeout(1400)
     remaining = page.evaluate("Storage.remainingRewardedAds('continue')")
-    assert remaining == 0, f"expected continue-ad cap exhausted after 3 uses, got {remaining} left"
+    assert remaining == 0, f"expected continue-ad cap ({cap}) exhausted, got {remaining} left"
     page.evaluate("UI.showFail()")
     page.wait_for_timeout(150)
     assert "hidden" in (page.get_attribute("#btn-fail-continue-ad", "class") or ""), \
@@ -197,8 +210,12 @@ def test_reset_progress(page):
 def test_thai_menu_wrap(page_factory):
     for width in (320, 390, 430):
         page = page_factory(width=width, lang='th')
+        assert page.evaluate("I18N.currentLang()") == 'th',             f"width={width}: page is not actually in Thai, so this check would prove nothing"
+        # Only buttons that are actually rendered: btn-bundle-promo is legitimately
+        # hidden on a fresh save and reports height 0, which is not a wrap.
         heights = page.evaluate("""
           () => Array.from(document.querySelectorAll('.menu-btn-row .btn'))
+            .filter(b => b.getBoundingClientRect().height > 0)
             .map(b => b.getBoundingClientRect().height)
         """)
         # A wrapped 2-line label roughly doubles the button's height vs its
