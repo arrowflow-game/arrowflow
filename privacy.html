@@ -64,6 +64,8 @@
         <li><strong>การซื้อในแอป</strong> — การชำระเงินดำเนินการโดย Google Play ทั้งหมด เกมไม่เห็นและไม่เก็บข้อมูลบัตรหรือวิธีชำระเงินของคุณ เกมเก็บเพียงว่าคุณเป็นเจ้าของสินค้าใดบ้าง และรหัสอ้างอิงการซื้อจาก Google สำหรับตรวจสอบว่าใบเสร็จเป็นของจริง</li>
         <li><strong>อันดับผู้เล่น (Leaderboard)</strong> — หากคุณเลือกตั้งชื่อผู้เล่นและเข้าร่วมอันดับคะแนนโลก เกมจะส่ง <em>ชื่อผู้เล่นที่คุณตั้งเอง</em> และ <em>คะแนน</em> ไปเก็บไว้บน Firebase (Firestore) พร้อมรหัสอ้างอิงแบบไม่ระบุตัวตน (anonymous ID) ที่สุ่มสร้างโดยอัตโนมัติ — ไม่มีการเก็บอีเมล ชื่อจริง เบอร์โทร หรือข้อมูลที่ระบุตัวตนได้อื่นใด</li>
         <li><strong>สถิติการใช้งานแบบไม่ระบุตัวตน (Firebase Analytics)</strong> — เกมใช้ Firebase Analytics เพื่อเก็บข้อมูลการใช้งานทั่วไป เช่น จำนวนครั้งที่เปิดเกม, ด่านที่เล่น, ข้อมูลอุปกรณ์/รุ่นระบบปฏิบัติการโดยรวม เพื่อช่วยปรับปรุงเกม ข้อมูลนี้เป็นสถิติรวมแบบไม่ระบุตัวตนของผู้เล่นรายบุคคล</li>
+        <li><strong>รายงานข้อขัดข้อง (Firebase Crashlytics)</strong> — หากเกมเกิดข้อผิดพลาดหรือปิดตัวกะทันหัน เกมจะส่งรายงานทางเทคนิค (ข้อความ error, ตำแหน่งในโค้ดที่เกิดปัญหา, ข้อมูลรุ่นอุปกรณ์/ระบบปฏิบัติการ) ให้ Firebase Crashlytics เพื่อช่วยแก้บั๊ก ข้อมูลนี้ไม่มีการตั้งค่าปิดเอง เนื่องจากจำเป็นต่อการรักษาคุณภาพของแอป</li>
+        <li><strong>โฆษณา (Google AdMob)</strong> — เกมแสดงโฆษณาผ่าน Google AdMob ซึ่งอาจใช้ Advertising ID ของอุปกรณ์คุณ (รหัสโฆษณาที่รีเซ็ต/ปิดเองได้จากการตั้งค่าเครื่อง Android) เพื่อแสดงโฆษณาที่เกี่ยวข้องมากขึ้น ข้อมูลนี้ถูกแชร์กับ Google ตามนโยบายของ AdMob</li>
       </ul>
     </section>
 
@@ -74,14 +76,15 @@
         <li>ไม่เก็บเบอร์โทร ที่อยู่ วันเกิด หรือข้อมูลติดต่ออื่นนอกจากอีเมลที่ Google แชร์มาตอนคุณเลือกเชื่อมบัญชี</li>
         <li>ไม่เก็บข้อมูลบัตรเครดิตหรือวิธีการชำระเงิน (Google Play จัดการทั้งหมด)</li>
         <li>ไม่เข้าถึงกล้อง, ไมโครโฟน, รายชื่อผู้ติดต่อ, ไฟล์, หรือตำแหน่งที่ตั้ง</li>
-        <li>ไม่ขายหรือแชร์ข้อมูลผู้เล่นให้บุคคลที่สามเพื่อการตลาด</li>
+        <li>ไม่ขายหรือแชร์ข้อมูลผู้เล่นให้บุคคลที่สามเพื่อการตลาดโดยตรง (การแชร์ Advertising ID กับ AdMob ด้านบนเป็นข้อยกเว้นเดียว และเป็นไปเพื่อแสดงโฆษณาในแอปเท่านั้น)</li>
       </ul>
     </section>
 
     <section>
       <h2>บริการของบุคคลที่สามที่ใช้</h2>
       <ul>
-        <li><a class="link" href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener">Firebase</a> (Google) — สำหรับอันดับผู้เล่นและสถิติการใช้งาน</li>
+        <li><a class="link" href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener">Firebase</a> (Google) — สำหรับบัญชีผู้เล่น, สำรองข้อมูลบนคลาวด์, อันดับผู้เล่น, สถิติการใช้งาน และรายงานข้อขัดข้อง</li>
+        <li><a class="link" href="https://support.google.com/admob/answer/6128543" target="_blank" rel="noopener">Google AdMob</a> — สำหรับแสดงโฆษณาในแอป</li>
       </ul>
     </section>
 
@@ -108,6 +111,8 @@
         <li><strong>In-app purchases</strong> — payment is handled entirely by Google Play. The game never sees or stores your card or payment details. It records only which items you own, plus the purchase reference Google issues, used to check that a receipt is genuine</li>
         <li><strong>Leaderboard data</strong> — if you choose to set a player name and opt in to the global leaderboard, the game sends your <em>self-chosen player name</em> and <em>score</em> to Firebase (Firestore), along with an automatically generated anonymous ID. No email, real name, phone number, or other personally identifying information is collected</li>
         <li><strong>Anonymous usage statistics (Firebase Analytics)</strong> — the game uses Firebase Analytics to collect general usage data such as how often the game is opened, which levels are played, and aggregate device/OS information, to help improve the game. This data is aggregated and not tied to an individual identity</li>
+        <li><strong>Crash reports (Firebase Crashlytics)</strong> — if the game crashes or errors, it sends a technical report (error message, the code location involved, device/OS version) to Firebase Crashlytics to help us fix bugs. This cannot be turned off, since it's needed to keep the app working</li>
+        <li><strong>Advertising (Google AdMob)</strong> — the game shows ads through Google AdMob, which may use your device's Advertising ID (a resettable identifier you can also disable from Android's own settings) to show more relevant ads. This is shared with Google under AdMob's policies</li>
       </ul>
     </section>
 
@@ -118,14 +123,15 @@
         <li>No phone number, address, date of birth, or contact details beyond the email address Google shares when you choose to link an account</li>
         <li>No card or payment details (Google Play handles all of it)</li>
         <li>No access to camera, microphone, contacts, files, or location</li>
-        <li>Player data is never sold or shared with third parties for marketing</li>
+        <li>Player data is never sold or shared with third parties for direct marketing (the Advertising ID shared with AdMob above is the one exception, and is solely for showing in-app ads)</li>
       </ul>
     </section>
 
     <section>
       <h2>Third-Party Services Used</h2>
       <ul>
-        <li><a class="link" href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener">Firebase</a> (Google) — used for the leaderboard and usage analytics</li>
+        <li><a class="link" href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener">Firebase</a> (Google) — used for player accounts, cloud save backup, the leaderboard, usage analytics, and crash reporting</li>
+        <li><a class="link" href="https://support.google.com/admob/answer/6128543" target="_blank" rel="noopener">Google AdMob</a> — used to show in-app ads</li>
       </ul>
     </section>
 
