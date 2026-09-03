@@ -38,23 +38,53 @@ const Analytics = (() => {
       // stays silently disabled, never blocks the game.
     }
 
-    // Global crash/error logging - GA4's own "exception" event shape
-    // (description/fatal), viewable in the Firebase console without any
-    // extra collection/rules of our own to maintain (unlike a custom
-    // Firestore errorLogs collection, which would need its own write-abuse
-    // guarding - logEvent() is already rate-limited by the SDK itself).
+    // Global crash/error logging, sent to BOTH sinks because they see
+    // different things:
+    //  - GA4's `exception` event gives a count next to the rest of the funnel,
+    //    and is the only one that works on the web build.
+    //  - Crashlytics gives the stack trace, groups identical errors, and is the
+    //    only place a NATIVE crash (the app dying outright) shows up at all -
+    //    GA4 never sees those, since nothing is left running to report them.
     window.addEventListener('error', (e) => {
       logEvent('exception', {
         description: `${e.message} @ ${e.filename}:${e.lineno}`,
         fatal: false
       });
+      recordCrash(e.error || e.message, `${e.filename}:${e.lineno}:${e.colno}`);
     });
     window.addEventListener('unhandledrejection', (e) => {
       logEvent('exception', {
         description: `unhandled rejection: ${e.reason}`,
         fatal: false
       });
+      recordCrash(e.reason, 'unhandledrejection');
     });
+  }
+
+  // Native-only, best-effort, and never allowed to throw from inside an error
+  // handler - a reporter that crashes while reporting would replace a legible
+  // bug with an infinite loop.
+  function recordCrash(err, where) {
+    try {
+      const plugin = window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform()
+        && Capacitor.Plugins && Capacitor.Plugins.FirebaseCrashlytics;
+      if (!plugin) return;
+      const message = (err && err.message) ? err.message : String(err);
+      const stack = (err && err.stack) ? err.stack : '';
+      plugin.recordException({ message: `${message} (${where})`, stacktrace: buildStack(stack) });
+    } catch {}
+  }
+
+  // The plugin wants structured frames, not a raw string. Parse what V8 gives
+  // us ("    at fn (url:line:col)") and fall back to one synthetic frame so a
+  // stack we can't parse still arrives as something rather than nothing.
+  function buildStack(stack) {
+    const frames = String(stack).split('\n').map(line => {
+      const m = line.match(/at\s+(?:(.+?)\s+\()?(.+?):(\d+):(\d+)\)?$/);
+      if (!m) return null;
+      return { fileName: m[2], lineNumber: parseInt(m[3], 10), methodName: m[1] || '<anonymous>' };
+    }).filter(Boolean);
+    return frames.length ? frames : [{ fileName: 'unknown', lineNumber: 0, methodName: '<no stack>' }];
   }
 
   function logEvent(name, params) {

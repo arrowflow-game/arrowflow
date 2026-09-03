@@ -9,6 +9,13 @@ buildscript {
     dependencies {
         classpath 'com.android.tools.build:gradle:8.10.0'
         classpath 'com.google.gms:google-services:4.4.2'
+        // Crashlytics (2026-09-03). Until now the only error reporting was
+        // window.onerror -> a GA4 "exception" event: one line of text, no stack,
+        // no grouping, no alerting - and completely blind to a native crash that
+        // kills the whole app (e.g. the ~430 MB high-water mark on the densest
+        // boards). The Gradle plugin's job is uploading the mapping files, so a
+        // report arrives symbolicated rather than as raw addresses.
+        classpath 'com.google.firebase:firebase-crashlytics-gradle:3.0.3'
 
         // NOTE: Do not place your application dependencies here; they belong
         // in the individual module build.gradle files
