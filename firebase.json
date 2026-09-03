@@ -6,7 +6,20 @@
     {
       "source": "functions",
       "codebase": "default",
-      "ignore": ["node_modules", ".git", "*.local"]
+      "ignore": [
+        "node_modules",
+        ".git",
+        "*.local"
+      ]
     }
-  ]
+  ],
+  "emulators": {
+    "firestore": {
+      "port": 8080
+    },
+    "ui": {
+      "enabled": false
+    },
+    "singleProjectMode": true
+  }
 }

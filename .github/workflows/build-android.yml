@@ -56,6 +56,15 @@ jobs:
           pip install playwright
           python -m playwright install --with-deps chromium
 
+      # firestore.rules is the only thing stopping one player from rewriting
+      # another player's data, and it has failed in production three separate
+      # times - always because `request.resource` is null outside a create or
+      # update, which makes a field check throw and Firestore deny. Every
+      # failure was silent and only reproducible against real Firestore. The
+      # emulator needs a JDK >= 21, which setup-java above already provides.
+      - name: Firestore security rules
+        run: npm run test:rules
+
       - name: End-to-end smoke test
         run: |
           python -m http.server 8000 &
