@@ -326,6 +326,16 @@
           <span class="settings-label" data-i18n="settings.reset">🗑️ ล้างข้อมูล</span>
           <button id="btn-open-reset" class="btn btn-outline btn-sm" data-i18n="settings.reset_btn">ล้างข้อมูล</button>
         </div>
+        <!-- Account deletion. Google Play requires any app offering account
+             creation to also offer in-app deletion (plus the public web route in
+             delete-account.html for people who have uninstalled). Distinct from
+             "ล้างข้อมูล" above, which only clears this device and deliberately
+             keeps purchases. Hidden unless an account actually exists - see
+             ui.js's syncGoogleAccountUI(). -->
+        <div class="settings-row hidden" id="settings-row-delete-account">
+          <span class="settings-label" data-i18n="settings.delete_account">☠️ ลบบัญชี</span>
+          <button id="btn-open-delete-account" class="btn btn-outline btn-sm" data-i18n="settings.delete_account_btn">ลบบัญชี</button>
+        </div>
       </div>
       <div class="modal-btns">
         <button id="btn-settings-close" class="btn btn-primary" data-i18n="settings.close">Close</button>
@@ -341,6 +351,20 @@
       <div class="modal-btns">
         <button id="btn-reset-confirm" class="btn btn-primary reset-danger-btn" data-i18n="reset.confirm">ล้างข้อมูลและเริ่มใหม่</button>
         <button id="btn-reset-cancel" class="btn btn-outline" data-i18n="reset.cancel">ยกเลิก</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DELETE ACCOUNT CONFIRM MODAL - permanently removes the Google-linked
+       account and everything stored under it (saves/{uid} + players/{uid}),
+       unlike modal-reset-confirm which only clears this device. -->
+  <div id="modal-delete-account" class="modal-overlay hidden" data-back-close="btn-delete-account-cancel">
+    <div class="modal-box">
+      <h2 class="modal-title" data-i18n="delete_account.title">☠️ ลบบัญชีถาวร?</h2>
+      <p class="modal-sub" data-i18n="delete_account.warning">บัญชี Google ที่เชื่อมไว้ ข้อมูลสำรองบนคลาวด์ และอันดับบนกระดานโลกของคุณจะถูกลบถาวร กู้คืนไม่ได้ ความคืบหน้าในเครื่องนี้จะถูกล้างด้วย ส่วนสินค้าที่ซื้อด้วยเงินจริงยังผูกกับบัญชี Google Play ของคุณตามเดิม</p>
+      <div class="modal-btns">
+        <button id="btn-delete-account-confirm" class="btn btn-primary reset-danger-btn" data-i18n="delete_account.confirm">ลบบัญชีถาวร</button>
+        <button id="btn-delete-account-cancel" class="btn btn-outline" data-i18n="delete_account.cancel">ยกเลิก</button>
       </div>
     </div>
   </div>

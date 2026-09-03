@@ -253,6 +253,53 @@ const CloudSave = (() => {
     location.reload();
   }
 
+  // Permanently deletes the signed-in account: its cloud save, its leaderboard
+  // entry, and the Firebase user itself. Required by Google Play for any app
+  // that offers account creation (the public web route is delete-account.html).
+  //
+  // Deliberately NOT best-effort like everything else in this module: a delete
+  // that silently half-failed would leave the player's data behind while telling
+  // them it was gone, so this reports what actually happened and the caller only
+  // wipes local data once the account is really gone.
+  //
+  // Real-money entitlements are untouched on purpose - they live in the player's
+  // Google Play account, not ours, and js/iap.js's restore sweep re-grants them.
+  // Returns { ok } or { ok: false, reason }.
+  async function deleteAccount() {
+    if (typeof firebase === 'undefined') return { ok: false, reason: 'unavailable' };
+    const user = firebase.auth().currentUser;
+    if (!user || user.isAnonymous) return { ok: false, reason: 'not_signed_in' };
+    const uid = user.uid;
+    try {
+      const db = firebase.firestore();
+      // Both docs first, while the credential is still valid: deleting the auth
+      // user revokes the token these writes are authorised by, so doing it the
+      // other way round would orphan the data permanently with no way back in.
+      await db.collection('saves').doc(uid).delete();
+      await db.collection('players').doc(uid).delete();
+    } catch (e) {
+      console.warn('[CloudSave] deleteAccount: data delete failed', e);
+      return { ok: false, reason: 'data' };
+    }
+    try {
+      await user.delete();
+    } catch (e) {
+      // auth/requires-recent-login: Firebase refuses to delete a user whose
+      // sign-in is old. The data is already gone at this point, so the honest
+      // outcome is "signed out, data deleted, auth record remains" - the player
+      // is told to sign in again and repeat, rather than shown a bare failure.
+      console.warn('[CloudSave] deleteAccount: user.delete failed', e);
+      linked = false;
+      try { await signOutGoogle(); } catch {}
+      return { ok: false, reason: (e && e.code === 'auth/requires-recent-login') ? 'stale_login' : 'auth' };
+    }
+    linked = false;
+    // user.delete() ends the session, so mint the anonymous one the app expects
+    // to always have (same reasoning as signOutGoogle).
+    try { await firebase.auth().signInAnonymously(); } catch {}
+    return { ok: true };
+  }
+
   // Best-effort startup check (native only) - if a Google session is already
   // active from a previous launch, silently resolves any restore conflict the
   // same way a fresh sign-in would. Returns the conflict snapshot (or null) so
@@ -275,5 +322,5 @@ const CloudSave = (() => {
     return null;
   }
 
-  return { init, signInWithGoogle, signOutGoogle, isGoogleLinked, pushNow, checkForRestore, applyCloudSnapshot };
+  return { init, signInWithGoogle, signOutGoogle, isGoogleLinked, pushNow, checkForRestore, applyCloudSnapshot, deleteAccount };
 })();

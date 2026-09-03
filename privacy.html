@@ -46,7 +46,7 @@
     <div class="logo">ArrowFlow</div>
     <h1 id="title-th">นโยบายความเป็นส่วนตัว</h1>
     <h1 id="title-en" style="display:none">Privacy Policy</h1>
-    <div class="updated">Last updated: 2026-08-18</div>
+    <div class="updated">Last updated: 2026-09-03</div>
   </header>
 
   <div class="lang-switch">
@@ -57,9 +57,11 @@
   <div id="th">
     <section>
       <h2>ข้อมูลที่เกมเก็บ</h2>
-      <p>ArrowFlow เป็นเกมปริศนาที่เล่นได้โดยไม่ต้องสมัครสมาชิกหรือเข้าสู่ระบบด้วยอีเมล/รหัสผ่าน เกมเก็บข้อมูลดังนี้:</p>
+      <p>ArrowFlow เล่นได้ครบทุกอย่างโดยไม่ต้องเข้าสู่ระบบ การเชื่อมบัญชี Google เป็นทางเลือก ใช้สำหรับสำรองข้อมูลไว้กู้คืนตอนเปลี่ยนเครื่องเท่านั้น เกมเก็บข้อมูลดังนี้:</p>
       <ul>
-        <li><strong>ความคืบหน้าในเกม</strong> (ด่านที่ผ่าน, ดาว, สถิติ) — เก็บไว้บนอุปกรณ์ของคุณเท่านั้น (local storage) ไม่ส่งขึ้นเซิร์ฟเวอร์</li>
+        <li><strong>ความคืบหน้าในเกม</strong> (ด่านที่ผ่าน, ดาว, สถิติ) — เก็บไว้บนอุปกรณ์ของคุณ (local storage) และจะถูกสำรองขึ้นคลาวด์ก็ต่อเมื่อคุณเลือกเชื่อมบัญชี Google เท่านั้น</li>
+        <li><strong>บัญชี Google (เฉพาะเมื่อคุณเลือกเชื่อม)</strong> — หากคุณกด “เชื่อมต่อ Google” ในหน้าตั้งค่า Google จะแชร์ <em>อีเมล ชื่อ และรูปโปรไฟล์</em> ของคุณให้กับเกม และเกมจะเก็บความคืบหน้าของคุณไว้บน Firebase (Firestore) โดยผูกกับบัญชีนั้น เพื่อให้กู้คืนได้เมื่อคุณติดตั้งเกมใหม่ ถ้าคุณไม่เชื่อมบัญชี จะไม่มีข้อมูลส่วนนี้เลย</li>
+        <li><strong>การซื้อในแอป</strong> — การชำระเงินดำเนินการโดย Google Play ทั้งหมด เกมไม่เห็นและไม่เก็บข้อมูลบัตรหรือวิธีชำระเงินของคุณ เกมเก็บเพียงว่าคุณเป็นเจ้าของสินค้าใดบ้าง และรหัสอ้างอิงการซื้อจาก Google สำหรับตรวจสอบว่าใบเสร็จเป็นของจริง</li>
         <li><strong>อันดับผู้เล่น (Leaderboard)</strong> — หากคุณเลือกตั้งชื่อผู้เล่นและเข้าร่วมอันดับคะแนนโลก เกมจะส่ง <em>ชื่อผู้เล่นที่คุณตั้งเอง</em> และ <em>คะแนน</em> ไปเก็บไว้บน Firebase (Firestore) พร้อมรหัสอ้างอิงแบบไม่ระบุตัวตน (anonymous ID) ที่สุ่มสร้างโดยอัตโนมัติ — ไม่มีการเก็บอีเมล ชื่อจริง เบอร์โทร หรือข้อมูลที่ระบุตัวตนได้อื่นใด</li>
         <li><strong>สถิติการใช้งานแบบไม่ระบุตัวตน (Firebase Analytics)</strong> — เกมใช้ Firebase Analytics เพื่อเก็บข้อมูลการใช้งานทั่วไป เช่น จำนวนครั้งที่เปิดเกม, ด่านที่เล่น, ข้อมูลอุปกรณ์/รุ่นระบบปฏิบัติการโดยรวม เพื่อช่วยปรับปรุงเกม ข้อมูลนี้เป็นสถิติรวมแบบไม่ระบุตัวตนของผู้เล่นรายบุคคล</li>
       </ul>
@@ -68,9 +70,10 @@
     <section>
       <h2>ข้อมูลที่เกม<u>ไม่</u>เก็บ</h2>
       <ul>
-        <li>ไม่มีระบบสมัครสมาชิก/เข้าสู่ระบบด้วยอีเมลหรือรหัสผ่าน</li>
-        <li>ไม่เก็บอีเมล เบอร์โทร ที่อยู่ หรือข้อมูลติดต่อส่วนตัวใดๆ</li>
-        <li>ไม่เข้าถึงกล้อง, ไมโครโฟน, รายชื่อผู้ติดต่อ, หรือตำแหน่งที่ตั้ง</li>
+        <li>ไม่มีการตั้งรหัสผ่าน — การยืนยันตัวตนทำผ่าน Google ทั้งหมด เกมไม่เคยเห็นรหัสผ่านของคุณ</li>
+        <li>ไม่เก็บเบอร์โทร ที่อยู่ วันเกิด หรือข้อมูลติดต่ออื่นนอกจากอีเมลที่ Google แชร์มาตอนคุณเลือกเชื่อมบัญชี</li>
+        <li>ไม่เก็บข้อมูลบัตรเครดิตหรือวิธีการชำระเงิน (Google Play จัดการทั้งหมด)</li>
+        <li>ไม่เข้าถึงกล้อง, ไมโครโฟน, รายชื่อผู้ติดต่อ, ไฟล์, หรือตำแหน่งที่ตั้ง</li>
         <li>ไม่ขายหรือแชร์ข้อมูลผู้เล่นให้บุคคลที่สามเพื่อการตลาด</li>
       </ul>
     </section>
@@ -84,7 +87,9 @@
 
     <section>
       <h2>สิทธิ์ของคุณ</h2>
-      <p>คุณสามารถเล่นเกมได้ตามปกติโดยไม่เข้าร่วมอันดับผู้เล่นโลก (ข้อมูลจะไม่ถูกส่งขึ้น Firebase เลย) การล้างข้อมูลแอปหรือถอนการติดตั้งจะลบความคืบหน้าที่เก็บในอุปกรณ์ทั้งหมด หากต้องการให้ลบชื่อผู้เล่น/คะแนนออกจากอันดับโลก ติดต่อได้ตามอีเมลด้านล่าง</p>
+      <p>คุณเล่นเกมได้ครบทุกอย่างโดยไม่ต้องเชื่อมบัญชีและไม่ต้องเข้าร่วมอันดับโลก — ในกรณีนั้นจะไม่มีข้อมูลใดของคุณถูกส่งขึ้นเซิร์ฟเวอร์เลย</p>
+      <p><strong>การลบบัญชีและข้อมูล:</strong> คุณลบบัญชีและข้อมูลทั้งหมดได้ด้วยตัวเองทันทีที่ <em>ตั้งค่า → ☠️ ลบบัญชี</em> ในเกม หรือถ้าถอนการติดตั้งไปแล้ว ส่งคำขอทางอีเมลได้ — ดูขั้นตอนทั้งหมดที่หน้า <a class="link" href="delete-account.html">ขอลบบัญชีและข้อมูล</a></p>
+      <p><strong>ระยะเวลาเก็บข้อมูล:</strong> ข้อมูลสำรองบนคลาวด์จะถูกเก็บไว้ตราบเท่าที่บัญชีของคุณยังอยู่ และถูกลบทันทีที่คุณลบบัญชี คำขอลบทางอีเมลจะดำเนินการภายใน 30 วัน</p>
     </section>
 
     <section>
@@ -96,9 +101,11 @@
   <div id="en">
     <section>
       <h2>Information We Collect</h2>
-      <p>ArrowFlow is a puzzle game that can be played without creating an account or signing in with an email/password. The game collects:</p>
+      <p>ArrowFlow is fully playable without signing in. Linking a Google account is optional and exists only to back up your progress so it can be restored on another device. The game collects:</p>
       <ul>
-        <li><strong>Game progress</strong> (levels cleared, stars, stats) — stored locally on your device only, never sent to any server</li>
+        <li><strong>Game progress</strong> (levels cleared, stars, stats) — stored on your device, and backed up to the cloud only if you choose to link a Google account</li>
+        <li><strong>Google account (only if you link one)</strong> — if you tap "Connect Google" in Settings, Google shares your <em>email address, name and profile picture</em> with the game, and your progress is stored on Firebase (Firestore) against that account so it can be restored after a reinstall. If you never link an account, none of this exists</li>
+        <li><strong>In-app purchases</strong> — payment is handled entirely by Google Play. The game never sees or stores your card or payment details. It records only which items you own, plus the purchase reference Google issues, used to check that a receipt is genuine</li>
         <li><strong>Leaderboard data</strong> — if you choose to set a player name and opt in to the global leaderboard, the game sends your <em>self-chosen player name</em> and <em>score</em> to Firebase (Firestore), along with an automatically generated anonymous ID. No email, real name, phone number, or other personally identifying information is collected</li>
         <li><strong>Anonymous usage statistics (Firebase Analytics)</strong> — the game uses Firebase Analytics to collect general usage data such as how often the game is opened, which levels are played, and aggregate device/OS information, to help improve the game. This data is aggregated and not tied to an individual identity</li>
       </ul>
@@ -107,9 +114,10 @@
     <section>
       <h2>Information We Do <u>Not</u> Collect</h2>
       <ul>
-        <li>No account/login system with email or password</li>
-        <li>No email, phone number, address, or other personal contact information</li>
-        <li>No access to camera, microphone, contacts, or location</li>
+        <li>No passwords — sign-in is handled entirely by Google, and the game never sees your password</li>
+        <li>No phone number, address, date of birth, or contact details beyond the email address Google shares when you choose to link an account</li>
+        <li>No card or payment details (Google Play handles all of it)</li>
+        <li>No access to camera, microphone, contacts, files, or location</li>
         <li>Player data is never sold or shared with third parties for marketing</li>
       </ul>
     </section>
@@ -123,7 +131,9 @@
 
     <section>
       <h2>Your Choices</h2>
-      <p>You can play the full game without ever opting into the global leaderboard (no data is sent to Firebase in that case). Clearing app data or uninstalling removes all locally stored progress. To request removal of your player name/score from the leaderboard, contact us at the email below.</p>
+      <p>You can play the entire game without linking an account or joining the global leaderboard — in that case nothing about you is sent to any server.</p>
+      <p><strong>Deleting your account and data:</strong> you can delete everything yourself at any time from <em>Settings → ☠️ Delete account</em> in the game. If you have already uninstalled, you can request deletion by email — full instructions are on the <a class="link" href="delete-account.html">account deletion page</a>.</p>
+      <p><strong>Data retention:</strong> your cloud backup is kept for as long as your account exists and is removed the moment you delete it. Email deletion requests are processed within 30 days.</p>
     </section>
 
     <section>

@@ -31,3 +31,13 @@ android/captures/
 # well-known debug-only credentials) so every CI/local debug build shares one stable
 # signing fingerprint - see android/app/build.gradle's signingConfigs.debug comment.
 !android/app/debug.keystore
+
+# Scratch space used while testing/releasing - built APKs and AABs (hundreds of
+# MB), captured video frames, and marketing renders. None of it is source, and a
+# single `git add -A` would otherwise put it in the repo's history forever.
+scratch_apk/
+scratch_frames/
+scratch_frames28/
+marketing/
+f36/
+f38/

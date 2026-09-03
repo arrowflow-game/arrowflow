@@ -84,6 +84,11 @@ const UI = (() => {
     const linked = CloudSave.isGoogleLinked();
     label.textContent = linked ? I18N.t('settings.google_signed_in') : I18N.t('settings.google_account');
     btn.textContent = linked ? I18N.t('settings.google_signout_btn') : I18N.t('settings.google_signin_btn');
+    // "Delete account" only means anything once one exists. Offering it to a
+    // player who never signed in would just be a scarier-looking duplicate of
+    // "ล้างข้อมูล" (which keeps purchases and is the thing they actually want).
+    const delRow = document.getElementById('settings-row-delete-account');
+    if (delRow) delRow.classList.toggle('hidden', !linked);
   }
 
   // Shared by the sign-in button's own flow and main.js's startup CloudSave.init()
@@ -1969,6 +1974,37 @@ const UI = (() => {
       }
       // Hard-reload so every module (Game/UI/Tutorial/Leaderboard/CloudSave)
       // re-initializes clean rather than trying to patch live state.
+      location.reload();
+    });
+
+    document.getElementById('btn-open-delete-account').addEventListener('click', () => {
+      document.getElementById('modal-settings').classList.add('hidden');
+      document.getElementById('modal-delete-account').classList.remove('hidden');
+    });
+    document.getElementById('btn-delete-account-cancel').addEventListener('click', () => {
+      document.getElementById('modal-delete-account').classList.add('hidden');
+    });
+    document.getElementById('btn-delete-account-confirm').addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      btn.textContent = I18N.t('delete_account.working');
+      const { ok, reason } = await CloudSave.deleteAccount();
+      if (!ok) {
+        btn.disabled = false;
+        btn.textContent = I18N.t('delete_account.confirm');
+        document.getElementById('modal-delete-account').classList.add('hidden');
+        // stale_login is the one failure the player can actually act on, and by
+        // then the cloud data IS already deleted - say so plainly rather than
+        // implying nothing happened.
+        alert(I18N.t(reason === 'stale_login' ? 'delete_account.stale_login' : 'delete_account.failed'));
+        return;
+      }
+      Analytics.logEvent('account_deleted', {});
+      // Only wipe the device once the account is really gone. resetAll() keeps
+      // purchases, which is correct: those belong to the player's Google Play
+      // account, not to the account just deleted.
+      Storage.resetAll();
+      alert(I18N.t('delete_account.done'));
       location.reload();
     });
 

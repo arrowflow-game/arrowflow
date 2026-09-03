@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Delete Account - ArrowFlow</title>
+<!-- Public account-deletion route. Google Play requires apps that offer account
+     creation to publish a URL where deletion can be requested WITHOUT installing
+     the app, alongside the in-app path (Settings -> ลบบัญชี). Styling mirrors
+     privacy.html deliberately: the two are linked to each other and are the only
+     pages served from this domain. -->
+<style>
+  :root {
+    --bg: #0d0d1a;
+    --bg-card: rgba(255,255,255,0.06);
+    --accent: #00f5ff;
+    --danger: #ff6b6b;
+    --text: #eef2ff;
+    --text-dim: #a9b0c9;
+    --border: rgba(255,255,255,0.12);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans Thai", Sarabun, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 40px 20px 80px; }
+  header { text-align: center; margin-bottom: 32px; }
+  .logo { font-size: 1.8rem; font-weight: 900; color: var(--accent); letter-spacing: 0.5px; }
+  h1 { font-size: 1.4rem; margin: 8px 0 0; color: var(--text); }
+  .updated { color: var(--text-dim); font-size: 0.85rem; margin-top: 4px; }
+  .lang-switch { text-align: center; margin: 24px 0 8px; }
+  .lang-switch a {
+    color: var(--accent); text-decoration: none; font-weight: 700; padding: 8px 16px;
+    border: 1px solid var(--border); border-radius: 999px; display: inline-block; margin: 0 4px;
+  }
+  section { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 24px 28px; margin-top: 24px; }
+  h2 { font-size: 1.1rem; color: var(--accent); margin-top: 0; }
+  ul, ol { padding-left: 1.2em; }
+  li { margin: 6px 0; }
+  .dim { color: var(--text-dim); }
+  a.link { color: var(--accent); }
+  .keep { border-color: rgba(255,255,255,0.2); }
+  .keep h2 { color: var(--text); }
+  strong.danger { color: var(--danger); }
+  code {
+    background: rgba(255,255,255,0.08); padding: 2px 7px; border-radius: 5px;
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.9em;
+  }
+  #en { display: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">ArrowFlow</div>
+    <h1 id="title-th">ขอลบบัญชีและข้อมูล</h1>
+    <h1 id="title-en" style="display:none">Delete your account and data</h1>
+    <div class="updated">Last updated: 2026-09-03</div>
+  </header>
+
+  <div class="lang-switch">
+    <a href="#" onclick="setLang('th');return false;">ไทย</a>
+    <a href="#" onclick="setLang('en');return false;">English</a>
+  </div>
+
+  <!-- ============ THAI ============ -->
+  <div id="th">
+    <section>
+      <h2>วิธีที่ 1 — ลบเองในแอป (เร็วที่สุด)</h2>
+      <p>ถ้ายังติดตั้ง ArrowFlow อยู่ ลบได้ทันทีด้วยตัวเอง ไม่ต้องรอใครอนุมัติ:</p>
+      <ol>
+        <li>เปิดเกม แล้วกดปุ่ม <strong>ตั้งค่า</strong> (รูปเฟือง มุมขวาบน)</li>
+        <li>เลื่อนลงไปที่แถว <strong>☠️ ลบบัญชี</strong></li>
+        <li>กด <strong>ลบบัญชี</strong> แล้วยืนยัน</li>
+      </ol>
+      <p class="dim">แถวนี้จะแสดงเฉพาะเมื่อคุณเชื่อมบัญชี Google ไว้แล้วเท่านั้น ถ้าไม่เคยเชื่อม แปลว่าเกมไม่ได้เก็บข้อมูลใดๆ ของคุณไว้บนเซิร์ฟเวอร์อยู่แล้ว — ข้อมูลทั้งหมดอยู่ในเครื่องคุณ และจะหายไปเองเมื่อถอนการติดตั้ง</p>
+    </section>
+
+    <section>
+      <h2>วิธีที่ 2 — ส่งคำขอทางอีเมล (กรณีถอนการติดตั้งไปแล้ว)</h2>
+      <p>ส่งอีเมลมาที่ <a class="link" href="mailto:kheehlow@gmail.com?subject=ArrowFlow%20-%20Delete%20my%20account">kheehlow@gmail.com</a> โดยใช้หัวข้อ <code>ArrowFlow - Delete my account</code></p>
+      <p>กรุณา <strong>ส่งจากอีเมลบัญชี Google เดียวกับที่ใช้เชื่อมในเกม</strong> เพราะนั่นคือวิธีเดียวที่เราจะยืนยันได้ว่าเป็นเจ้าของบัญชีจริง (เราไม่มีข้อมูลอื่นที่ใช้ยืนยันตัวตนคุณได้เลย)</p>
+      <p class="dim">เราจะดำเนินการภายใน <strong>30 วัน</strong> และตอบกลับยืนยันเมื่อลบเสร็จ</p>
+    </section>
+
+    <section>
+      <h2>สิ่งที่จะถูกลบถาวร</h2>
+      <ul>
+        <li>การเชื่อมบัญชี Google ของคุณกับเกม (อีเมลและชื่อที่ Google แชร์มา)</li>
+        <li>ข้อมูลสำรองบนคลาวด์ทั้งหมด — ด่านที่ผ่าน ดาว คะแนน เพชร คำใบ้ สกินที่ปลดล็อก สตรีครายวัน</li>
+        <li>ชื่อผู้เล่นและอันดับของคุณบนกระดานอันดับโลก</li>
+        <li>ความคืบหน้าทั้งหมดในเครื่องที่คุณกดลบ</li>
+      </ul>
+      <p><strong class="danger">การลบไม่สามารถย้อนกลับได้</strong> ไม่มีสำเนาสำรองให้กู้คืน หากคุณติดตั้งเกมใหม่ในภายหลัง จะเริ่มจากด่าน 1 ใหม่ทั้งหมด</p>
+    </section>
+
+    <section class="keep">
+      <h2>สิ่งที่ไม่ได้ถูกลบ (และเหตุผล)</h2>
+      <ul>
+        <li><strong>สินค้าที่คุณซื้อด้วยเงินจริง</strong> — ประวัติการซื้อเป็นของบัญชี Google Play ของคุณ ไม่ใช่ของเรา เราไม่มีสิทธิ์ลบ และถ้าคุณติดตั้งเกมใหม่ ระบบจะคืนสินค้าที่ซื้อไว้ให้อัตโนมัติ หากต้องการขอคืนเงินหรือดูประวัติ ต้องติดต่อ Google Play โดยตรง</li>
+        <li><strong>คะแนนสูงสุดของแต่ละด่านในตารางสถิติรวม</strong> — เก็บเป็นตัวเลขล้วนโดยไม่ผูกกับตัวตนใคร จึงไม่ใช่ข้อมูลส่วนบุคคลอีกต่อไป</li>
+        <li><strong>สถิติการใช้งานแบบไม่ระบุตัวตน</strong> — ข้อมูลรวมที่ไม่สามารถย้อนกลับมาหาคุณได้</li>
+      </ul>
+    </section>
+
+    <section>
+      <p class="dim">ดูรายละเอียดว่าเกมเก็บข้อมูลอะไรบ้างได้ที่ <a class="link" href="privacy.html">นโยบายความเป็นส่วนตัว</a></p>
+    </section>
+  </div>
+
+  <!-- ============ ENGLISH ============ -->
+  <div id="en">
+    <section>
+      <h2>Option 1 — Delete it yourself in the app (fastest)</h2>
+      <p>If you still have ArrowFlow installed you can delete your account immediately, with no approval step:</p>
+      <ol>
+        <li>Open the game and tap <strong>Settings</strong> (the gear, top right)</li>
+        <li>Scroll to the <strong>☠️ Delete account</strong> row</li>
+        <li>Tap <strong>Delete</strong> and confirm</li>
+      </ol>
+      <p class="dim">That row appears only if you have linked a Google account. If you never linked one, the game stores nothing about you on any server — everything lives on your device and goes away when you uninstall.</p>
+    </section>
+
+    <section>
+      <h2>Option 2 — Request it by email (if you already uninstalled)</h2>
+      <p>Email <a class="link" href="mailto:kheehlow@gmail.com?subject=ArrowFlow%20-%20Delete%20my%20account">kheehlow@gmail.com</a> with the subject <code>ArrowFlow - Delete my account</code></p>
+      <p>Please <strong>send it from the same Google account you linked in the game</strong>. That is the only way we can confirm the account is yours — we hold nothing else that could identify you.</p>
+      <p class="dim">Requests are processed within <strong>30 days</strong>, and we reply to confirm once the deletion is done.</p>
+    </section>
+
+    <section>
+      <h2>What is permanently deleted</h2>
+      <ul>
+        <li>The link between your Google account and the game (the email and name Google shared with us)</li>
+        <li>Your entire cloud backup — levels completed, stars, score, gems, hints, unlocked skins, daily streak</li>
+        <li>Your nickname and your entry on the world leaderboard</li>
+        <li>All progress on the device you delete from</li>
+      </ul>
+      <p><strong class="danger">Deletion cannot be undone.</strong> There is no backup to restore from. If you install the game again later, you start from level 1.</p>
+    </section>
+
+    <section class="keep">
+      <h2>What is not deleted, and why</h2>
+      <ul>
+        <li><strong>Anything you bought with real money</strong> — purchase history belongs to your Google Play account, not to us. We have no ability to delete it, and if you reinstall, your purchases are restored automatically. For refunds or purchase history, contact Google Play directly.</li>
+        <li><strong>Per-level world-best scores</strong> — stored as bare numbers with no identity attached, so they are no longer personal data.</li>
+        <li><strong>Anonymous usage statistics</strong> — aggregate figures that cannot be traced back to you.</li>
+      </ul>
+    </section>
+
+    <section>
+      <p class="dim">For details of what the game collects, see the <a class="link" href="privacy.html">Privacy Policy</a>.</p>
+    </section>
+  </div>
+</div>
+
+<script>
+  function setLang(lang) {
+    document.getElementById('th').style.display = lang === 'th' ? 'block' : 'none';
+    document.getElementById('en').style.display = lang === 'en' ? 'block' : 'none';
+    document.getElementById('title-th').style.display = lang === 'th' ? 'block' : 'none';
+    document.getElementById('title-en').style.display = lang === 'en' ? 'block' : 'none';
+    document.documentElement.lang = lang;
+  }
+  // Anyone arriving from a non-Thai device gets English without hunting for the
+  // switch - this page is often reached from a Play Store data-safety link.
+  if (!(navigator.language || '').toLowerCase().startsWith('th')) setLang('en');
+</script>
+</body>
+</html>

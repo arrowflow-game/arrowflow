@@ -20,7 +20,14 @@ service cloud.firestore {
     // One doc per player, keyed by their Firebase Anonymous Auth uid.
     match /players/{uid} {
       allow read: if true;
-      allow write: if request.auth != null
+      // Account deletion (Play Store requirement for any app with sign-in - see
+      // delete-account.html). `allow write` covers create/update/DELETE, but on a
+      // delete `request.resource` is null, so every field check below would throw
+      // and Firestore would deny it - the same fail-closed trap that broke reads on
+      // saves/{uid}. Deletes therefore need their own rule, and create/update is
+      // spelled out explicitly so the two can never be conflated again.
+      allow delete: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null
         && request.auth.uid == uid
         && request.resource.data.nickname is string
         && request.resource.data.nickname.size() > 0
@@ -81,7 +88,10 @@ service cloud.firestore {
       // one thing cloud save exists for: checkForRestore() could never read the doc
       // back after a reinstall, so a restore would always come up empty.
       allow read: if request.auth != null && request.auth.uid == uid;
-      allow write: if request.auth != null
+      // Same delete/create-update split as players/{uid} above, for the same
+      // reason: request.resource is null on a delete.
+      allow delete: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null
         && request.auth.uid == uid
         // Nickname is optional here, unlike players/{uid} above where it is the
         // leaderboard's display name and must exist. Setting one is genuinely
