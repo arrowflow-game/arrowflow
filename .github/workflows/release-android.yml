@@ -47,7 +47,14 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ANDROID_VERSION_CODE: ${{ github.run_number }}
-        run: ./gradlew bundleRelease --no-daemon
+        # versionName previously fell back to a constant "1.0" on every single
+        # release, so a tester's bug report could not be traced back to the code
+        # it came from. Stamping the run number and the commit makes the build in
+        # someone's hands identifiable from the Play listing alone.
+        run: |
+          export ANDROID_VERSION_NAME="1.0.$ANDROID_VERSION_CODE+$(git rev-parse --short HEAD)"
+          echo "Building versionCode=$ANDROID_VERSION_CODE versionName=$ANDROID_VERSION_NAME"
+          ./gradlew bundleRelease --no-daemon
 
       - name: Remove keystore from runner
         if: always()

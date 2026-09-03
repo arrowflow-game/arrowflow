@@ -1,0 +1,30 @@
+# Nothing else in this project watches for dependency security advisories, and
+# two of these packages sit directly on money (@capgo/native-purchases) and on
+# authentication (@capacitor-firebase/authentication). Monthly rather than
+# weekly: this is a solo project, and a PR nobody has time to look at is worse
+# than no PR.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    groups:
+      capacitor:
+        patterns:
+          - "@capacitor/*"
+          - "@capacitor-community/*"
+          - "@capacitor-firebase/*"
+          - "@capawesome/*"
+
+  - package-ecosystem: npm
+    directory: /functions
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

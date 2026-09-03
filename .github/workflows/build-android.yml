@@ -42,6 +42,26 @@ jobs:
       - name: Lint (no-undef tripwire)
         run: npm run lint
 
+      # tools/e2e_smoke_test.py has existed since the early manual-verification
+      # passes were formalised, but nothing ever ran it automatically - so in
+      # practice it ran only when someone remembered, which is to say rarely.
+      # It drives the real page in headless Chromium, which is how every feature
+      # in this project has actually been verified.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Playwright
+        run: |
+          pip install playwright
+          python -m playwright install --with-deps chromium
+
+      - name: End-to-end smoke test
+        run: |
+          python -m http.server 8000 &
+          for i in $(seq 1 20); do curl -sf http://localhost:8000/ >/dev/null && break; sleep 0.5; done
+          python tools/e2e_smoke_test.py --url http://localhost:8000
+
       - name: Build web assets + sync Capacitor
         run: npm run cap:sync
 
