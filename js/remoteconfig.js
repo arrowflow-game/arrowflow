@@ -50,8 +50,15 @@ const RemoteConfig = (() => {
     // Star pacing - game.js's onWin(). A clear within parTime x the first
     // number keeps 3 stars, within x the second keeps 2 (see
     // [[arrowflow_star_rating_redesign]] for how these were chosen).
-    star_pace_fast_multiplier: 3,
-    star_pace_ok_multiplier: 6
+    // parTime itself is paths.length * 2.5s - a tap-only speedrun baseline
+    // with zero time to rotate the cube and look for the next path. 3x/6x
+    // shipped 3-star out of reach for an ordinary player on longer levels
+    // (level 7, 43 paths, needed a sub-5:23 clear including all rotation
+    // time) - loosened 2026-09-03 so an unhurried but competent player can
+    // still land 3 stars, while a level still gets played, not stared at,
+    // to earn them.
+    star_pace_fast_multiplier: 5,
+    star_pace_ok_multiplier: 9
   };
 
   let values = { ...DEFAULTS };
