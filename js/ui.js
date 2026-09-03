@@ -888,7 +888,13 @@ const UI = (() => {
   // freezes the score/best-time clock (game.js's pause()/resume()) and pauses
   // music, same as tapping Pause manually.
   function openPauseModal() {
-    document.getElementById('pause-lvl').textContent = Storage.get('currentLevel');
+    // Storage.get('currentLevel') is the player's last-reached CAMPAIGN level,
+    // not the level actually in play - it showed the wrong number when pausing
+    // mid-replay of an earlier level, and was never even a number for Daily
+    // ('daily-2026-09-03') or REMIX ('remix-110'). Game.getHudPayload().level
+    // is the same mode-aware label the in-level HUD pill already shows.
+    const hud = Game.getHudPayload();
+    document.getElementById('pause-lvl').textContent = hud ? hud.level : Storage.get('currentLevel');
     document.getElementById('modal-pause').classList.remove('hidden');
     Game.pause();
     Sound.pauseMusic();
