@@ -47,7 +47,7 @@ jobs:
       # practice it ran only when someone remembered, which is to say rarely.
       # It drives the real page in headless Chromium, which is how every feature
       # in this project has actually been verified.
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
