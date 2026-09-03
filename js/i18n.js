@@ -263,7 +263,13 @@ const I18N = (() => {
       'wheel.close': 'ปิด',
       'wheel.reset_in': 'รีเซ็ตใน {t}',
       'wheel.result_gems': '💎 ได้รับ {n} เพชร!',
-      'wheel.result_hints': '💡 ได้รับ {n} คำใบ้!'
+      'wheel.result_hints': '💡 ได้รับ {n} คำใบ้!',
+
+      // REMIX difficulty escalation (2026-09-03) - one-time notice per tier.
+      'remix.tier1_notice': '🔥 REMIX รอบใหม่: เหลือหัวใจแค่ 2 ดวงจากนี้ไป ระวังให้ดี!',
+      'remix.tier2_notice': '💀 REMIX โหมดหัวใจเดียว: พลาดครั้งเดียวจบทันที!',
+      'remix.tier3_notice': '🚫 REMIX ปิดใช้งานคำใบ้แล้ว: ใช้ความจำล้วนๆ จากนี้ไป!',
+      'remix.hints_disabled': 'คำใบ้ปิดใช้งานใน REMIX รอบนี้'
     },
     en: {
       'menu.play': '▶  PLAY',
@@ -520,7 +526,13 @@ const I18N = (() => {
       'wheel.close': 'Close',
       'wheel.reset_in': 'Resets in {t}',
       'wheel.result_gems': '💎 You got {n} gems!',
-      'wheel.result_hints': '💡 You got {n} hints!'
+      'wheel.result_hints': '💡 You got {n} hints!',
+
+      // REMIX difficulty escalation (2026-09-03) - one-time notice per tier.
+      'remix.tier1_notice': '🔥 REMIX gets harder: only 2 hearts from here on - be careful!',
+      'remix.tier2_notice': '💀 REMIX sudden death: one mistake ends the run!',
+      'remix.tier3_notice': "🚫 REMIX hints are off from here: you're on memory alone now!",
+      'remix.hints_disabled': 'Hints are disabled at this REMIX tier'
     }
   };
 

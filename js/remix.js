@@ -24,10 +24,19 @@ const Remix = (() => {
 
     base.tier = 'REMIX';
     base.remixIndex = remixIndex;
-    // Tighten the move budget each lap - never below the path count itself
-    // (the theoretical minimum: one move per path).
-    base.parMoves = Math.max(base.paths.length, base.parMoves - lap);
-    base.maxMoves = Math.max(base.parMoves + 1, base.maxMoves - Math.floor(lap / 2));
+    base.remixLap = lap;
+    // Real difficulty escalation (2026-09-03). The move-budget tightening this
+    // replaced computed parMoves/maxMoves that nothing ever read: every path
+    // clears in exactly one successful tap and a wrong tap costs a LIFE, not a
+    // move, so state.moves always equals paths.length on any win (see the
+    // star-rating redesign note in game.js) - no move budget can ever be
+    // exceeded, and a tester who reached lap 2+ (level 100+) reported REMIX
+    // felt exactly as easy as lap 0. Escalate the one thing that genuinely
+    // can get harder with the same 50 boards: how many mistakes a run
+    // survives, then remove the hint crutch once three full laps (150 levels)
+    // is enough to have this rotating set memorized.
+    base.remixLivesMax = lap === 0 ? 3 : lap === 1 ? 2 : 1;
+    base.remixHintsDisabled = lap >= 3;
     return base;
   }
 

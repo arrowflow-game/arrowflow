@@ -24,7 +24,7 @@ const CloudSave = (() => {
     'currentLevel', 'highestUnlocked', 'levelData', 'totalStars', 'totalScore',
     'hints', 'paidHints', 'gems', 'paidGems',
     'ownedGemSkins', 'ownedIapSkins', 'ownedStreakSkins', 'selectedSkin',
-    'dailyStreak', 'dailyLastCompletedDate', 'remixHighest', 'remixBestScoreByLevel',
+    'dailyStreak', 'dailyLastCompletedDate', 'remixHighest', 'remixBestScoreByLevel', 'remixHighestWarnedLap',
     'adsRemovedUntil', 'adsRemovedForever', 'nickname',
     // Synced so reinstalling can't re-farm the one-time link reward - the flag
     // has to travel with the account, not the device.

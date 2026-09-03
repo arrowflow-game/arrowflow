@@ -1701,6 +1701,23 @@ const UI = (() => {
     toastHideTimer = setTimeout(() => el.classList.remove('show'), 2500);
   }
 
+  // One-time notice the first time a player reaches each REMIX difficulty
+  // tier (js/remix.js's remixLap escalation) - the standing rule for any
+  // gameplay-mechanic change is that the player must be told about it before
+  // being surprised by it, not just left to notice the HUD has fewer hearts
+  // than last time. Gated by Storage.remixHighestWarnedLap so re-entering an
+  // already-seen tier stays silent (same "seen once" pattern as
+  // googleLinkRewardGiven/iapRestoreHintShown).
+  function announceRemixTierIfNew() {
+    const hud = Game.getHudPayload();
+    if (!hud || hud.mode !== 'remix') return;
+    const lap = hud.remixLap || 0;
+    if (lap <= Storage.get('remixHighestWarnedLap')) return;
+    Storage.set('remixHighestWarnedLap', lap);
+    const key = lap === 1 ? 'remix.tier1_notice' : lap === 2 ? 'remix.tier2_notice' : 'remix.tier3_notice';
+    showToast(I18N.t(key));
+  }
+
   function watchRewardedAd(btn, onGranted, onFailed) {
     btn.disabled = true;
     // Swap text on a child [data-i18n] label when one exists (btn-wheel-spin-ad/
@@ -2089,6 +2106,7 @@ const UI = (() => {
 
       if (mode === 'remix') {
         Game.loadRemixLevel(Game.getRemixIndex() + 1);
+        announceRemixTierIfNew();
         Sound.resumeMusic();
       } else if (mode === 'daily') {
         // Only one puzzle per day - "next" just returns to the menu.
@@ -2096,7 +2114,7 @@ const UI = (() => {
         showScreen('screen-menu');
       } else {
         const cur = Game.getLevelNum();
-        if (cur >= TOTAL_LEVELS) Game.loadRemixLevel(0); // campaign just finished -> REMIX
+        if (cur >= TOTAL_LEVELS) { Game.loadRemixLevel(0); announceRemixTierIfNew(); } // campaign just finished -> REMIX
         else Game.loadLevel(cur + 1);
         // Game.loadLevel()/loadRemixLevel() -> Sound.setLevelContext() only
         // crossfades if music is ALREADY playing (see sound.js) - it never
@@ -2157,6 +2175,13 @@ const UI = (() => {
     });
 
     document.getElementById('btn-hint').addEventListener('click', () => {
+      // REMIX turns hints off entirely at its hardest tier (js/remix.js) -
+      // Game.useHint() would just silently no-op there too, same problem as
+      // the out-of-hints case below, so it needs its own explicit message.
+      if (!Game.isHintAllowed()) {
+        showToast(I18N.t('remix.hints_disabled'));
+        return;
+      }
       // Out of hints -> Game.useHint() would just silently no-op, leaving the
       // player with no idea why nothing happened. Send them straight to the
       // Store instead, same shortcut pattern as btn-hud-store.

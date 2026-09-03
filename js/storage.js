@@ -6,6 +6,10 @@
     theme: 'light', sound: true, music: true, vibration: true, colorblindMode: false, tutorialSeen: false, dailyTipSeen: false, lang: 'en', langExplicit: false,
     dailyLastCompletedDate: null, dailyStreak: 0,
     remixHighest: 0, remixBestScoreByLevel: {},
+    // Gates the one-time toast each REMIX difficulty tier shows the first time a
+    // player reaches it (see js/remix.js's remixLap escalation) - the highest
+    // lap already announced, so re-entering an already-seen tier stays silent.
+    remixHighestWarnedLap: 0,
     continueAdsUsedToday: 0, continueAdsDate: null,
     hintAdsUsedToday: 0, hintAdsDate: null,
     // Daily prize wheel (2026-08-25). wheelSpunDate = last date the free spin was

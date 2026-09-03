@@ -18,6 +18,8 @@ const Game = (() => {
     hintsUsed: 0,
     clearedCount: 0,
     lives: LIVES_MAX,
+    livesMax: LIVES_MAX,
+    hintsDisabled: false,
     failed: false,
     won: false,
     lastMovePathId: null,
@@ -118,6 +120,10 @@ const Game = (() => {
   // Shared setup used by loadLevel/loadDailyLevel/loadRemixLevel - only the
   // mode tag, the level-number bookkeeping field, and the source data differ.
   function applyLevelState(mode, data, extra) {
+    // REMIX escalates its own lives ceiling and hint availability per lap
+    // (js/remix.js) - every other mode keeps the base LIVES_MAX/hints-allowed
+    // behaviour untouched, since data.remixLivesMax is only ever set there.
+    const livesMax = data.remixLivesMax || LIVES_MAX;
     state = {
       mode,
       levelNum: extra.levelNum,
@@ -128,7 +134,9 @@ const Game = (() => {
       moves: 0,
       hintsUsed: 0,
       clearedCount: 0,
-      lives: LIVES_MAX,
+      lives: livesMax,
+      livesMax,
+      hintsDisabled: !!data.remixHintsDisabled,
       failed: false,
       won: false,
       lastMovePathId: null,
@@ -205,8 +213,10 @@ const Game = (() => {
       difficulty: state.levelData.difficulty,
       remaining: state.paths.length - state.clearedCount,
       hints: Storage.getHintsTotal(),
+      hintsDisabled: !!state.hintsDisabled,
       lives: state.lives,
-      livesMax: LIVES_MAX,
+      livesMax: state.livesMax,
+      remixLap: state.levelData.remixLap,
       canUndo: state.canUndo,
       combo: state.combo || 0
     };
@@ -444,6 +454,7 @@ const Game = (() => {
 
   function useHint() {
     if (state.failed || state.won) return;
+    if (state.hintsDisabled) return;
     if (Storage.getHintsTotal() <= 0) return;
 
     const target = findOpenPath();
@@ -659,13 +670,15 @@ const Game = (() => {
     // Replaced with two independent criteria, final stars = the WORSE of the
     // two (a clean run that took forever, or a fast run full of mistakes,
     // should both fall short of 3 stars):
-    //  - accuracy: LIVES_MAX - state.lives = misses this run (max survivable
-    //    misses is LIVES_MAX-1, so this only ever lands on 0/1/2 misses).
+    //  - accuracy: state.livesMax - state.lives = misses this run (against
+    //    THIS run's own lives ceiling, not always 3 - REMIX's escalating
+    //    livesMax means a flawless 1-life REMIX clear must read as 0 misses,
+    //    not "3-1=2 misses" against a ceiling this run never had).
     //  - pace: elapsedSec (pause time excluded via totalPausedMs(), same as
     //    computeScore()'s time bonus below) against the same parTime basis
-    //    already used for scoring, loosened 3x/6x since parTime's 2.5s/path
+    //    already used for scoring, loosened 5x/9x since parTime's 2.5s/path
     //    assumes instant taps with no time to actually look at the cube.
-    const missCount = LIVES_MAX - state.lives;
+    const missCount = state.livesMax - state.lives;
     let accuracyStars = 1;
     if (missCount <= 0) accuracyStars = 3;
     else if (missCount <= 1) accuracyStars = 2;
@@ -767,6 +780,7 @@ const Game = (() => {
     getHudPayload: () => state.levelData ? buildHudPayload() : null,
     getFirstOpenPathId,
     isComboEnabled: comboEnabledForLevel,
+    isHintAllowed: () => !state.hintsDisabled,
     // Read-only debug/test getters (no side effects, same spirit as getFirstOpenPathId
     // above) - not used by any real gameplay UI, only automated smoke tests.
     getGoldenPathId: () => state.goldenPathId,
