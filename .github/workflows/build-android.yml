@@ -15,6 +15,13 @@ on:
       - 'scripts/**'
       - 'android/**'
       - '.github/workflows/build-android.yml'
+      # Added 2026-09-03 alongside the rules/backup/e2e gates. Without these,
+      # the one change each gate exists to catch - an edit to firestore.rules,
+      # or to a test itself - would not have triggered CI at all.
+      - 'tools/**'
+      - 'firestore.rules'
+      - 'firebase.json'
+      - 'package-lock.json'
   workflow_dispatch: {}
 
 jobs:
