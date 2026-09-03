@@ -41,3 +41,7 @@ scratch_frames28/
 marketing/
 f36/
 f38/
+
+# Firebase emulator output from `npm run test:rules`
+*-debug.log
+firebase-export-*/
