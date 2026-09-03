@@ -65,6 +65,11 @@ jobs:
       - name: Firestore security rules
         run: npm run test:rules
 
+      # The backup exporter is only useful if its output can actually be read
+      # back - a backup nobody has restored from is a folder of files.
+      - name: Firestore backup exporter
+        run: npm run test:backup
+
       - name: End-to-end smoke test
         run: |
           python -m http.server 8000 &

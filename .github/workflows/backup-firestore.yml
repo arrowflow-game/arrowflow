@@ -1,0 +1,60 @@
+name: Backup Firestore
+
+# Firestore's own managed scheduled backups require the Blaze plan. This project
+# is on Spark, so without this workflow player data has no copy anywhere: a bad
+# rules deploy, a stray script or a deleted collection is permanent. Reading
+# documents is free-tier, so a daily export costs nothing and produces a real,
+# portable backup that isn't tied to the Firebase project.
+#
+# One-time setup (see docs/firestore-backup.md):
+#   Firebase Console -> Project settings -> Service accounts -> Generate new
+#   private key, then paste the whole JSON into the repo secret
+#   FIREBASE_SERVICE_ACCOUNT.
+on:
+  schedule:
+    # 03:00 UTC = 10:00 Asia/Bangkok, well after the daily-challenge rollover.
+    - cron: '0 3 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Fail loudly and early rather than running a credential-less export that
+      # would "succeed" with zero documents.
+      - name: Check the service-account secret is configured
+        env:
+          KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error::FIREBASE_SERVICE_ACCOUNT is not set - see docs/firestore-backup.md"
+            exit 1
+          fi
+
+      - name: Export every collection
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: npm run backup
+
+      # 90 days is the maximum GitHub retains, and is far longer than the window
+      # in which anyone would notice data loss and come looking.
+      - name: Upload the backup
+        uses: actions/upload-artifact@v4
+        with:
+          name: firestore-backup-${{ github.run_number }}
+          path: backups/
+          retention-days: 90
+
+      - name: Summary
+        run: |
+          echo "### Firestore backup" >> $GITHUB_STEP_SUMMARY
+          cat backups/*/manifest.json >> $GITHUB_STEP_SUMMARY

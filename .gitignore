@@ -45,3 +45,6 @@ f38/
 # Firebase emulator output from `npm run test:rules`
 *-debug.log
 firebase-export-*/
+
+# Firestore exports from `npm run backup` - real player data, never commit it
+backups/
