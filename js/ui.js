@@ -10,6 +10,9 @@ const UI = (() => {
   // Same idea for Skins - the menu button and the Settings shortcut (reachable from
   // pause mid-game) both open screen-skins, but need to land back in different places.
   let skinsReturnScreen = 'screen-menu';
+  // Modal ids that were open on top of skinsReturnScreen when Skins was opened,
+  // re-shown by the back arrow so the player lands where they left off.
+  let skinsReturnModals = [];
   // Holds the cloud snapshot between showing modal-cloudsave-conflict and the
   // player actually picking a side - set by openCloudSaveConflict(), read/cleared
   // by the modal's own two button handlers (wireEvents(), below).
@@ -360,7 +363,7 @@ const UI = (() => {
   }
 
   function updateHUD(payload) {
-    const { level, tier, isMilestone, difficulty, remaining, hints, lives, livesMax, canUndo, combo } = payload;
+    const { level, tier, isMilestone, difficulty, remaining, hints, lives, livesMax, canUndo, combo, comboColor } = payload;
 
     document.getElementById('hud-lvl-num').textContent = level;
     const tierEl = document.getElementById('hud-tier');
@@ -411,6 +414,18 @@ const UI = (() => {
       comboBadge.classList.toggle('hidden', !(combo > 1));
       const comboCountEl = document.getElementById('hud-combo-count');
       if (comboCountEl) comboCountEl.textContent = combo || 0;
+      // Which colour has to be tapped next to keep the streak. On a Daily board
+      // with six path colours the count alone left the player guessing.
+      const comboDot = document.getElementById('hud-combo-dot');
+      if (comboDot) {
+        comboDot.classList.toggle('hidden', !comboColor);
+        if (comboColor) {
+          comboDot.style.background = comboColor;
+          comboDot.textContent = Storage.get('colorblindMode') === true
+            ? (Scene3D.colorLabelFor(comboColor) || '')
+            : '';
+        }
+      }
     }
 
     updateRemoveAdsHud();
@@ -1041,6 +1056,7 @@ const UI = (() => {
         skinBtn.onclick = () => {
           winModal.classList.add('hidden');
           skinsReturnScreen = 'modal-win';
+          skinsReturnModals = [];
           buildSkinsScreen();
           showScreen('screen-skins');
         };
@@ -1788,6 +1804,17 @@ const UI = (() => {
   function handleHardwareBack() {
     const openModal = document.querySelector('.modal-overlay:not(.hidden)');
     if (openModal) {
+      // The win modal has no close control of its own (every button on it moves
+      // forward), so back was a dead press there - reported from device test t54,
+      // 2026-09-04. The level is already won and banked at this point, so back
+      // means "leave it", same destination as pause -> quit.
+      if (openModal.id === 'modal-win') {
+        hideAllModals();
+        Game.resume();
+        updateMenu();
+        showScreen('screen-menu');
+        return;
+      }
       const closeBtnId = openModal.dataset.backClose;
       if (closeBtnId) document.getElementById(closeBtnId).click();
       return;
@@ -1892,6 +1919,7 @@ const UI = (() => {
 
     document.getElementById('btn-skins').addEventListener('click', () => {
       skinsReturnScreen = 'screen-menu';
+      skinsReturnModals = [];
       buildSkinsScreen();
       showScreen('screen-skins');
     });
@@ -1900,6 +1928,10 @@ const UI = (() => {
       // settings, so remember which screen was underneath to return to it
       // (rather than always bouncing back to the main menu mid-game).
       skinsReturnScreen = document.getElementById('screen-game').classList.contains('active') ? 'screen-game' : 'screen-menu';
+      // ...and which modals were stacked on it: a back tap used to drop the
+      // player straight into the running game, losing the pause/settings state
+      // they opened Skins from (device test t54, 2026-09-04).
+      skinsReturnModals = ['modal-pause', 'modal-settings'].filter(id => !document.getElementById(id).classList.contains('hidden'));
       document.getElementById('modal-settings').classList.add('hidden');
       document.getElementById('modal-pause').classList.add('hidden');
       buildSkinsScreen();
@@ -1916,7 +1948,9 @@ const UI = (() => {
         document.getElementById('modal-win').classList.remove('hidden');
       } else {
         showScreen(skinsReturnScreen);
+        for (const id of skinsReturnModals) document.getElementById(id).classList.remove('hidden');
       }
+      skinsReturnModals = [];
     });
     document.getElementById('skin-preview-close').addEventListener('click', closeSkinPreview);
 
@@ -2327,6 +2361,7 @@ const UI = (() => {
     });
     document.getElementById('btn-hud-skins').addEventListener('click', () => {
       skinsReturnScreen = 'screen-game';
+      skinsReturnModals = [];
       buildSkinsScreen();
       showScreen('screen-skins');
     });

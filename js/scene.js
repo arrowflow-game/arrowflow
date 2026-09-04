@@ -1502,6 +1502,10 @@ const Scene3D = (() => {
         snapToFace(head.cube, head.dir);
       }
       boostHighlightedFacesOpacity(path);
+      // Paint it once, here: updateFrame() folds the highlighted path's own
+      // faces into any redraw it does (see facesToRedraw), and nothing else
+      // dirties them now that the glow no longer animates per frame.
+      updateFrame(currentPaths);
     }
   }
 
@@ -1554,7 +1558,12 @@ const Scene3D = (() => {
       // in highlightPath()/clearHighlightBoost() below). This overlay stays
       // a plain pulse regardless of skin lineStyle - it's a status cue, not
       // a cosmetic decoration.
-      const pulse = 0.65 + 0.35 * Math.sin(performance.now() / 130);
+      // Standing, not pulsing (2026-09-04) - the sine pulse meant every face of
+      // the hinted path was repainted and re-uploaded every animation frame for
+      // the full 3.5s highlight, the same cost that halved the frame rate for the
+      // Lock-Key padlock glow. Drawn at the old pulse's peak alpha so it is if
+      // anything more visible than before, just no longer animated.
+      const pulse = 1;
       ctx.shadowColor = '#FF2DF5';
       ctx.shadowBlur = cellSize * 0.6;
       ctx.strokeStyle = `rgba(255,45,245,${pulse})`;
@@ -2449,14 +2458,15 @@ const Scene3D = (() => {
         scene.background.multiplyScalar(pulse);
       }
     }
-    if (highlightPathId) {
-      if (performance.now() < highlightUntil) {
-        updateFrame(currentPaths);
-      } else {
-        highlightPathId = null;
-        restoreHighlightedFacesOpacity();
-        updateFrame(currentPaths);
-      }
+    // Only the expiry needs a frame here: the highlight itself is a standing
+    // glow (see drawPathOnFace), painted once when highlightPath() dirties its
+    // faces and again here when it ends.
+    if (highlightPathId && performance.now() >= highlightUntil) {
+      const ended = highlightPathId;
+      highlightPathId = null;
+      restoreHighlightedFacesOpacity();
+      const path = currentPaths && currentPaths.find(p => p.id === ended);
+      updateFrame(currentPaths, path ? new Set(path.segments.map(segFaceKey)) : true);
     }
     // No per-frame redraw for the Golden Path / padlock glows any more - they are
     // standing effects now, drawn at a fixed intensity whenever their face is
@@ -2659,5 +2669,5 @@ const Scene3D = (() => {
     }
   }
 
-  return { init, setLevelData, updateFrame, setOnArrowTap, setOnGesture, highlightPath, shootExitArrow, refreshMoodForTheme, renderSkinPreviewFrame, setGoldenPath };
+  return { init, setLevelData, updateFrame, setOnArrowTap, setOnGesture, highlightPath, shootExitArrow, refreshMoodForTheme, renderSkinPreviewFrame, setGoldenPath, colorLabelFor };
 })();

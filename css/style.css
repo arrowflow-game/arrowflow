@@ -201,7 +201,14 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
    status color it sits right next to. */
 /* Centred under the hearts as a direct child of .hud-center-cluster (a centred
    column), so it neither widens the stats row nor leaves a gap when hidden. */
-.hud-combo-badge { align-self: center; background: var(--bg-card); padding: 4px 10px; border-radius: 99px; font-weight: 800; font-size: 0.85rem; color: #ff9500; border: 2px solid #ff9500; flex-shrink: 0; }
+.hud-combo-badge { align-self: center; background: var(--bg-card); padding: 4px 10px; border-radius: 99px; font-weight: 800; font-size: 0.85rem; color: #ff9500; border: 2px solid #ff9500; flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; }
+/* The colour the streak is riding on (2026-09-04). Its own swatch rather than
+   tinting the badge itself: the badge's orange is the "combo" identity and
+   recolouring it made the badge read as a different element each chain. The
+   white ring keeps a pale path colour readable on the card background, and the
+   letter inside is the colourblind label (Storage's colorblindMode), the same
+   character stamped along the path itself - see scene.js's colorLabelFor. */
+.hud-combo-dot { width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 0 0 2px var(--bg-card), 0 0 0 3px rgba(0,0,0,0.18); display: inline-flex; align-items: center; justify-content: center; font-size: 0.55rem; font-weight: 900; color: #fff; text-shadow: 0 1px 1px rgba(0,0,0,0.5); }
 
 /* Milestone levels (every 10th) — aggressive/intense tier treatment */
 .hud-tier-label.milestone {
@@ -221,7 +228,12 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
 .modal-overlay { position: fixed; inset: 0; background: var(--bg-overlay); z-index: 100; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(5px); }
 .modal-overlay.hidden { display: none; }
 .hidden { display: none; }
-.modal-box { background: var(--bg-card); padding: 30px; border-radius: 20px; width: 90%; max-width: 320px; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,0.2); }
+/* max-height + overflow: body sets `touch-action: none` and `overflow: hidden`,
+   so a modal taller than the viewport used to simply spill off-screen with its
+   lower rows unreachable - the Settings modal's last rows and buttons could not
+   be reached at all on a phone (device test t54, 2026-09-04). touch-action here
+   re-enables the vertical drag that the body rule otherwise swallows. */
+.modal-box { background: var(--bg-card); padding: 30px; border-radius: 20px; width: 90%; max-width: 320px; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,0.2); max-height: 88vh; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
 .modal-title { font-family: var(--font-logo); color: var(--accent); font-size: 1.8rem; margin-bottom: 5px; }
 .modal-sub { color: var(--text-secondary); font-weight: 700; margin-bottom: 20px; }
 .modal-btns { display: flex; flex-direction: column; gap: 10px; }
@@ -263,7 +275,7 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
 }
 .wheel-result { text-align: center; font-size: 1.3rem; font-weight: 800; margin: 10px 0 15px; min-height: 1.6rem; }
 
-.settings-list { display: flex; flex-direction: column; gap: 18px; margin: 20px 0 25px; text-align: left; }
+.settings-list { display: flex; flex-direction: column; gap: 14px; margin: 16px 0 20px; text-align: left; }
 .settings-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .settings-label { font-weight: 700; color: var(--text-primary); }
 .switch { width: 50px; height: 28px; border-radius: 99px; background: var(--bg-secondary); position: relative; flex-shrink: 0; transition: background var(--transition); }
@@ -271,21 +283,27 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
 .switch.on { background: var(--accent); }
 .switch.on .switch-knob { transform: translateX(22px); }
 
-.win-emoji { font-size: 3.5rem; margin-bottom: 10px; }
+/* Compact win layout (2026-09-04): the full-height card left no game visible
+   behind it and read as a whole new page rather than a result popup. */
+.modal-win-box { padding: 20px 22px; }
+.modal-win-box .modal-title { font-size: 1.5rem; }
+.modal-win-box .btn-lg { padding: 13px 24px; font-size: 1.05rem; }
+.modal-win-box .modal-btns .btn-outline { padding: 10px 20px; font-size: 0.95rem; }
+.win-emoji { font-size: 2.4rem; margin-bottom: 4px; }
 #modal-win.campaign-complete .modal-title {
   background: linear-gradient(135deg, #fbbf24, #ff3b30);
   -webkit-background-clip: text; background-clip: text; color: transparent;
   font-size: 2.1rem;
 }
 #modal-win.campaign-complete .win-emoji { font-size: 4.5rem; }
-.win-stars-row { font-size: 2.5rem; color: #ccc; margin-bottom: 15px; }
+.win-stars-row { font-size: 2rem; color: #ccc; margin-bottom: 10px; }
 .win-stars-row .wstar.earned { color: var(--star-color); }
 /* Wraps into rows instead of squeezing everything onto one line - up to 6
    stats (score/time/hints/gems/combo/golden) can all be visible at once on a
    level with every bonus mechanic active, which badly overlapped in a single
    flex row on the ~260px-wide win modal (reported 2026-09-01, screenshot
    showed the score and combo count overlapping). */
-.win-stats-row { display: flex; flex-wrap: wrap; justify-content: center; column-gap: 16px; row-gap: 12px; margin-bottom: 25px; }
+.win-stats-row { display: flex; flex-wrap: wrap; justify-content: center; column-gap: 16px; row-gap: 10px; margin-bottom: 14px; }
 .wstat { flex: 0 0 auto; min-width: 56px; text-align: center; }
 .wstat-lbl { font-size: 0.7rem; font-weight: 800; color: var(--text-secondary); text-transform: uppercase; white-space: nowrap; }
 .wstat-val { font-size: 1.5rem; font-family: var(--font-logo); font-weight: 900; color: var(--accent); white-space: nowrap; }
@@ -362,8 +380,8 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
 .nickname-input::placeholder { color: var(--text-secondary); }
 
 /* Win modal rank badge */
-.win-rank-badge { background: var(--bg-primary); border-radius: 12px; padding: 10px; margin-bottom: 18px; font-weight: 800; color: var(--accent); }
-.win-level-best-row { display: flex; justify-content: space-between; gap: 10px; background: var(--bg-primary); border-radius: 12px; padding: 10px 14px; margin-bottom: 12px; font-size: 0.8rem; color: var(--text-secondary); }
+.win-rank-badge { background: var(--bg-primary); border-radius: 12px; padding: 8px; margin-bottom: 12px; font-weight: 800; color: var(--accent); }
+.win-level-best-row { display: flex; justify-content: space-between; gap: 10px; background: var(--bg-primary); border-radius: 12px; padding: 8px 12px; margin-bottom: 10px; font-size: 0.78rem; color: var(--text-secondary); }
 .win-level-best-row b { color: var(--text-primary); }
 
 /* Leaderboard modal */

@@ -218,7 +218,12 @@ const Game = (() => {
       livesMax: state.livesMax,
       remixLap: state.levelData.remixLap,
       canUndo: state.canUndo,
-      combo: state.combo || 0
+      combo: state.combo || 0,
+      // Which color the streak is currently riding on. The badge only ever said
+      // "x2" before, so on a 6-colour Daily board the player had to remember
+      // which path colour they last cleared to keep chaining (asked for directly
+      // after test t55, 2026-09-04).
+      comboColor: state.lastClearedColor || null
     };
   }
 
