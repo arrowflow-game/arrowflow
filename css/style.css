@@ -199,7 +199,9 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
 /* Color-Match Combo badge (2026-08-31) - deliberately gold/orange, not the blue
    --accent used by .hud-arrows-badge, so it never gets confused with the idle-path
    status color it sits right next to. */
-.hud-combo-badge { background: var(--bg-card); padding: 4px 10px; border-radius: 99px; font-weight: 800; font-size: 0.85rem; color: #ff9500; border: 2px solid #ff9500; flex-shrink: 0; }
+/* Centred under the hearts as a direct child of .hud-center-cluster (a centred
+   column), so it neither widens the stats row nor leaves a gap when hidden. */
+.hud-combo-badge { align-self: center; background: var(--bg-card); padding: 4px 10px; border-radius: 99px; font-weight: 800; font-size: 0.85rem; color: #ff9500; border: 2px solid #ff9500; flex-shrink: 0; }
 
 /* Milestone levels (every 10th) — aggressive/intense tier treatment */
 .hud-tier-label.milestone {

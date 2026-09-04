@@ -40,6 +40,12 @@ Native dialogs (the Google account picker, the share sheet) can't be driven this
 
 **Git Bash mangles device paths.** `adb shell screencap -p /sdcard/s.png` becomes a Windows path and fails. Set `MSYS2_ARG_CONV_EXCL='*'`, or use PowerShell. `adb exec-out screencap -p > file` also corrupts the PNG in PowerShell — use `shell screencap` then `pull`.
 
+**Playwright's own `page.screenshot()` cannot see the WebGL canvas here.** It returns the page with `#three-canvas` blank — correct canvas dimensions, no covering modal, nothing wrong with the app. Believing it costs an hour chasing a rendering regression that does not exist. Every visual check has to go through `adb shell screencap -p /sdcard/s.png` + `adb pull`; CDP screenshots are only good for DOM-only screens.
+
+**A tap looks ineffective if you read the HUD on the same tick.** A cleared path animates out over several `requestAnimationFrame`s, so `remaining` does not drop until it finishes. A sweep that taps and immediately compares will report every level in the game as broken. Wait on the value (`wait_for_function`), don't sample it.
+
+**A full-campaign sweep at real animation speed takes hours.** Override `requestAnimationFrame` to `setTimeout(cb, 0)` and stub `Scene3D.updateFrame` to a no-op — 300 levels then run in tens of minutes. That trades away rendering coverage, so pair it with a smaller sweep that leaves rendering on.
+
 **`performance.memory` is frozen on Android WebView** — it returns the same number forever. Real memory comes from `adb shell dumpsys meminfo com.arrowflowgame.puzzle`.
 
 **Timing `updateFrame()` measures the wrong thing.** Marking face textures dirty makes three.js re-upload them inside the *next* `renderer.render()`, so `updateFrame` once reported 173 ms for a frame the player experienced as 1090 ms. Always measure the `requestAnimationFrame` delta.

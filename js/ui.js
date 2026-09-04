@@ -49,6 +49,7 @@ const UI = (() => {
   }
 
   function syncSettingsUI() {
+    setSwitch('toggle-darkmode', Storage.get('theme') === 'dark');
     setSwitch('toggle-music', Storage.get('music') !== false);
     setSwitch('toggle-sfx', Storage.get('sound') !== false);
     setSwitch('toggle-vibration', Storage.get('vibration') !== false);
@@ -119,8 +120,6 @@ const UI = (() => {
     const iconText = theme === 'dark' ? '☀️' : '🌙';
     const icon = document.getElementById('theme-icon');
     if (icon) icon.textContent = iconText;
-    const iconHud = document.getElementById('theme-icon-hud');
-    if (iconHud) iconHud.textContent = iconText;
   }
 
   // Shared by the main menu card and the in-game HUD - both show the same
@@ -1835,10 +1834,28 @@ const UI = (() => {
       Game.redrawTheme();
     };
     document.getElementById('btn-theme').addEventListener('click', toggleTheme);
-    document.getElementById('btn-hud-theme').addEventListener('click', toggleTheme);
+    // The in-game theme button was removed from the HUD; Settings owns it now.
+    document.getElementById('toggle-darkmode').addEventListener('click', () => {
+      toggleTheme();
+      syncSettingsUI();
+    });
 
     document.getElementById('btn-play').addEventListener('click', () => {
-      Game.loadLevel(Storage.get('currentLevel'));
+      // Storage.remixHighest was written on every REMIX win, synced to the cloud,
+      // and then read by nothing at all: a player who closed the app mid-REMIX
+      // came back to Play sending them at level 300 (currentLevel is capped
+      // there), and finishing it dropped them back at REMIX 1 with the lap
+      // escalation reset to lap 0. Resume where they actually were instead.
+      // remixHighest counts COMPLETED remix levels, so it is already the index
+      // of the next one. Non-zero only after the campaign is finished, which is
+      // the only way into REMIX, so it needs no separate campaign-complete test.
+      const remixNext = Storage.get('remixHighest') || 0;
+      if (remixNext > 0) {
+        Game.loadRemixLevel(remixNext);
+        announceRemixTierIfNew();
+      } else {
+        Game.loadLevel(Storage.get('currentLevel'));
+      }
       showScreen('screen-game');
     });
 

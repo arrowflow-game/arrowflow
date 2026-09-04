@@ -74,6 +74,7 @@ const I18N = (() => {
       'pause.quit': '✕ เมนู',
 
       'settings.title': '⚙ ตั้งค่า',
+      'settings.darkmode': '🌙 โหมดมืด',
       'settings.music': '🎵 เพลง',
       'settings.sfx': '🔊 เสียงเอฟเฟกต์',
       'settings.vibration': '📳 การสั่น',
@@ -337,6 +338,7 @@ const I18N = (() => {
       'pause.quit': '✕ Menu',
 
       'settings.title': '⚙ SETTINGS',
+      'settings.darkmode': '🌙 Dark mode',
       'settings.music': '🎵 Music',
       'settings.sfx': '🔊 Sound Effects',
       'settings.vibration': '📳 Vibration',

@@ -262,6 +262,13 @@
     revokeIapSkins(skinIds) {
       const drop = new Set(skinIds);
       _state.ownedIapSkins = _state.ownedIapSkins.filter(id => !drop.has(id));
+      // Nothing re-validates selectedSkin after it is set - js/scene.js just
+      // renders whatever id is stored. Without this, revoking a skin (forged
+      // receipt, refund, or a token already claimed by another account) left
+      // the player wearing it anyway, permanently: the entitlement was gone
+      // from ownedIapSkins but the only place it is actually *used* still
+      // pointed at it. Fall back to the default look.
+      if (drop.has(_state.selectedSkin)) _state.selectedSkin = null;
       save(_state);
     },
     // days === null revokes the permanent "forever" tier; otherwise the window
