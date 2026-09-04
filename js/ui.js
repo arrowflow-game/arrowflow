@@ -389,7 +389,13 @@ const UI = (() => {
     const livesRow = document.getElementById('hud-lives-row');
     if (livesRow) {
       const hearts = livesRow.querySelectorAll('.heart-icon');
+      // REMIX laps cut the heart budget (3 -> 2 -> 1, see js/remix.js). A heart
+      // the player never had must be HIDDEN, not dimmed: dimming is exactly how
+      // a heart already lost this level is drawn, so leaving all three in place
+      // told a lap-2 player they had failed twice before their first tap.
+      const max = livesMax || hearts.length;
       hearts.forEach((el, idx) => {
+        el.classList.toggle('hidden', idx >= max);
         el.classList.toggle('lost', idx >= lives);
       });
     }
