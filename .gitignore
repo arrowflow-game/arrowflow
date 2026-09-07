@@ -35,12 +35,14 @@ android/captures/
 # Scratch space used while testing/releasing - built APKs and AABs (hundreds of
 # MB), captured video frames, and marketing renders. None of it is source, and a
 # single `git add -A` would otherwise put it in the repo's history forever.
-scratch_apk/
-scratch_frames/
-scratch_frames28/
+# Patterns, not fixed names: these folders get a fresh suffix every release or
+# test session (scratch_apk_f818286, release_aab_2026-09-07, frame dumps named
+# after a commit), and the two that were named literally here promptly leaked
+# back into `git status` the next time one was created (2026-09-07).
+scratch_*/
+release_aab*/
 marketing/
-f36/
-f38/
+f[0-9][0-9]/
 
 # Firebase emulator output from `npm run test:rules`
 *-debug.log
