@@ -853,18 +853,23 @@ const Scene3D = (() => {
     fxCanvas = document.getElementById('fx-canvas');
     fxCtx = fxCanvas.getContext('2d');
     resizeFxCanvas();
-    // 4x MSAA is a fixed per-frame cost that does not care how simple the board is:
-    // on a Mali-T820 phone (Android 8.1, 320x568 css px) the whole render loop ran at
-    // 26fps with it on, against 58fps with the 3D canvas hidden entirely, identically
-    // on the smallest and the largest board. This flag exists to measure that on real
-    // hardware; it is off by default, so nothing changes for players until the numbers
-    // say it should. Read once, at renderer creation - a reload applies a change.
-    const antialias = Storage.get('lowQuality') !== true;
-    renderer = new THREE.WebGLRenderer({ canvas, antialias, alpha: true });
+    // MSAA was measured on a Mali-T820 phone (2026-09-07) on the suspicion that its
+    // fixed per-frame cost was what pinned that device to 30fps. It is not: with
+    // antialias off the same board ran 26-28fps against 27-30fps with it on. What
+    // actually decides that device's frame rate is how many pixels get drawn - see
+    // setPixelRatio below.
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
     // Uncapped devicePixelRatio means a phone reporting dpr=3 renders 2.25x the pixels
     // of dpr=2 for no visible benefit on a screen that size - this alone is often the
     // single biggest steady-state GPU cost of a WebGL page (paid every frame, forever,
     // not just while animating).
+    //
+    // Measured on a Mali-T820 phone (dpr 1.5, 320x568 css px), rendering level 60 at
+    // several buffer sizes: 408k px -> 34.6ms per frame, 295k -> 18.5ms, 200k -> 17.4ms.
+    // The device is one vsync away from smooth, so ~28% fewer pixels is the whole
+    // difference between a 30fps and a 58fps cadence. Lowering this cap is therefore
+    // the lever for low-end devices, not MSAA or scene complexity - both were measured
+    // and neither moved the number.
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
 

@@ -123,6 +123,21 @@ button { border: none; background: none; font-family: inherit; cursor: pointer; 
 #btn-daily.daily-done { opacity: 0.6; }
 .daily-streak-badge { text-align: center; font-size: 0.8rem; font-weight: 700; color: #e8641a; margin-top: -4px; }
 .menu-progress-info { display: flex; justify-content: space-between; font-weight: 800; font-size: 0.9rem; margin-bottom: 5px; }
+/* Short screens: the menu card wants 632px, which is taller than the 568px
+   viewport of a 480x960 phone - the level/stars/gems row and the progress bar
+   under it ended up behind the navigation bar, and the theme/settings buttons
+   were pushed off the top (photographed on a Mito A67, 2026-09-07). The card
+   scrolls, but a menu should not need scrolling to show its own footer. These
+   numbers bring it to 451px with everything on screen; phones with a normal
+   viewport never see this block. */
+@media (max-height: 660px) {
+  .menu-card { padding: 18px 16px; }
+  .menu-logo { font-size: 1.8rem; margin-bottom: 2px; }
+  .menu-tagline { margin-bottom: 12px; font-size: 0.85rem; }
+  .menu-btns { gap: 8px; margin-bottom: 12px; }
+  .menu-card .btn-lg { padding: 11px 24px; font-size: 1.05rem; }
+  .menu-btn-row .btn { padding: 9px 6px; }
+}
 .progress-track { height: 10px; background: var(--bg-secondary); border-radius: 5px; overflow: hidden; }
 .progress-fill { height: 100%; background: var(--accent); width: 0%; transition: width 0.5s; }
 
