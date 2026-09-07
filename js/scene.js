@@ -853,7 +853,14 @@ const Scene3D = (() => {
     fxCanvas = document.getElementById('fx-canvas');
     fxCtx = fxCanvas.getContext('2d');
     resizeFxCanvas();
-    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    // 4x MSAA is a fixed per-frame cost that does not care how simple the board is:
+    // on a Mali-T820 phone (Android 8.1, 320x568 css px) the whole render loop ran at
+    // 26fps with it on, against 58fps with the 3D canvas hidden entirely, identically
+    // on the smallest and the largest board. This flag exists to measure that on real
+    // hardware; it is off by default, so nothing changes for players until the numbers
+    // say it should. Read once, at renderer creation - a reload applies a change.
+    const antialias = Storage.get('lowQuality') !== true;
+    renderer = new THREE.WebGLRenderer({ canvas, antialias, alpha: true });
     // Uncapped devicePixelRatio means a phone reporting dpr=3 renders 2.25x the pixels
     // of dpr=2 for no visible benefit on a screen that size - this alone is often the
     // single biggest steady-state GPU cost of a WebGL page (paid every frame, forever,
