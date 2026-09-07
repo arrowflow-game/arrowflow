@@ -50,3 +50,10 @@ firebase-export-*/
 
 # Firestore exports from `npm run backup` - real player data, never commit it
 backups/
+
+# Raw mascot artwork (skins-src/README.md). The originals are large and only
+# the converted transparent PNG in icons/mascots/ is what the game loads, so
+# the source images stay out of the repo - the README that explains the format
+# does not.
+skins-src/*
+!skins-src/README.md

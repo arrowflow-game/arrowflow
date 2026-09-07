@@ -45,7 +45,7 @@ function clusterBorderColors(data, width, height, channels) {
   return clusters.filter(c => c.count >= samples.length * 0.03).map(c => c.color);
 }
 
-async function run(inputPath, outputPath, extraSeeds = []) {
+async function run(inputPath, outputPath, extraSeeds = [], quiet = false) {
   const img = sharp(inputPath).ensureAlpha();
   const { data, info } = await img.raw().toBuffer({ resolveWithObject: true });
   const { width, height, channels } = info;
@@ -102,13 +102,23 @@ async function run(inputPath, outputPath, extraSeeds = []) {
     .png()
     .toFile(outputPath);
 
-  console.log(`${path.basename(inputPath)} -> ${path.basename(outputPath)} (bg colors: ${bgColors.map(c => `[${c}]`).join(' ')}, erased ${erased} of ${width * height} px)`);
+  if (!quiet) {
+    console.log(`${path.basename(inputPath)} -> ${path.basename(outputPath)} (bg colors: ${bgColors.map(c => `[${c}]`).join(' ')}, erased ${erased} of ${width * height} px)`);
+  }
+  return { width, height, channels, erased, total: width * height, bgColors, alpha: data };
 }
 
-const [, , inputPath, outputPath, ...seedArgs] = process.argv;
-if (!inputPath || !outputPath) {
-  console.error('Usage: node scripts/mascot-bg-remove.js <input.jpg> <output.png> [x,y ...]');
-  process.exit(1);
+// Importable so scripts/mascots-build.js can run the same conversion over a
+// whole folder without shelling out per file (sharp's startup dominates the
+// work on images this size). The CLI below still behaves exactly as before.
+module.exports = { run };
+
+if (require.main === module) {
+  const [, , inputPath, outputPath, ...seedArgs] = process.argv;
+  if (!inputPath || !outputPath) {
+    console.error('Usage: node scripts/mascot-bg-remove.js <input.jpg> <output.png> [x,y ...]');
+    process.exit(1);
+  }
+  const extraSeeds = seedArgs.map(s => s.split(',').map(Number));
+  run(inputPath, outputPath, extraSeeds).catch(e => { console.error(e); process.exit(1); });
 }
-const extraSeeds = seedArgs.map(s => s.split(',').map(Number));
-run(inputPath, outputPath, extraSeeds).catch(e => { console.error(e); process.exit(1); });

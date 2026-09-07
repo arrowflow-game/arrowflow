@@ -10,7 +10,8 @@
     "postinstall": "patch-package",
     "test:rules": "firebase emulators:exec --only firestore \"node tools/firestore-rules.test.js\"",
     "test:backup": "firebase emulators:exec --only firestore \"node tools/backup-firestore.test.js\"",
-    "backup": "node tools/backup-firestore.js"
+    "backup": "node tools/backup-firestore.js",
+    "skins:build": "node scripts/mascots-build.js"
   },
   "dependencies": {
     "@capacitor-community/admob": "^7.2.0",
@@ -33,6 +34,7 @@
     "eslint": "^9.15.0",
     "firebase-admin": "^13.10.0",
     "firebase-tools": "^15.29.0",
-    "patch-package": "^8.0.1"
+    "patch-package": "^8.0.1",
+    "sharp": "^0.32.6"
   }
 }
