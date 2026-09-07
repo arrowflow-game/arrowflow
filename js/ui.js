@@ -1802,7 +1802,13 @@ const UI = (() => {
   // whatever its own back button targets; mid-level it opens the pause modal
   // instead of exiting; only at the bare main menu does back actually exit.
   function handleHardwareBack() {
-    const openModal = document.querySelector('.modal-overlay:not(.hidden)');
+    // The LAST open modal in document order, not the first: every .modal-overlay
+    // shares one z-index, so the one the player actually sees on top is whichever
+    // sits later in index.html. querySelector returned the first instead, which
+    // meant back over the leaderboard opened from the win screen acted on the win
+    // modal underneath and jumped straight to the menu (device test t56, 2026-09-07).
+    const openModals = document.querySelectorAll('.modal-overlay:not(.hidden)');
+    const openModal = openModals[openModals.length - 1];
     if (openModal) {
       // The win modal has no close control of its own (every button on it moves
       // forward), so back was a dead press there - reported from device test t54,
