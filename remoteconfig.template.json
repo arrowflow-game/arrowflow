@@ -1,0 +1,86 @@
+{
+  "conditions": [],
+  "parameters": {
+    "feature_daily_wheel_enabled": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "valueType": "BOOLEAN",
+      "description": "Kill switch: Daily Wheel. Set false to hide the wheel entirely."
+    },
+    "feature_cloud_save_enabled": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "valueType": "BOOLEAN",
+      "description": "Kill switch: Google Sign-In cloud save. Set false if restore misbehaves in the wild."
+    },
+    "feature_share_enabled": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "valueType": "BOOLEAN",
+      "description": "Kill switch: the win-screen share button."
+    },
+    "interstitial_min_levels": {
+      "defaultValue": {
+        "value": "3"
+      },
+      "valueType": "NUMBER",
+      "description": "Fewest levels between interstitial ads (storage.js rollInterstitialThreshold)."
+    },
+    "interstitial_max_levels": {
+      "defaultValue": {
+        "value": "5"
+      },
+      "valueType": "NUMBER",
+      "description": "Most levels between interstitial ads."
+    },
+    "rewarded_ad_cap_hint": {
+      "defaultValue": {
+        "value": "5"
+      },
+      "valueType": "NUMBER",
+      "description": "Max rewarded hint ads a player may watch per day."
+    },
+    "rewarded_ad_cap_continue": {
+      "defaultValue": {
+        "value": "5"
+      },
+      "valueType": "NUMBER",
+      "description": "Max rewarded continue-after-fail ads per day."
+    },
+    "gems_per_star": {
+      "defaultValue": {
+        "value": "5"
+      },
+      "valueType": "NUMBER",
+      "description": "Gems awarded per star on an ordinary level."
+    },
+    "gems_per_star_milestone": {
+      "defaultValue": {
+        "value": "6"
+      },
+      "valueType": "NUMBER",
+      "description": "Gems awarded per star on a milestone level."
+    },
+    "star_pace_fast_multiplier": {
+      "defaultValue": {
+        "value": "5"
+      },
+      "valueType": "NUMBER",
+      "description": "Clear within parTime x this and 3 stars are still possible."
+    },
+    "star_pace_ok_multiplier": {
+      "defaultValue": {
+        "value": "9"
+      },
+      "valueType": "NUMBER",
+      "description": "Clear within parTime x this and 2 stars are still possible."
+    }
+  },
+  "parameterGroups": {},
+  "version": {
+    "description": "Initial parameters, generated from js/remoteconfig.js DEFAULTS"
+  }
+}
