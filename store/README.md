@@ -13,6 +13,8 @@ count in them was checked against Play's limits when they were written.
 | `feature-graphic-1024x500-th.png` | Feature graphic (th-TH) | same |
 | `screenshots/en-*.png` | Phone screenshots (en-US) | 7 shots, 1080×1920 (9:16) |
 | `screenshots/th-*.png` | Phone screenshots (th-TH) | 7 shots, 1080×1920 (9:16) |
+| `screenshots/tab7-*.png` | 7-inch tablet screenshots | 5 shots, 1080×1920 (9:16) |
+| `screenshots/tab10-*.png` | 10-inch tablet screenshots | 5 shots, 1440×2560 (9:16) |
 
 Play accepts 2–8 phone screenshots; the order of the filenames is the order they
 should be uploaded in, and it is deliberate: menu, an easy board, two boards that
@@ -50,3 +52,16 @@ session's scratchpad.
   cloud saves; Analytics, Crashlytics and AdMob are already disclosed in
   `privacy.html`, and the form must match what that page says
 - Target audience and ads declaration (the app **does** contain ads)
+
+
+## Tablet screenshots are a separate, required field
+
+Play asks for 7-inch and 10-inch tablet screenshots as their own `*` fields, and
+they were the only thing missing from the live listing on 2026-09-09. Both must
+be 16:9 or 9:16, but the size windows differ: **7-inch allows 320–3840 px per
+side, 10-inch demands 1080–7680**, so one set cannot serve both. These are
+captured at viewport 540×960 and 720×1280 with `device_scale_factor=2`, giving
+1080×1920 and 1440×2560 — inside both windows with room to spare.
+
+The phone field takes at most 8 images. The listing already had 4 when these
+were made, so at most 4 of the `th-*` set can be added on top.
