@@ -13,7 +13,7 @@ count in them was checked against Play's limits when they were written.
 | `feature-graphic-1024x500-th.png` | Feature graphic (th-TH) | same |
 | `screenshots/en-*.png` | Phone screenshots (en-US) | 7 shots, 1080×1920 (9:16) |
 | `screenshots/th-*.png` | Phone screenshots (th-TH) | 7 shots, 1080×1920 (9:16) |
-| `screenshots/tab7-*.png` | 7-inch tablet screenshots | 5 shots, 1080×1920 (9:16) |
+| `screenshots/tab7-*.png` | 7-inch tablet screenshots | 5 shots, 1260×2240 (9:16) |
 | `screenshots/tab10-*.png` | 10-inch tablet screenshots | 5 shots, 1440×2560 (9:16) |
 
 Play accepts 2–8 phone screenshots; the order of the filenames is the order they
@@ -62,6 +62,17 @@ be 16:9 or 9:16, but the size windows differ: **7-inch allows 320–3840 px per
 side, 10-inch demands 1080–7680**, so one set cannot serve both. These are
 captured at viewport 540×960 and 720×1280 with `device_scale_factor=2`, giving
 1080×1920 and 1440×2560 — inside both windows with room to spare.
+
+**Play silently drops a screenshot that is byte-identical to one already in the
+listing**, reporting only "removed because duplicate" — so every set has to be
+genuinely different, not the same capture resized. The first 7-inch attempt used
+the same 540×960 viewport as the phone shots and four of its five files came out
+bit-for-bit identical to `th-*`; two were dropped on upload and the other two
+would have been dropped later. The set was rebuilt at 1260×2240 on levels
+30/110/165/210/275, none of which appears in the phone (12/54/96/240) or 10-inch
+(12/54/240) sets. There is a duplicate check in this session's scratchpad that
+compares MD5s and, for content across differing resolutions, mean grey distance
+on a 32×57 downscale — worth re-running after adding any screenshot.
 
 The phone field takes at most 8 images. The listing already had 4 when these
 were made, so at most 4 of the `th-*` set can be added on top.
