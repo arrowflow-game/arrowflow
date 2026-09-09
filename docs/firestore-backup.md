@@ -39,15 +39,25 @@ every rotation with nothing to remember. The check never fails the job — a
 working backup must not be reported as broken because a secondary permission
 check could not be made.
 
-If IAM refuses the question (the key's own account may not hold
-`iam.serviceAccountKeys.get`), the run says so rather than staying silent, and
-the date can be read from Google Cloud Console → IAM & Admin → Service Accounts
-→ the account → Keys.
+In practice IAM refuses the question — a service account does not hold
+`iam.serviceAccountKeys.get` on itself, and that permission is not worth
+granting for a countdown. So there is a second source: the repo **variable**
+(Settings → Secrets and variables → Actions → **Variables**)
+`BACKUP_KEY_EXPIRES`, holding the date as `YYYY-MM-DD`. A variable, not a
+secret: secrets are masked in logs, which is exactly where this has to be
+readable. If neither source answers, the run says so instead of going quiet.
 
-**To rotate:** repeat steps 1–3 of the setup above with a new key, then delete
-the old key in that same Cloud Console Keys list — a key left behind is a live
-credential with full project admin. Nothing needs redeploying; the next
-scheduled run picks up the new secret.
+**To rotate:**
+
+1. Repeat steps 1–3 of the setup above with a new key.
+2. Update `BACKUP_KEY_EXPIRES` to the new expiry date.
+3. Delete the old key in Google Cloud Console → IAM & Admin → Service Accounts
+   → the account → Keys. A key left behind is a live credential with full
+   project admin.
+
+Nothing needs redeploying; the next scheduled run picks up the new secret. If
+step 2 is forgotten the check starts shouting early rather than late, which is
+the right way for it to fail.
 
 ## Running it locally
 

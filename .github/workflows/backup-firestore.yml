@@ -61,6 +61,7 @@ jobs:
         if: steps.creds.outputs.ready == 'true'
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          BACKUP_KEY_EXPIRES: ${{ vars.BACKUP_KEY_EXPIRES }}
         run: node tools/check-key-expiry.js
 
       - name: Export every collection
