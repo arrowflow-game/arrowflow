@@ -25,6 +25,30 @@ The workflow needs a service-account key, which only you can create:
 
 Until step 2 is done the workflow fails immediately with a clear message, rather than silently producing an empty backup.
 
+## The key expires — and the workflow will tell you
+
+The key created on 2026-09-07 carries a 90-day expiry (2026-12-06). When it
+lapses the daily export starts failing, and a backup nobody is watching fails
+quietly, which is indistinguishable from having no backup at all until the day
+someone needs one.
+
+So the workflow asks IAM how long the key it is holding has left, and annotates
+every run: a warning inside 30 days, an error inside 10. The date is read from
+the key itself rather than written down anywhere, so it stays right through
+every rotation with nothing to remember. The check never fails the job — a
+working backup must not be reported as broken because a secondary permission
+check could not be made.
+
+If IAM refuses the question (the key's own account may not hold
+`iam.serviceAccountKeys.get`), the run says so rather than staying silent, and
+the date can be read from Google Cloud Console → IAM & Admin → Service Accounts
+→ the account → Keys.
+
+**To rotate:** repeat steps 1–3 of the setup above with a new key, then delete
+the old key in that same Cloud Console Keys list — a key left behind is a live
+credential with full project admin. Nothing needs redeploying; the next
+scheduled run picks up the new secret.
+
 ## Running it locally
 
 ```bash

@@ -52,6 +52,17 @@ jobs:
             echo "::warning::FIREBASE_SERVICE_ACCOUNT is not set - skipping until it is configured"
           fi
 
+      # The key has a 90-day expiry. A backup nobody watches fails quietly, and
+      # a quiet failure is indistinguishable from no backup until the day it
+      # matters - so ask IAM how long is left and annotate the run. Advisory
+      # only: it never fails the job, because the export below is the real
+      # signal and a working backup must not be reported as broken.
+      - name: Warn if the service-account key is near expiry
+        if: steps.creds.outputs.ready == 'true'
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node tools/check-key-expiry.js
+
       - name: Export every collection
         if: steps.creds.outputs.ready == 'true'
         env:
