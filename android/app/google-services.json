@@ -30,6 +30,14 @@
           }
         },
         {
+          "client_id": "968667057133-nihn3q8c64raf1b5liqq694i04jlsd1u.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.arrowflowgame.puzzle",
+            "certificate_hash": "c86c79b156fbadc400848a4f76b0b86b61feaccd"
+          }
+        },
+        {
           "client_id": "968667057133-ml8cjbe102stjir5b9ns7edmbb08e9q7.apps.googleusercontent.com",
           "client_type": 3
         }

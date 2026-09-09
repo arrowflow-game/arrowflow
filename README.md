@@ -119,3 +119,33 @@ delete-account.html   public account-deletion route (Play requirement)
 2. Upload each AAB to its track in Play Console
 3. Add the release note to `CHANGELOG.md`
 4. If Firestore rules or Cloud Functions changed, deploy them separately — they are **not** part of the app build
+
+### Three signing keys, and the one that broke Google Sign-In
+
+The app is signed by a different key depending on where it came from, and
+`android/app/google-services.json` must list all three or Google Sign-In fails
+with a generic "couldn't connect" toast:
+
+| SHA-1 | Signs |
+|---|---|
+| `29c6d783…` | `android/app/debug.keystore` — local and CI debug APKs |
+| `0560f25a…` | the upload key — what we send to Play |
+| `c86c79b1…` | **Play App Signing** — what players actually install |
+
+Play re-signs every upload with its own key, so the third one exists only on
+store builds and cannot be observed on anything we build here. It was missing
+until 2026-09-09, which meant sign-in worked on every test build and failed for
+every real player, with `js/cloudsave.js` swallowing the cause.
+
+Read the fingerprint off the installed app, never off a console page:
+
+```bash
+adb shell pm path com.arrowflowgame.puzzle          # -> /data/app/.../base.apk
+adb pull <that path> base.apk
+"$ANDROID_HOME/build-tools/<ver>/apksigner" verify --print-certs -v base.apk
+```
+
+Adding a fingerprint in Firebase needs no rebuild — the check is server-side on
+(package name + signature) — but re-download `google-services.json` afterwards
+so the repo matches reality. The real error is only visible in logcat:
+`adb logcat | grep -iE 'Auth\.Api|CredentialManager'`.
