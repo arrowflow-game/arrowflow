@@ -790,6 +790,10 @@ const Game = (() => {
     // above) - not used by any real gameplay UI, only automated smoke tests.
     getGoldenPathId: () => state.goldenPathId,
     getGoldenClaimed: () => state.goldenClaimed,
-    getLockedPaths: () => state.paths.filter(p => p.locked).map(p => ({ id: p.id, keyPathId: p.keyPathId }))
+    getLockedPaths: () => state.paths.filter(p => p.locked).map(p => ({ id: p.id, keyPathId: p.keyPathId })),
+    // The same elapsed figure onWin() scores and rates pace with, exposed so a
+    // test can prove a given detour (Settings, backgrounding) is excluded from
+    // it without having to solve a level and read the win modal.
+    getElapsedSec: () => state.levelData ? (Date.now() - state.startTime - totalPausedMs()) / 1000 : 0
   };
 })();

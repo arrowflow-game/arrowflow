@@ -28,7 +28,13 @@ const CloudSave = (() => {
     'adsRemovedUntil', 'adsRemovedForever', 'nickname',
     // Synced so reinstalling can't re-farm the one-time link reward - the flag
     // has to travel with the account, not the device.
-    'googleLinkRewardGiven'
+    'googleLinkRewardGiven',
+    // Same reason. Grouped with the daily ad-cap counters below at first and
+    // therefore left unsynced, which was wrong: the bonus spins are ad-gated
+    // (re-earning those costs the player an ad view and pays us), but the free
+    // daily spin is pure grant, so uninstall/reinstall/re-link handed it out
+    // again. Only wheelSpunDate travels; wheelBonusSpins* stay device-local.
+    'wheelSpunDate'
   ];
 
   // Fields backed by real money. A restore replaces local state with the

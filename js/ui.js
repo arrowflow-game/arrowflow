@@ -13,6 +13,14 @@ const UI = (() => {
   // Modal ids that were open on top of skinsReturnScreen when Skins was opened,
   // re-shown by the back arrow so the player lands where they left off.
   let skinsReturnModals = [];
+  // True while Settings is the thing holding the level clock. Opening Settings
+  // mid-level used to leave the clock running, so toggling sound or vibration
+  // cost the player pace stars (see game.js's paceStars) for something that
+  // isn't playing. The pause modal already exists for players who want to stop
+  // the clock deliberately, so there is nothing to exploit here. Only set when
+  // Settings did the pausing - opened on top of modal-pause the game is already
+  // paused, and resuming on close would un-freeze a still-visible pause modal.
+  let settingsPausedGame = false;
   // Holds the cloud snapshot between showing modal-cloudsave-conflict and the
   // player actually picking a side - set by openCloudSaveConflict(), read/cleared
   // by the modal's own two button handlers (wireEvents(), below).
@@ -1783,6 +1791,10 @@ const UI = (() => {
   }
 
   function hideAllModals() {
+    // Closes Settings among everything else, bypassing closeSettings() - so drop
+    // its claim on the clock here too. Callers that bulk-close either load a new
+    // level (fresh clock) or resume explicitly, so nothing is left frozen.
+    settingsPausedGame = false;
     document.querySelectorAll('.modal-overlay').forEach(m => m.classList.add('hidden'));
     ['confetti-area', 'wheel-confetti-area'].forEach(id => {
       const area = document.getElementById(id);
@@ -1938,7 +1950,7 @@ const UI = (() => {
       // player straight into the running game, losing the pause/settings state
       // they opened Skins from (device test t54, 2026-09-04).
       skinsReturnModals = ['modal-pause', 'modal-settings'].filter(id => !document.getElementById(id).classList.contains('hidden'));
-      document.getElementById('modal-settings').classList.add('hidden');
+      closeSettings(true);
       document.getElementById('modal-pause').classList.add('hidden');
       buildSkinsScreen();
       showScreen('screen-skins');
@@ -2007,14 +2019,29 @@ const UI = (() => {
 
     const openSettings = () => {
       syncSettingsUI();
+      const inLevel = document.getElementById('screen-game').classList.contains('active');
+      const pauseOpen = !document.getElementById('modal-pause').classList.contains('hidden');
+      // Assigned, never just raised: a stale true from an earlier level (say
+      // Settings -> Replay tutorial, which bulk-closes modals) would otherwise
+      // make a later close resume the clock behind a still-open pause modal.
+      settingsPausedGame = inLevel && !pauseOpen;
+      if (settingsPausedGame) Game.pause();
       document.getElementById('modal-settings').classList.remove('hidden');
+    };
+    // Every route out of Settings goes through here so the clock can't be left
+    // frozen. The one exception is the Skins shortcut below, which passes
+    // keepPaused because it re-shows Settings when the player comes back.
+    const closeSettings = (keepPaused) => {
+      document.getElementById('modal-settings').classList.add('hidden');
+      if (settingsPausedGame && !keepPaused) {
+        settingsPausedGame = false;
+        Game.resume();
+      }
     };
     document.getElementById('btn-settings').addEventListener('click', openSettings);
     document.getElementById('btn-pause-settings').addEventListener('click', openSettings);
     document.getElementById('btn-hud-settings').addEventListener('click', openSettings);
-    document.getElementById('btn-settings-close').addEventListener('click', () => {
-      document.getElementById('modal-settings').classList.add('hidden');
-    });
+    document.getElementById('btn-settings-close').addEventListener('click', () => closeSettings());
 
     // Resets the 'seen' flag and reloads level 1, which makes Tutorial's own
     // 'level-loaded' listener re-arm it - no direct coupling to the Tutorial
@@ -2031,7 +2058,7 @@ const UI = (() => {
     });
 
     document.getElementById('btn-open-reset').addEventListener('click', () => {
-      document.getElementById('modal-settings').classList.add('hidden');
+      closeSettings();
       document.getElementById('modal-reset-confirm').classList.remove('hidden');
     });
     document.getElementById('btn-reset-cancel').addEventListener('click', () => {
@@ -2064,7 +2091,7 @@ const UI = (() => {
     });
 
     document.getElementById('btn-open-delete-account').addEventListener('click', () => {
-      document.getElementById('modal-settings').classList.add('hidden');
+      closeSettings();
       document.getElementById('modal-delete-account').classList.remove('hidden');
     });
     document.getElementById('btn-delete-account-cancel').addEventListener('click', () => {
@@ -2114,7 +2141,7 @@ const UI = (() => {
       }
       Analytics.logEvent('google_account_linked', {});
       if (conflict) {
-        document.getElementById('modal-settings').classList.add('hidden');
+        closeSettings();
         openCloudSaveConflict(conflict);
       } else if (Storage.get('googleLinkRewardGiven')) {
         showToast(I18N.t('cloudsave.link_reward'));

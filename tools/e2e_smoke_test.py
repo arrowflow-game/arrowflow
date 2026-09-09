@@ -206,6 +206,65 @@ def test_reset_progress(page):
     assert page.evaluate("Storage.get('lang')") == 'th', "language preference should survive reset"
 
 
+@check("Settings freezes the level clock, pause modal stays consistent")
+def test_settings_pauses_clock(page):
+    skip_tutorial(page)
+    page.evaluate("Game.loadLevel(1)")
+    page.evaluate("UI.showScreen('screen-game')")
+    page.wait_for_timeout(300)
+
+    # Opened from the HUD mid-level: the clock must not advance while the
+    # player is toggling sound/vibration, because pace decides stars.
+    page.click("#btn-hud-settings")
+    page.wait_for_timeout(150)
+    before = page.evaluate("Game.getElapsedSec()")
+    page.wait_for_timeout(1200)
+    during = page.evaluate("Game.getElapsedSec()")
+    assert during - before < 0.2, f"clock ran while Settings was open (+{during - before:.2f}s)"
+
+    page.click("#btn-settings-close")
+    page.wait_for_timeout(700)
+    after = page.evaluate("Game.getElapsedSec()")
+    assert after - during > 0.4, f"clock did not restart after closing Settings (+{after - during:.2f}s)"
+
+    # Opened on top of the pause modal, closing Settings must NOT resume play -
+    # the pause modal is still on screen and Resume is the only thing that ends it.
+    page.click("#btn-pause")
+    page.wait_for_timeout(150)
+    page.click("#btn-pause-settings")
+    page.wait_for_timeout(150)
+    page.click("#btn-settings-close")
+    page.wait_for_timeout(150)
+    paused_at = page.evaluate("Game.getElapsedSec()")
+    page.wait_for_timeout(900)
+    assert page.evaluate("Game.getElapsedSec()") - paused_at < 0.2,         "closing Settings resumed the clock while the pause modal was still open"
+    assert not page.is_visible("#modal-settings")
+    assert page.is_visible("#modal-pause")
+
+    page.click("#btn-resume")
+    page.wait_for_timeout(700)
+    assert page.evaluate("Game.getElapsedSec()") - paused_at > 0.4,         "Resume did not restart the clock"
+
+    # A bulk modal close (Settings -> Replay tutorial and every btn-next style
+    # path) must drop Settings' claim on the clock. Left stale, the next close
+    # of a Settings opened over the pause modal would resume play behind it.
+    page.click("#btn-hud-settings")
+    page.wait_for_timeout(150)
+    page.evaluate("UI.hideAllModals()")
+    page.evaluate("Game.loadLevel(1)")
+    page.evaluate("UI.showScreen('screen-game')")
+    page.wait_for_timeout(200)
+    page.click("#btn-pause")
+    page.wait_for_timeout(150)
+    page.click("#btn-pause-settings")
+    page.wait_for_timeout(150)
+    page.click("#btn-settings-close")
+    page.wait_for_timeout(150)
+    stale = page.evaluate("Game.getElapsedSec()")
+    page.wait_for_timeout(900)
+    assert page.evaluate("Game.getElapsedSec()") - stale < 0.2,         "a stale Settings pause claim survived a bulk modal close"
+
+
 @check("Thai menu labels fit on one line at common phone widths")
 def test_thai_menu_wrap(page_factory):
     for width in (320, 390, 430):
