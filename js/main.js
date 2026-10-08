@@ -2,6 +2,26 @@
    ArrowFlow 3D — main.js
    ============================================ */
 
+// Replaces the splash's contents with a plain message and a retry button. Plain
+// DOM on purpose - it runs when the 3D scene could not start, so it must not
+// depend on anything the scene or the rest of startup would have set up.
+function showGraphicsError() {
+  const inner = document.querySelector('#screen-splash .splash-inner');
+  if (!inner) return;
+  inner.innerHTML = '';
+  inner.style.cssText = 'padding:0 24px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:16px;';
+  const title = document.createElement('h2');
+  title.textContent = I18N.t('boot.gl_title');
+  const body = document.createElement('p');
+  body.textContent = I18N.t('boot.gl_body');
+  const retry = document.createElement('button');
+  retry.className = 'btn-primary';
+  retry.style.cssText = 'padding:12px 32px;font-size:16px;border-radius:12px;';
+  retry.textContent = I18N.t('boot.retry');
+  retry.addEventListener('click', () => location.reload());
+  inner.append(title, body, retry);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   // Android 15+ (targetSdk 35) enforces edge-to-edge by default, so the WebView
   // draws under the OS status bar and covers the top HUD buttons unless we opt
@@ -62,8 +82,16 @@ document.addEventListener('DOMContentLoaded', () => {
   UI.applyVibration(Storage.get('vibration'));
   UI.wireEvents();
   
-  // Init 3D Scene
-  Scene3D.init();
+  // Init 3D Scene. If no WebGL context can be had at all, the game cannot run -
+  // say so and offer a retry, rather than leaving the splash frozen. A frozen
+  // splash is exactly what got the first production build rejected as
+  // "app not responding" (2026-10-08).
+  try {
+    Scene3D.init();
+  } catch (e) {
+    showGraphicsError();
+    throw e; // still reaches Analytics' global handler, so Crashlytics sees it
+  }
   Scene3D.setOnArrowTap(Game.onArrowTap);
 
   // First-run tutorial (level 1 only, gated on Storage's tutorialSeen flag) -

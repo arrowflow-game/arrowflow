@@ -283,6 +283,40 @@ def test_thai_menu_wrap(page_factory):
         page.close()
 
 
+@check("Startup survives a GPU that refuses MSAA, and never freezes on the splash")
+def test_boot_without_msaa(page):
+    # The first production build was rejected (2026-10-08) as "app not
+    # responding": on the reviewer's device the antialiased WebGL context could
+    # not be created, Scene3D.init() threw, and the splash sat at 0% forever.
+    browser = page.context.browser
+    refuse = """
+      const orig = HTMLCanvasElement.prototype.getContext;
+      HTMLCanvasElement.prototype.getContext = function (type, attrs) {
+        if (%s) return null;
+        return orig.call(this, type, attrs);
+      };"""
+    cases = [
+        # Only MSAA refused: the renderer must fall back and reach the menu.
+        ("/webgl/.test(type) && attrs && attrs.antialias", "screen-menu"),
+        # No WebGL at all: a retry message, not a frozen loading bar.
+        # (three.js falls back to 'experimental-webgl', so that is refused too.)
+        ("/webgl/.test(type)", "graphics-error"),
+    ]
+    for condition, expected in cases:
+        p = browser.new_page(viewport={"width": 390, "height": 844})
+        p.add_init_script(refuse % condition)
+        p.goto(URL)
+        p.wait_for_timeout(2500)
+        active = p.evaluate("document.querySelector('.ovr-screen.active, .screen.active')?.id")
+        if expected == "screen-menu":
+            assert active == "screen-menu", f"MSAA refused: stuck on {active}"
+        else:
+            assert active == "screen-splash", f"no WebGL: unexpected screen {active}"
+            retry = p.evaluate("Array.from(document.querySelectorAll('#screen-splash button')).map(b => b.textContent)")
+            assert retry, "no WebGL: splash shows no retry button - it would just freeze"
+        p.close()
+
+
 def main():
     global URL
     parser = argparse.ArgumentParser()

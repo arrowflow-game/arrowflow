@@ -848,6 +848,25 @@ const Scene3D = (() => {
   let highlightPathId = null;
   let highlightUntil = 0;
 
+  // Play's production review rejected vc48 (2026-10-08) for hanging on the
+  // splash: on the reviewer's device `antialias: true` could not get a WebGL
+  // context, the constructor threw, and nothing after it in main.js ran.
+  // Ask for less on each retry; MSAA is the usual thing a GPU or emulator
+  // refuses. A canvas whose getContext() returned null holds no context, so
+  // retrying on the same element is allowed. Throws only if all three fail.
+  function createRenderer(canvas) {
+    const attempts = [
+      { antialias: true, alpha: true },
+      { antialias: false, alpha: true },
+      { antialias: false, alpha: true, powerPreference: 'low-power', precision: 'mediump' },
+    ];
+    let lastError;
+    for (const opts of attempts) {
+      try { return new THREE.WebGLRenderer({ canvas, ...opts }); } catch (e) { lastError = e; }
+    }
+    throw lastError;
+  }
+
   function init() {
     const canvas = document.getElementById('three-canvas');
     fxCanvas = document.getElementById('fx-canvas');
@@ -858,7 +877,7 @@ const Scene3D = (() => {
     // antialias off the same board ran 26-28fps against 27-30fps with it on. What
     // actually decides that device's frame rate is how many pixels get drawn - see
     // setPixelRatio below.
-    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    renderer = createRenderer(canvas);
     // Uncapped devicePixelRatio means a phone reporting dpr=3 renders 2.25x the pixels
     // of dpr=2 for no visible benefit on a screen that size - this alone is often the
     // single biggest steady-state GPU cost of a WebGL page (paid every frame, forever,
