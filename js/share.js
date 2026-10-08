@@ -11,13 +11,12 @@
    ============================================ */
 
 const Share = (() => {
-  // Where a friend who taps the shared link actually lands. Deliberately the
-  // web build rather than a Play Store listing: the app is still in closed
-  // testing, so a store link would show most recipients "item not found",
-  // while this URL plays immediately for anyone on any platform. Swap it for
-  // the Play Store URL once the app is public - see [[arrowflow_leaderboard]]
-  // for why this game lives on the arrowflow-game org account.
-  const SHARE_URL = 'https://arrowflow-game.github.io/arrowflow/';
+  // Where a friend who taps the shared link lands: the Play Store listing,
+  // now that the app is public (2026-10-08). It was the web build while the app
+  // was in closed testing, because a store link would have shown most
+  // recipients "item not found". Anyone on a desktop or iPhone gets the store
+  // page too; the web build is still playable at arrowflow-game.github.io/arrowflow.
+  const SHARE_URL = 'https://play.google.com/store/apps/details?id=com.arrowflowgame.puzzle';
 
   function plugin() {
     return (window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform()
