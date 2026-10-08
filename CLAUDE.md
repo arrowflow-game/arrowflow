@@ -10,7 +10,7 @@ Read `README.md` first for layout, build and release. This file is the set of ru
 
 **A gameplay-mechanic change needs two things**, stated by the user as a standing rule: verify the old behaviour is unchanged, and ship a tutorial for the first level where a player meets the new mechanic.
 
-**Keep `initializeForTesting: true` in `js/ads.js` until production.** Clicking a real ad on a test build risks a permanent AdMob ban.
+**Ads are live since production (2026-10-08): `ADS_TEST_MODE = false` in `js/ads.js`.** Never tap a live ad on your own device - that risks a permanent AdMob ban. Testing ads on a dev device means a build with `ADS_TEST_MODE = true`, never shipped.
 
 **Respond in Thai** unless asked otherwise.
 

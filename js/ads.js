@@ -9,14 +9,17 @@
    daily-cap gating in js/storage.js still applies either way), not a bug.
 
    Real App ID (AndroidManifest.xml) and Ad Unit ID (below) for com.arrowflowgame.puzzle
-   were created 2026-08-19. prepare() still passes isTesting:true, so ad requests
-   currently only ever serve Google's test creative regardless of using the real
-   unit ID - safe during development (never tap your own live ads - AdMob policy
-   violation) and required until the app has actually gone through Play Store
-   review. Flip isTesting off only when ready to serve/earn real ads.
+   were created 2026-08-19. Production access was granted 2026-10-08, so ads now
+   serve real creative (ADS_TEST_MODE = false). Never tap a live ad on your own
+   device - that is an AdMob policy violation that can ban the account. To test
+   ads on a dev device, set ADS_TEST_MODE back to true for that build only.
    ============================================ */
 
 const Ads = (() => {
+  // One switch for all three places the SDK asks (initialize, rewarded,
+  // interstitial). They used to be three separate literals, and leaving any
+  // one of them on would have served test ads to real players unnoticed.
+  const ADS_TEST_MODE = false;
   const REWARDED_AD_UNIT_ID = 'ca-app-pub-5407872195671640/2365362318';
   const INTERSTITIAL_AD_UNIT_ID = 'ca-app-pub-5407872195671640/1567054452';
 
@@ -83,7 +86,7 @@ const Ads = (() => {
     try {
       const canRequestAds = await requestConsent();
       if (!canRequestAds) return; // consent declined/pending - don't init the ad SDK at all
-      await admob().initialize({ initializeForTesting: true });
+      await admob().initialize({ initializeForTesting: ADS_TEST_MODE });
       initialized = true;
       await prepare();
       await prepareInterstitial();
@@ -96,7 +99,7 @@ const Ads = (() => {
   async function prepare() {
     if (!isNative() || !initialized) return;
     try {
-      await admob().prepareRewardVideoAd({ adId: REWARDED_AD_UNIT_ID, isTesting: true });
+      await admob().prepareRewardVideoAd({ adId: REWARDED_AD_UNIT_ID, isTesting: ADS_TEST_MODE });
       adReady = true;
     } catch {
       adReady = false;
@@ -106,7 +109,7 @@ const Ads = (() => {
   async function prepareInterstitial() {
     if (!isNative() || !initialized) return;
     try {
-      await admob().prepareInterstitial({ adId: INTERSTITIAL_AD_UNIT_ID, isTesting: true });
+      await admob().prepareInterstitial({ adId: INTERSTITIAL_AD_UNIT_ID, isTesting: ADS_TEST_MODE });
       interstitialReady = true;
     } catch {
       interstitialReady = false;
